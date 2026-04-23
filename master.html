@@ -12,10 +12,10 @@ body{font-family:'Segoe UI',sans-serif;background:#0f0f0f;color:#e0e0e0;display:
 .sidebar-logo{padding:20px 16px;border-bottom:1px solid #222}
 .sidebar-logo h2{color:#c9a96e;font-size:15px;font-weight:600}
 .sidebar-logo p{color:#555;font-size:11px;margin-top:2px}
-.nav-item{display:flex;align-items:center;gap:10px;padding:12px 16px;color:#888;font-size:13px;cursor:pointer;border-left:3px solid transparent;transition:all .15s;position:relative}
+.nav-item{display:flex;align-items:center;gap:10px;padding:12px 16px;color:#888;font-size:13px;cursor:pointer;border-left:3px solid transparent;transition:all .15s}
 .nav-item:hover{background:#1e1e1e;color:#ccc}
 .nav-item.active{background:#1e1e1e;color:#c9a96e;border-left-color:#c9a96e}
-.nav-item .icon{font-size:16px;width:20px;text-align:center}
+.nav-icon{font-size:15px;width:22px;text-align:center}
 .badge{background:#e74c3c;color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:2px 6px;margin-left:auto}
 .sidebar-bottom{margin-top:auto;padding:16px;border-top:1px solid #222}
 .user-info{font-size:12px;color:#666}
@@ -45,18 +45,14 @@ tr:hover td{background:#1e1e1e}
 .status.aprovada{background:#1a3a2a;color:#2ecc71}
 .status.rejeitada{background:#3a1a1a;color:#e74c3c}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
-.btn-primary{background:#c9a96e;color:#000}
-.btn-primary:hover{background:#e0c080}
-.btn-success{background:#1a3a2a;color:#2ecc71;border:1px solid #2ecc71}
-.btn-success:hover{background:#2ecc71;color:#000}
-.btn-danger{background:#3a1a1a;color:#e74c3c;border:1px solid #e74c3c}
-.btn-danger:hover{background:#e74c3c;color:#fff}
+.btn-primary{background:#c9a96e;color:#000}.btn-primary:hover{background:#e0c080}
+.btn-success{background:#1a3a2a;color:#2ecc71;border:1px solid #2ecc71}.btn-success:hover{background:#2ecc71;color:#000}
+.btn-danger{background:#3a1a1a;color:#e74c3c;border:1px solid #e74c3c}.btn-danger:hover{background:#e74c3c;color:#fff}
+.btn-ghost{background:none;border:1px solid #333;color:#888}.btn-ghost:hover{background:#222;color:#ccc}
 .btn-sm{padding:5px 10px;font-size:12px}
-.btn-ghost{background:none;border:1px solid #333;color:#888}
-.btn-ghost:hover{background:#222;color:#ccc}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:1000}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:1000}
 .modal-overlay.open{display:flex}
-.modal{background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:28px;width:100%;max-width:500px;max-height:80vh;overflow-y:auto}
+.modal{background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:28px;width:100%;max-width:520px;max-height:85vh;overflow-y:auto}
 .modal h3{font-size:17px;color:#fff;margin-bottom:16px}
 .modal label{display:block;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;margin-top:16px}
 .modal input,.modal select,.modal textarea{width:100%;background:#111;border:1px solid #333;border-radius:7px;color:#fff;font-size:14px;padding:10px 12px;outline:none}
@@ -68,20 +64,18 @@ tr:hover td{background:#1e1e1e}
 .form-group input,.form-group select{width:100%;background:#111;border:1px solid #333;border-radius:7px;color:#fff;font-size:14px;padding:10px 12px;outline:none}
 .empty{text-align:center;padding:40px;color:#555;font-size:14px}
 .pill{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;background:#222;color:#888}
-.text-gold{color:#c9a96e}
-.text-muted{color:#666}
 </style>
 </head>
 <body>
 <div class="sidebar">
-  <div class="sidebar-logo"><h2>ROSEWOOD SP</h2><p>Painel Master</p></div>
-  <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="icon">D</span>Dashboard<span class="badge" id="badge-nav" style="display:none">0</span></div>
-  <div class="nav-item" onclick="showPage('aprovacao',this)"><span class="icon">A</span>Aprovacao<span class="badge" id="badge-apr" style="display:none">0</span></div>
-  <div class="nav-item" onclick="showPage('programados',this)"><span class="icon">P</span>Programados</div>
-  <div class="nav-item" onclick="showPage('lista-compras',this)"><span class="icon">L</span>Lista de Compras</div>
-  <div class="nav-item" onclick="showPage('food-cost',this)"><span class="icon">$</span>Food Cost</div>
-  <div class="nav-item" onclick="showPage('usuarios',this)"><span class="icon">U</span>Usuarios</div>
-  <div class="nav-item" onclick="showPage('beo',this)"><span class="icon">B</span>BEO</div>
+  <div class="sidebar-logo"><h2>ð½ ROSEWOOD SP</h2><p>Painel Master</p></div>
+  <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">ð</span>Dashboard<span class="badge" id="badge-nav" style="display:none">0</span></div>
+  <div class="nav-item" onclick="showPage('aprovacao',this)"><span class="nav-icon">â</span>Aprovacao<span class="badge" id="badge-apr" style="display:none">0</span></div>
+  <div class="nav-item" onclick="showPage('programados',this)"><span class="nav-icon">ð</span>Programados</div>
+  <div class="nav-item" onclick="showPage('lista-compras',this)"><span class="nav-icon">ð</span>Lista de Compras</div>
+  <div class="nav-item" onclick="showPage('food-cost',this)"><span class="nav-icon">ð°</span>Food Cost</div>
+  <div class="nav-item" onclick="showPage('usuarios',this)"><span class="nav-icon">ð¥</span>Usuarios</div>
+  <div class="nav-item" onclick="showPage('beo',this)"><span class="nav-icon">ð</span>BEO</div>
   <div class="sidebar-bottom">
     <div class="user-info"><strong id="user-nome">-</strong><span>master</span></div>
     <button class="btn-logout" onclick="logout()">Sair</button>
@@ -96,10 +90,10 @@ tr:hover td{background:#1e1e1e}
       <div class="stat-card"><div class="label">Itens Aprovados Hoje</div><div class="value" id="val-itens">-</div><div class="sub">em requisicoes</div></div>
       <div class="stat-card"><div class="label">Usuarios Ativos</div><div class="value" id="val-users">-</div><div class="sub">no sistema</div></div>
     </div>
-    <div class="section"><div class="section-header"><h3>Variacao de Estoque - Ontem vs Hoje</h3></div><div id="comp-cont"><div class="empty">Carregando...</div></div></div>
+    <div class="section"><div class="section-header"><h3>ð¦ Variacao de Estoque - Ontem vs Hoje</h3></div><div id="comp-cont"><div class="empty">Carregando...</div></div></div>
   </div>
   <div class="page" id="page-aprovacao">
-    <div class="page-header"><h1>Fila de Aprovacao</h1></div>
+    <div class="page-header"><h1>Fila de Aprovacao</h1><p>Requisicoes aguardando revisao</p></div>
     <div class="section"><div id="lista-aprov"><div class="empty">Carregando...</div></div></div>
   </div>
   <div class="page" id="page-programados">
@@ -108,33 +102,39 @@ tr:hover td{background:#1e1e1e}
   </div>
   <div class="page" id="page-lista-compras">
     <div class="page-header"><h1>Lista de Compras do Dia</h1></div>
-    <div class="section"><div class="section-header"><h3>Itens de Hoje</h3><button class="btn btn-ghost btn-sm" onclick="carregarListaCompras()">Atualizar</button></div><div id="lista-compras-body"><div class="empty">Carregando...</div></div></div>
+    <div class="section">
+      <div class="section-header"><h3>Itens de Hoje</h3><button class="btn btn-ghost btn-sm" onclick="carregarListaCompras()">âº Atualizar</button></div>
+      <div id="lista-compras-body"><div class="empty">Carregando...</div></div>
+    </div>
   </div>
   <div class="page" id="page-food-cost">
-    <div class="page-header"><h1>Food Cost por PDV</h1></div>
+    <div class="page-header"><h1>Food Cost por PDV</h1><p>Quantidade requisitada Ã preco unitario</p></div>
     <div style="display:flex;gap:12px;margin-bottom:20px">
       <div style="flex:1"><label style="display:block;color:#888;font-size:11px;text-transform:uppercase;margin-bottom:6px">Inicio</label><input type="date" id="fc-ini" style="width:100%;background:#111;border:1px solid #333;border-radius:7px;color:#fff;font-size:14px;padding:10px 12px;outline:none"></div>
       <div style="flex:1"><label style="display:block;color:#888;font-size:11px;text-transform:uppercase;margin-bottom:6px">Fim</label><input type="date" id="fc-fim" style="width:100%;background:#111;border:1px solid #333;border-radius:7px;color:#fff;font-size:14px;padding:10px 12px;outline:none"></div>
-      <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="carregarFoodCost()">Gerar</button></div>
+      <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="carregarFoodCost()">Gerar Relatorio</button></div>
     </div>
-    <div class="section"><div id="fc-body"><div class="empty">Selecione o periodo</div></div></div>
+    <div class="section"><div id="fc-body"><div class="empty">Selecione o periodo e clique em Gerar</div></div></div>
   </div>
   <div class="page" id="page-usuarios">
-    <div class="page-header"><h1>Gestao de Usuarios</h1></div>
-    <div class="section"><div class="section-header"><h3>Usuarios</h3><button class="btn btn-primary btn-sm" onclick="abrirModalUser()">+ Novo</button></div><div id="lista-users"><div class="empty">Carregando...</div></div></div>
+    <div class="page-header"><h1>Gestao de Usuarios</h1><p>Criar, editar e ativar/desativar usuarios</p></div>
+    <div class="section">
+      <div class="section-header"><h3>Usuarios Cadastrados</h3><button class="btn btn-primary btn-sm" onclick="abrirModalUser()">+ Novo Usuario</button></div>
+      <div id="lista-users"><div class="empty">Carregando...</div></div>
+    </div>
   </div>
   <div class="page" id="page-beo">
-    <div class="page-header"><h1>BEO</h1></div>
-    <div class="section"><div style="padding:60px;text-align:center"><h2 style="color:#555;font-size:20px">Em breve</h2><p style="color:#444;font-size:14px;margin-top:8px">Modulo BEO em desenvolvimento.</p></div></div>
+    <div class="page-header"><h1>BEO - Banquet Event Order</h1></div>
+    <div class="section"><div style="padding:60px;text-align:center"><div style="font-size:48px;margin-bottom:16px">ð</div><h2 style="color:#555;font-size:20px">Em breve</h2><p style="color:#444;font-size:14px;margin-top:8px">Modulo BEO em desenvolvimento.</p></div></div>
   </div>
 </div>
 <div class="modal-overlay" id="modal-aprov">
   <div class="modal">
     <h3 id="modal-aprov-titulo">Requisicao</h3>
-    <div id="modal-aprov-itens" style="max-height:260px;overflow-y:auto;margin-bottom:16px"></div>
+    <div id="modal-aprov-itens" style="max-height:260px;overflow-y=auto;margin-bottom:16px"></div>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-success" onclick="aprovar()">Aprovar</button>
-      <button class="btn btn-danger" onclick="document.getElementById('div-rejeitar').style.display='block'">Rejeitar</button>
+      <button class="btn btn-success" onclick="aprovar()">â Aprovar</button>
+      <button class="btn btn-danger" onclick="document.getElementById('div-rejeitar').style.display='block'">â Rejeitar</button>
       <button class="btn btn-ghost" onclick="document.getElementById('modal-aprov').classList.remove('open')">Cancelar</button>
     </div>
     <div id="div-rejeitar" style="display:none;margin-top:16px">
@@ -152,8 +152,8 @@ tr:hover td{background:#1e1e1e}
     <h3 id="modal-user-titulo">Usuario</h3>
     <input type="hidden" id="uid">
     <div class="form-row">
-      <div class="form-group"><label>Nome</label><input id="u-nome" type="text"></div>
-      <div class="form-group"><label>E-mail</label><input id="u-email" type="email"></div>
+      <div class="form-group"><label>Nome</label><input id="u-nome" type="text" placeholder="Nome completo"></div>
+      <div class="form-group"><label>E-mail</label><input id="u-email" type="email" placeholder="email@rosewood"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Perfil</label>
@@ -179,7 +179,7 @@ tr:hover td{background:#1e1e1e}
       </select>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Senha</label><input id="u-senha" type="password" placeholder="Vazio = manter"></div>
+      <div class="form-group"><label>Senha</label><input id="u-senha" type="password" placeholder="Deixe vazio para manter"></div>
       <div class="form-group"><label>Status</label><select id="u-ativo"><option value="true">Ativo</option><option value="false">Inativo</option></select></div>
     </div>
     <div class="modal-footer">
@@ -188,196 +188,6 @@ tr:hover td{background:#1e1e1e}
     </div>
   </div>
 </div>
-<script>
-const SURL='https://nyijprhukndlyijqljbm.supabase.co';
-const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55aWpwcmh1a25kbHlpanFsamJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MjUwMDgsImV4cCI6MjA5MjIwMTAwOH0.Vzljd9xesi1ZJ-l7du00v-elUSDQObRCUz2jPyqL5p8';
-const sb=supabase.createClient(SURL,SKEY);
-let user=null,reqAtual=null;
-
-window.addEventListener('DOMContentLoaded',async()=>{
-  user=JSON.parse(sessionStorage.getItem('rw_user')||'null');
-  if(!user||user.perfil!=='master'){location.href='index.html';return}
-  document.getElementById('user-nome').textContent=user.nome;
-  const hoje=new Date();
-  document.getElementById('data-hoje').textContent=hoje.toLocaleDateString('pt-BR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  document.getElementById('fc-ini').value=document.getElementById('fc-fim').value=hoje.toISOString().split('T')[0];
-  await carregarDashboard();
-});
-
-function showPage(id,el){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  document.getElementById('page-'+id).classList.add('active');el.classList.add('active');
-  if(id==='aprovacao')carregarAprovacao();
-  if(id==='programados')carregarProgramados();
-  if(id==='lista-compras')carregarListaCompras();
-  if(id==='usuarios')carregarUsers();
-}
-function logout(){sessionStorage.clear();location.href='index.html'}
-
-async function carregarDashboard(){
-  const hoje=new Date().toISOString().split('T')[0];
-  const{count:pend}=await sb.from('requisicoes').select('*',{count:'exact',head:true}).eq('status','aberta');
-  document.getElementById('val-pend').textContent=pend||0;
-  const b=document.getElementById('badge-nav'),ba=document.getElementById('badge-apr');
-  if(pend>0){b.textContent=ba.textContent=pend;b.style.display=ba.style.display='inline-block'}else{b.style.display=ba.style.display='none'}
-  const{count:cnt}=await sb.from('contagens').select('*',{count:'exact',head:true}).eq('data',hoje);
-  document.getElementById('val-cont').textContent=cnt||0;
-  const{data:rh}=await sb.from('requisicoes').select('requisicao_itens(*)').eq('status','aprovada').gte('aprovado_em',hoje+'T00:00:00').lte('aprovado_em',hoje+'T23:59:59');
-  let ti=0;(rh||[]).forEach(r=>{ti+=(r.requisicao_itens||[]).length});
-  document.getElementById('val-itens').textContent=ti;
-  const{count:ua}=await sb.from('usuarios').select('*',{count:'exact',head:true}).eq('ativo',true);
-  document.getElementById('val-users').textContent=ua||0;
-  // Comparativo contagem
-  const ontem=new Date();ontem.setDate(ontem.getDate()-1);
-  const hs=hoje,os=ontem.toISOString().split('T')[0];
-  const{data:hc}=await sb.from('contagens').select('item,quantidade').eq('data',hs);
-  const{data:oc}=await sb.from('contagens').select('item,quantidade').eq('data',os);
-  const el=document.getElementById('comp-cont');
-  if(!hc||!hc.length){el.innerHTML='<div class="empty">Nenhuma contagem hoje.</div>';return}
-  const map={};(oc||[]).forEach(c=>{map[c.item]={ontem:c.quantidade,hoje:null}});
-  hc.forEach(c=>{if(!map[c.item])map[c.item]={ontem:null,hoje:null};map[c.item].hoje=c.quantidade});
-  const al=Object.entries(map).filter(([,v])=>v.ontem!==null&&v.hoje!==null&&Math.abs(v.hoje-v.ontem)/Math.max(v.ontem,1)>0.3);
-  if(!al.length){el.innerHTML='<div class="empty" style="color:#2ecc71">Nenhuma variacao anormal detectada.</div>';return}
-  el.innerHTML='<table><thead><tr><th>Item</th><th>Ontem</th><th>Hoje</th><th>Variacao</th></tr></thead><tbody>'+
-    al.map(([item,v])=>{const d=v.hoje-v.ontem,p=((d/Math.max(v.ontem,1))*100).toFixed(0);return '<tr><td>'+item+'</td><td>'+v.ontem+'</td><td>'+v.hoje+'</td><td style="color:'+(d<0?'#e74c3c':'#2ecc71')+'">'+(d>0?'+':'')+p+'%</td></tr>'}).join('')+
-    '</tbody></table>';
-}
-
-async function carregarAprovacao(){
-  const{data:reqs}=await sb.from('requisicoes').select('*,usuarios(nome),requisicao_itens(*,ingredientes(nome,unidade))').eq('status','aberta').order('criado_em',{ascending:true});
-  const el=document.getElementById('lista-aprov');
-  if(!reqs||!reqs.length){el.innerHTML='<div class="empty">Nenhuma requisicao pendente.</div>';return}
-  el.innerHTML='<table><thead><tr><th>Data</th><th>PDV</th><th>Itens</th><th>Entrega</th><th>Acoes</th></tr></thead><tbody>'+
-    reqs.map(r=>'<tr><td>'+new Date(r.criado_em).toLocaleString('pt-BR')+'</td><td><strong>'+(r.pdv||'-')+'</strong><br><span style="color:#666;font-size:11px">'+(r.usuarios?.nome||'-')+'</span></td><td>'+(r.requisicao_itens||[]).length+'</td><td>'+(r.entrega_prevista?new Date(r.entrega_prevista+'T12:00:00').toLocaleDateString('pt-BR'):'-')+'</td><td><button class="btn btn-ghost btn-sm" onclick="abrirReq(''+r.id+'')">Ver/Aprovar</button></td></tr>'
-    ).join('')+'</tbody></table>';
-}
-async function abrirReq(id){
-  const{data:r}=await sb.from('requisicoes').select('*,usuarios(nome),requisicao_itens(*,ingredientes(nome,unidade))').eq('id',id).single();
-  reqAtual=r;
-  document.getElementById('modal-aprov-titulo').textContent='Requisicao - '+(r.pdv||'Sem PDV')+' / '+(r.usuarios?.nome||'');
-  document.getElementById('modal-aprov-itens').innerHTML='<table style="width:100%"><thead><tr><th>Item</th><th>Qtd</th><th>Un</th><th>Comentario</th></tr></thead><tbody>'+
-    (r.requisicao_itens||[]).map(i=>'<tr><td>'+(i.ingredientes?.nome||i.item_nome||'-')+'</td><td>'+i.quantidade+'</td><td>'+(i.unidade||'-')+'</td><td style="color:#666">'+(i.comentario||'')+'</td></tr>').join('')+'</tbody></table>';
-  document.getElementById('div-rejeitar').style.display='none';
-  document.getElementById('modal-aprov').classList.add('open');
-}
-async function aprovar(){
-  if(!reqAtual)return;
-  await sb.from('requisicoes').update({status:'aprovada',aprovado_por:user.id,aprovado_em:new Date().toISOString()}).eq('id',reqAtual.id);
-  document.getElementById('modal-aprov').classList.remove('open');
-  carregarAprovacao();carregarDashboard();
-}
-async function rejeitar(){
-  if(!reqAtual)return;
-  const m=document.getElementById('motivo-rej').value.trim();
-  if(!m){alert('Informe o motivo.');return}
-  await sb.from('requisicoes').update({status:'rejeitada',aprovado_por:user.id,aprovado_em:new Date().toISOString(),motivo_rejeicao:m}).eq('id',reqAtual.id);
-  document.getElementById('modal-aprov').classList.remove('open');
-  carregarAprovacao();carregarDashboard();
-}
-
-async function carregarProgramados(){
-  const amanha=new Date();amanha.setDate(amanha.getDate()+1);
-  const{data:reqs}=await sb.from('requisicoes').select('*,usuarios(nome),requisicao_itens(*,ingredientes(lead_time))').eq('status','aberta').gt('entrega_prevista',amanha.toISOString().split('T')[0]);
-  const el=document.getElementById('lista-prog');
-  if(!reqs||!reqs.length){el.innerHTML='<div class="empty">Nenhum pedido programado.</div>';return}
-  const grupos={};
-  reqs.forEach(r=>{
-    const lt=r.requisicao_itens?.[0]?.ingredientes?.lead_time||1;
-    const d=new Date(r.entrega_prevista+'T12:00:00');d.setDate(d.getDate()-lt);
-    const k=d.toISOString().split('T')[0];
-    if(!grupos[k])grupos[k]=[];grupos[k].push(r);
-  });
-  el.innerHTML=Object.entries(grupos).sort(([a],[b])=>a.localeCompare(b)).map(([dia,lista])=>
-    '<div class="section" style="margin-bottom:16px"><div class="section-header"><h3>Comprar em: '+new Date(dia+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})+'</h3>'+
-    '<button class="btn btn-primary btn-sm" onclick="alert('Itens adicionados a lista do dia!')">+ Adicionar a Lista</button></div>'+
-    '<table><thead><tr><th>PDV</th><th>Solicitante</th><th>Itens</th><th>Entrega</th></tr></thead><tbody>'+
-    lista.map(r=>'<tr><td>'+r.pdv+'</td><td>'+(r.usuarios?.nome||'-')+'</td><td>'+(r.requisicao_itens||[]).length+'</td><td>'+new Date(r.entrega_prevista+'T12:00:00').toLocaleDateString('pt-BR')+'</td></tr>').join('')+
-    '</tbody></table></div>').join('');
-}
-
-async function carregarListaCompras(){
-  const hoje=new Date().toISOString().split('T')[0];
-  const{data:reqs}=await sb.from('requisicoes').select('requisicao_itens(*,ingredientes(nome,unidade))').eq('status','aprovada').gte('aprovado_em',hoje+'T00:00:00').lte('aprovado_em',hoje+'T23:59:59');
-  const mapa={};
-  (reqs||[]).forEach(r=>{(r.requisicao_itens||[]).forEach(i=>{const n=i.ingredientes?.nome||i.item_nome||'?';if(!mapa[n])mapa[n]={q:0,u:i.unidade||'-'};mapa[n].q+=Number(i.quantidade)||0})});
-  const el=document.getElementById('lista-compras-body');
-  if(!Object.keys(mapa).length){el.innerHTML='<div class="empty">Nenhum item aprovado hoje.</div>';return}
-  el.innerHTML='<table><thead><tr><th>Item</th><th>Quantidade</th><th>Unidade</th></tr></thead><tbody>'+
-    Object.entries(mapa).sort(([a],[b])=>a.localeCompare(b)).map(([n,v])=>'<tr><td>'+n+'</td><td><strong>'+v.q+'</strong></td><td>'+v.u+'</td></tr>').join('')+'</tbody></table>';
-}
-
-async function carregarFoodCost(){
-  const ini=document.getElementById('fc-ini').value,fim=document.getElementById('fc-fim').value;
-  if(!ini||!fim){alert('Selecione o periodo.');return}
-  const{data:reqs}=await sb.from('requisicoes').select('pdv,requisicao_itens(item_nome,quantidade,unidade,ingredientes(nome))').eq('status','aprovada').gte('aprovado_em',ini+'T00:00:00').lte('aprovado_em',fim+'T23:59:59');
-  const{data:precos}=await sb.from('precos').select('item,preco_unitario').eq('ativo',true);
-  const mp={};(precos||[]).forEach(p=>{mp[p.item.toLowerCase()]=p.preco_unitario});
-  const pp={};
-  (reqs||[]).forEach(r=>{const p=r.pdv||'-';if(!pp[p])pp[p]={total:0,itens:[]};(r.requisicao_itens||[]).forEach(i=>{const n=i.ingredientes?.nome||i.item_nome||'?';const pr=mp[n.toLowerCase()]||0;const c=pr*(Number(i.quantidade)||0);pp[p].total+=c;pp[p].itens.push({n,q:i.quantidade,u:i.unidade,pr,c})})});
-  const el=document.getElementById('fc-body');
-  if(!Object.keys(pp).length){el.innerHTML='<div class="empty">Nenhum dado no periodo.</div>';return}
-  el.innerHTML=Object.entries(pp).map(([pdv,d])=>'<div style="padding:16px;border-bottom:1px solid #222">'+
-    '<div style="display:flex;justify-content:space-between;margin-bottom:10px"><strong style="color:#c9a96e">'+pdv+'</strong><span style="font-size:18px;font-weight:700">R$ '+d.total.toFixed(2)+'</span></div>'+
-    '<table><thead><tr><th>Item</th><th>Qtd</th><th>Preco</th><th>Custo</th></tr></thead><tbody>'+
-    d.itens.map(i=>'<tr><td>'+i.n+'</td><td>'+i.q+' '+(i.u||'')+'</td><td>'+(i.pr?'R$ '+i.pr.toFixed(2):'sem preco')+'</td><td style="color:#c9a96e">'+(i.c>0?'R$ '+i.c.toFixed(2):'-')+'</td></tr>').join('')+
-    '</tbody></table></div>').join('');
-}
-
-async function carregarUsers(){
-  const{data}=await sb.from('usuarios').select('*').order('nome');
-  const el=document.getElementById('lista-users');
-  if(!data||!data.length){el.innerHTML='<div class="empty">Nenhum usuario.</div>';return}
-  el.innerHTML='<table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>PDV</th><th>Status</th><th>Acoes</th></tr></thead><tbody>'+
-    data.map(u=>'<tr><td>'+u.nome+'</td><td>'+u.email+'</td><td><span class="pill">'+u.perfil+(u.subtipo?' / '+u.subtipo:'')+'</span></td><td>'+(u.pdv||'-')+'</td><td><span class="status '+(u.ativo?'aprovada':'rejeitada')+'">'+(u.ativo?'Ativo':'Inativo')+'</span></td><td><button class="btn btn-ghost btn-sm" onclick="editUser(''+u.id+'')">Editar</button></td></tr>'
-    ).join('')+'</tbody></table>';
-}
-function abrirModalUser(){
-  document.getElementById('modal-user-titulo').textContent='Novo Usuario';
-  document.getElementById('uid').value='';
-  ['u-nome','u-email','u-senha'].forEach(id=>{document.getElementById(id).value=''});
-  document.getElementById('u-perfil').value='operacional';
-  document.getElementById('u-sub').value='pdv';
-  document.getElementById('u-pdv').value='';
-  document.getElementById('u-ativo').value='true';
-  toggleSub();
-  document.getElementById('modal-user').classList.add('open');
-}
-async function editUser(id){
-  const{data:u}=await sb.from('usuarios').select('*').eq('id',id).single();
-  document.getElementById('modal-user-titulo').textContent='Editar Usuario';
-  document.getElementById('uid').value=u.id;
-  document.getElementById('u-nome').value=u.nome;
-  document.getElementById('u-email').value=u.email;
-  document.getElementById('u-senha').value='';
-  document.getElementById('u-perfil').value=u.perfil==='master'?'executivo':u.perfil;
-  document.getElementById('u-sub').value=u.subtipo||'pdv';
-  document.getElementById('u-pdv').value=u.pdv||'';
-  document.getElementById('u-ativo').value=u.ativo?'true':'false';
-  toggleSub();
-  document.getElementById('modal-user').classList.add('open');
-}
-function toggleSub(){
-  const p=document.getElementById('u-perfil').value;
-  document.getElementById('sub-grp').style.display=p==='operacional'?'block':'none';
-  document.getElementById('pdv-grp').style.display=(p==='operacional'&&document.getElementById('u-sub').value==='pdv')?'block':'none';
-}
-async function salvarUser(){
-  const id=document.getElementById('uid').value;
-  const nome=document.getElementById('u-nome').value.trim(),email=document.getElementById('u-email').value.trim();
-  const senha=document.getElementById('u-senha').value,perfil=document.getElementById('u-perfil').value;
-  const subtipo=perfil==='operacional'?document.getElementById('u-sub').value:null;
-  const pdv=subtipo==='pdv'?document.getElementById('u-pdv').value:null;
-  const ativo=document.getElementById('u-ativo').value==='true';
-  if(!nome||!email){alert('Preencha nome e e-mail.');return}
-  const payload={nome,email,perfil,subtipo,pdv,ativo};
-  if(senha)payload.senha_hash=await sha256(senha);
-  if(id)await sb.from('usuarios').update(payload).eq('id',id);
-  else{if(!senha){alert('Informe a senha.');return}await sb.from('usuarios').insert({...payload})}
-  document.getElementById('modal-user').classList.remove('open');
-  carregarUsers();
-}
-async function sha256(m){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(m));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('')}
-</script>
+<script src="master.js"></script>
 </body>
 </html>
