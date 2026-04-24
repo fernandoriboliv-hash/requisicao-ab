@@ -68,14 +68,14 @@ tr:hover td{background:#1e1e1e}
 </head>
 <body>
 <div class="sidebar">
-  <div class="sidebar-logo"><h2>ð½ ROSEWOOD SP</h2><p>Painel Master</p></div>
-  <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">ð</span>Dashboard<span class="badge" id="badge-nav" style="display:none">0</span></div>
-  <div class="nav-item" onclick="showPage('aprovacao',this)"><span class="nav-icon">â</span>Aprovacao<span class="badge" id="badge-apr" style="display:none">0</span></div>
-  <div class="nav-item" onclick="showPage('programados',this)"><span class="nav-icon">ð</span>Programados</div>
-  <div class="nav-item" onclick="showPage('lista-compras',this)"><span class="nav-icon">ð</span>Lista de Compras</div>
-  <div class="nav-item" onclick="showPage('food-cost',this)"><span class="nav-icon">ð°</span>Food Cost</div>
-  <div class="nav-item" onclick="showPage('usuarios',this)"><span class="nav-icon">ð¥</span>Usuarios</div>
-  <div class="nav-item" onclick="showPage('beo',this)"><span class="nav-icon">ð</span>BEO</div>
+  <div class="sidebar-logo"><h2>🍽 ROSEWOOD SP</h2><p>Painel Master</p></div>
+  <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">📊</span>Dashboard<span class="badge" id="badge-nav" style="display:none">0</span></div>
+  <div class="nav-item" onclick="showPage('aprovacao',this)"><span class="nav-icon">✅</span>Aprovacao<span class="badge" id="badge-apr" style="display:none">0</span></div>
+  <div class="nav-item" onclick="showPage('programados',this)"><span class="nav-icon">📅</span>Programados</div>
+  <div class="nav-item" onclick="showPage('lista-compras',this)"><span class="nav-icon">🛒</span>Lista de Compras</div>
+  <div class="nav-item" onclick="showPage('food-cost',this)"><span class="nav-icon">💰</span>Food Cost</div>
+  <div class="nav-item" onclick="showPage('usuarios',this)"><span class="nav-icon">👥</span>Usuarios</div>
+  <div class="nav-item" onclick="showPage('beo',this)"><span class="nav-icon">📋</span>BEO</div>
   <div class="sidebar-bottom">
     <div class="user-info"><strong id="user-nome">-</strong><span>master</span></div>
     <button class="btn-logout" onclick="logout()">Sair</button>
@@ -90,7 +90,7 @@ tr:hover td{background:#1e1e1e}
       <div class="stat-card"><div class="label">Itens Aprovados Hoje</div><div class="value" id="val-itens">-</div><div class="sub">em requisicoes</div></div>
       <div class="stat-card"><div class="label">Usuarios Ativos</div><div class="value" id="val-users">-</div><div class="sub">no sistema</div></div>
     </div>
-    <div class="section"><div class="section-header"><h3>ð¦ Variacao de Estoque - Ontem vs Hoje</h3></div><div id="comp-cont"><div class="empty">Carregando...</div></div></div>
+    <div class="section"><div class="section-header"><h3>📦 Variacao de Estoque - Ontem vs Hoje</h3></div><div id="comp-cont"><div class="empty">Carregando...</div></div></div>
   </div>
   <div class="page" id="page-aprovacao">
     <div class="page-header"><h1>Fila de Aprovacao</h1><p>Requisicoes aguardando revisao</p></div>
@@ -103,12 +103,12 @@ tr:hover td{background:#1e1e1e}
   <div class="page" id="page-lista-compras">
     <div class="page-header"><h1>Lista de Compras do Dia</h1></div>
     <div class="section">
-      <div class="section-header"><h3>Itens de Hoje</h3><button class="btn btn-ghost btn-sm" onclick="carregarListaCompras()">âº Atualizar</button></div>
+      <div class="section-header"><h3>Itens de Hoje</h3><button class="btn btn-ghost btn-sm" onclick="carregarListaCompras()">↺ Atualizar</button></div>
       <div id="lista-compras-body"><div class="empty">Carregando...</div></div>
     </div>
   </div>
   <div class="page" id="page-food-cost">
-    <div class="page-header"><h1>Food Cost por PDV</h1><p>Quantidade requisitada Ã preco unitario</p></div>
+    <div class="page-header"><h1>Food Cost por PDV</h1><p>Quantidade requisitada × preco unitario</p></div>
     <div style="display:flex;gap:12px;margin-bottom:20px">
       <div style="flex:1"><label style="display:block;color:#888;font-size:11px;text-transform:uppercase;margin-bottom:6px">Inicio</label><input type="date" id="fc-ini" style="width:100%;background:#111;border:1px solid #333;border-radius:7px;color:#fff;font-size:14px;padding:10px 12px;outline:none"></div>
       <div style="flex:1"><label style="display:block;color:#888;font-size:11px;text-transform:uppercase;margin-bottom:6px">Fim</label><input type="date" id="fc-fim" style="width:100%;background:#111;border:1px solid #333;border-radius:7px;color:#fff;font-size:14px;padding:10px 12px;outline:none"></div>
@@ -125,16 +125,18 @@ tr:hover td{background:#1e1e1e}
   </div>
   <div class="page" id="page-beo">
     <div class="page-header"><h1>BEO - Banquet Event Order</h1></div>
-    <div class="section"><div style="padding:60px;text-align:center"><div style="font-size:48px;margin-bottom:16px">ð</div><h2 style="color:#555;font-size:20px">Em breve</h2><p style="color:#444;font-size:14px;margin-top:8px">Modulo BEO em desenvolvimento.</p></div></div>
+    <div class="section"><div style="padding:60px;text-align:center"><div style="font-size:48px;margin-bottom:16px">📋</div><h2 style="color:#555;font-size:20px">Em breve</h2><p style="color:#444;font-size:14px;margin-top:8px">Modulo BEO em desenvolvimento.</p></div></div>
   </div>
 </div>
+
+<!-- MODAL APROVACAO -->
 <div class="modal-overlay" id="modal-aprov">
   <div class="modal">
     <h3 id="modal-aprov-titulo">Requisicao</h3>
-    <div id="modal-aprov-itens" style="max-height:260px;overflow-y=auto;margin-bottom:16px"></div>
+    <div id="modal-aprov-itens" style="max-height:260px;overflow-y:auto;margin-bottom:16px"></div>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-success" onclick="aprovar()">â Aprovar</button>
-      <button class="btn btn-danger" onclick="document.getElementById('div-rejeitar').style.display='block'">â Rejeitar</button>
+      <button class="btn btn-success" onclick="aprovar()">✅ Aprovar</button>
+      <button class="btn btn-danger" onclick="document.getElementById('div-rejeitar').style.display='block'">❌ Rejeitar</button>
       <button class="btn btn-ghost" onclick="document.getElementById('modal-aprov').classList.remove('open')">Cancelar</button>
     </div>
     <div id="div-rejeitar" style="display:none;margin-top:16px">
@@ -147,6 +149,8 @@ tr:hover td{background:#1e1e1e}
     </div>
   </div>
 </div>
+
+<!-- MODAL USUARIO -->
 <div class="modal-overlay" id="modal-user">
   <div class="modal">
     <h3 id="modal-user-titulo">Usuario</h3>
@@ -188,6 +192,7 @@ tr:hover td{background:#1e1e1e}
     </div>
   </div>
 </div>
+
 <script src="master.js"></script>
 </body>
 </html>
