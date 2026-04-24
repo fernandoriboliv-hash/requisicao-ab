@@ -16,6 +16,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('data-hoje').textContent = hoje.toLocaleDateString('pt-BR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   document.getElementById('fc-ini').value = document.getElementById('fc-fim').value = hoje.toISOString().split('T')[0];
   await carregarDashboard();
+  await carregarIngsMaster();
 });
 
 function showPage(id, el) {
@@ -27,6 +28,7 @@ function showPage(id, el) {
   if (id === 'programados') carregarProgramados();
   if (id === 'lista-compras') carregarListaCompras();
   if (id === 'usuarios') carregarUsers();
+  if (id === 'requisicao') { document.getElementById('mreq-entrega').value = new Date().toISOString().split('T')[0]; }
 }
 
 function logout() { sessionStorage.clear(); location.href = 'index.html'; }
@@ -266,4 +268,85 @@ async function salvarUser() {
   else { if (!senha) { alert('Informe a senha.'); return; } await sb.from('usuarios').insert({ ...payload }); }
   document.getElementById('modal-user').classList.remove('open');
   carregarUsers();
+}
+
+// ========== REQUISIÇÃO MASTER ==========
+let ingsMaster = [], itensMaster = [], itemAtualMaster = null;
+
+async function carregarIngsMaster() {
+  if (ingsMaster.length > 0) return;
+  const {data} = await sb.from('ingredientes').select('id,nome,unidade').eq('ativo',true).order('nome');
+  ingsMaster = data || [];
+}
+
+function buscarIngMaster(q) {
+  const ac = document.getElementById('mreq-ac');
+  if (!q || q.length < 2) { ac.style.display='none'; return; }
+  const res = ingsMaster.filter(i => i.nome.toLowerCase().includes(q.toLowerCase())).slice(0,10);
+  if (!res.length) { ac.style.display='none'; return; }
+  ac.innerHTML = res.map(i => `<div style="padding:10px 14px;font-size:13px;cursor:pointer;color:#ccc;border-bottom:1px solid #252525" onmouseover="this.style.background='#2a2a2a'" onmouseout="this.style.background=''" onclick="selIngMaster('${i.id}')">${i.nome} <span style="color:#666">(${i.unidade||'-'})</span></div>`).join('');
+  ac.style.display='block';
+}
+
+document.addEventListener('click', e => {
+  const ac = document.getElementById('mreq-ac');
+  if (ac && !e.target.closest('#mreq-busca') && !e.target.closest('#mreq-ac')) ac.style.display='none';
+});
+
+function selIngMaster(id) {
+  itemAtualMaster = ingsMaster.find(i => i.id===id);
+  if (!itemAtualMaster) return;
+  document.getElementById('mreq-busca').value = itemAtualMaster.nome;
+  document.getElementById('mreq-un').value = itemAtualMaster.unidade || '-';
+  document.getElementById('mreq-ac').style.display = 'none';
+  document.getElementById('mreq-qtd').focus();
+}
+
+function adicionarItemMaster() {
+  if (!itemAtualMaster) { alert('Selecione um ingrediente.'); return; }
+  const q = parseFloat(document.getElementById('mreq-qtd').value);
+  if (!q || q <= 0) { alert('Informe a quantidade.'); return; }
+  const c = document.getElementById('mreq-com').value.trim();
+  const ex = itensMaster.findIndex(i => i.id===itemAtualMaster.id);
+  if (ex >= 0) itensMaster[ex].quantidade += q;
+  else itensMaster.push({id:itemAtualMaster.id, nome:itemAtualMaster.nome, unidade:itemAtualMaster.unidade||'-', quantidade:q, comentario:c});
+  ['mreq-busca','mreq-qtd','mreq-un','mreq-com'].forEach(id => { document.getElementById(id).value=''; });
+  itemAtualMaster = null;
+  renderItensMaster();
+}
+
+function renderItensMaster() {
+  const el = document.getElementById('mreq-list');
+  document.getElementById('mreq-cnt').textContent = `(${itensMaster.length})`;
+  if (!itensMaster.length) { el.innerHTML = '<div class="empty">Nenhum item adicionado.</div>'; return; }
+  el.innerHTML = itensMaster.map((it,i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#111;border:1px solid #222;border-radius:8px;margin-bottom:8px">
+      <span style="flex:2;font-size:13px;color:#ddd">${it.nome}</span>
+      <input type="number" value="${it.quantidade}" min="0.01" step="0.01" style="width:80px;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#fff;font-size:13px;padding:6px 8px;text-align:center;outline:none" onchange="itensMaster[${i}].quantidade=parseFloat(this.value)||0">
+      <span style="font-size:12px;color:#666;width:60px">${it.unidade}</span>
+      <input type="text" value="${it.comentario||''}" placeholder="comentario..." style="flex:2;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#ccc;font-size:12px;padding:6px 8px;outline:none" onchange="itensMaster[${i}].comentario=this.value">
+      <button style="background:none;border:none;color:#555;font-size:18px;cursor:pointer;padding:0 4px" onmouseover="this.style.color='#e74c3c'" onmouseout="this.style.color='#555'" onclick="itensMaster.splice(${i},1);renderItensMaster()">×</button>
+    </div>`).join('');
+}
+
+async function enviarReqMaster() {
+  const pdv = document.getElementById('mreq-pdv').value;
+  if (!pdv) { alert('Selecione o PDV.'); return; }
+  if (!itensMaster.length) { alert('Adicione ao menos um item.'); return; }
+  const ep = document.getElementById('mreq-entrega').value;
+  const obs = document.getElementById('mreq-obs').value.trim();
+  const {data:req, error} = await sb.from('requisicoes').insert({
+    pdv, criado_por: user.id, status:'aberta',
+    entrega_prevista: ep||null, observacao: obs||null
+  }).select().single();
+  if (error||!req) { alert('Erro ao enviar: '+(error?.message||'desconhecido')); return; }
+  await sb.from('requisicao_itens').insert(itensMaster.map(i=>({
+    requisicao_id:req.id, ingrediente_id:i.id, item_nome:i.nome,
+    quantidade:i.quantidade, unidade:i.unidade, comentario:i.comentario||null
+  })));
+  alert(`✅ Requisicao enviada para ${pdv}!\nStatus: Aguardando aprovacao.`);
+  itensMaster=[]; renderItensMaster();
+  document.getElementById('mreq-pdv').value='';
+  document.getElementById('mreq-obs').value='';
+  carregarDashboard();
 }
