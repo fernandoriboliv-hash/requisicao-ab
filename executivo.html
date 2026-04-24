@@ -15,14 +15,13 @@ body{font-family:'Segoe UI',sans-serif;background:#0f0f0f;color:#e0e0e0;display:
 .nav-item{display:flex;align-items:center;gap:10px;padding:12px 16px;color:#888;font-size:13px;cursor:pointer;border-left:3px solid transparent;transition:all .15s}
 .nav-item:hover{background:#1e1e1e;color:#ccc}
 .nav-item.active{background:#1e1e1e;color:#c9a96e;border-left-color:#c9a96e}
-.nav-item .icon{font-size:16px;width:20px;text-align:center}
+.nav-icon{font-size:15px;width:22px;text-align:center}
 .sidebar-bottom{margin-top:auto;padding:16px;border-top:1px solid #222}
 .user-info{font-size:12px;color:#666}
 .user-info strong{color:#aaa;display:block;margin-bottom:2px}
 .btn-logout{margin-top:8px;background:none;border:1px solid #333;color:#666;font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;width:100%}
 .main{margin-left:220px;flex:1;padding:28px}
-.page{display:none}
-.page.active{display:block}
+.page{display:none}.page.active{display:block}
 .page-header{margin-bottom:24px}
 .page-header h1{font-size:22px;color:#fff;font-weight:600}
 .page-header p{color:#666;font-size:13px;margin-top:4px}
@@ -39,15 +38,11 @@ th{background:#161616;color:#666;font-size:11px;text-transform:uppercase;padding
 td{padding:12px 16px;border-top:1px solid #1e1e1e;font-size:13px;color:#ccc}
 tr:hover td{background:#1e1e1e}
 .status{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
-.status.rascunho{background:#2a2a2a;color:#888}
-.status.aberta{background:#1a2a4a;color:#5b9cf6}
-.status.aprovada{background:#1a3a2a;color:#2ecc71}
-.status.rejeitada{background:#3a1a1a;color:#e74c3c}
+.status.rascunho{background:#2a2a2a;color:#888}.status.aberta{background:#1a2a4a;color:#5b9cf6}
+.status.aprovada{background:#1a3a2a;color:#2ecc71}.status.rejeitada{background:#3a1a1a;color:#e74c3c}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
-.btn-primary{background:#c9a96e;color:#000}
-.btn-primary:hover{background:#e0c080}
-.btn-ghost{background:none;border:1px solid #333;color:#888}
-.btn-ghost:hover{background:#1e1e1e;color:#ccc}
+.btn-primary{background:#c9a96e;color:#000}.btn-primary:hover{background:#e0c080}
+.btn-ghost{background:none;border:1px solid #333;color:#888}.btn-ghost:hover{background:#1e1e1e;color:#ccc}
 .btn-sm{padding:5px 10px;font-size:12px}
 .form-group{margin-bottom:14px;position:relative}
 .form-group label{display:block;color:#777;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
@@ -56,14 +51,13 @@ tr:hover td{background:#1e1e1e}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .ac-list{position:absolute;top:100%;left:0;right:0;background:#1e1e1e;border:1px solid #333;border-radius:7px;z-index:200;max-height:200px;overflow-y:auto;margin-top:2px}
 .ac-item{padding:10px 14px;font-size:13px;cursor:pointer;color:#ccc;border-bottom:1px solid #252525}
-.ac-item:hover{background:#2a2a2a}
+.ac-item:hover{background:#2a2a2a;color:#fff}
 .item-row{display:flex;align-items:center;gap:10px;padding:10px;background:#111;border:1px solid #222;border-radius:8px;margin-bottom:8px}
-.item-row .nome{flex:2;font-size:13px;color:#ddd}
+.nome{flex:2;font-size:13px;color:#ddd}
 .qtd-inp{width:80px;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#fff;font-size:13px;padding:6px 8px;text-align:center;outline:none}
 .un-lbl{font-size:12px;color:#666;width:60px}
 .com-inp{flex:2;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#ccc;font-size:12px;padding:6px 8px;outline:none}
-.rm-btn{background:none;border:none;color:#555;font-size:18px;cursor:pointer;padding:0 4px}
-.rm-btn:hover{color:#e74c3c}
+.rm-btn{background:none;border:none;color:#555;font-size:18px;cursor:pointer;padding:0 4px}.rm-btn:hover{color:#e74c3c}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:500}
 .modal-overlay.open{display:flex}
 .modal{background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:24px;width:100%;max-width:540px;max-height:80vh;overflow-y:auto}
@@ -74,16 +68,15 @@ tr:hover td{background:#1e1e1e}
 .btn-actions{display:flex;gap:10px;margin-top:16px}
 .empty{text-align:center;padding:40px;color:#555}
 .text-muted{color:#666}
-.text-gold{color:#c9a96e}
 </style>
 </head>
 <body>
 <div class="sidebar">
-  <div class="sidebar-logo"><h2>ROSEWOOD SP</h2><p>Painel Executivo</p></div>
-  <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="icon">D</span>Dashboard</div>
-  <div class="nav-item" onclick="showPage('requisicao',this)"><span class="icon">R</span>Nova Requisicao</div>
-  <div class="nav-item" onclick="showPage('historico',this)"><span class="icon">H</span>Historico Geral</div>
-  <div class="nav-item" onclick="showPage('consumo',this)"><span class="icon">C</span>Consumo por PDV</div>
+  <div class="sidebar-logo"><h2>🍽 ROSEWOOD SP</h2><p>Painel Executivo</p></div>
+  <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">📊</span>Dashboard</div>
+  <div class="nav-item" onclick="showPage('requisicao',this)"><span class="nav-icon">📋</span>Nova Requisicao</div>
+  <div class="nav-item" onclick="showPage('historico',this)"><span class="nav-icon">📜</span>Historico Geral</div>
+  <div class="nav-item" onclick="showPage('consumo',this)"><span class="nav-icon">📈</span>Consumo por PDV</div>
   <div class="sidebar-bottom">
     <div class="user-info"><strong id="user-nome">-</strong><span>Executivo</span></div>
     <button class="btn-logout" onclick="logout()">Sair</button>
@@ -100,25 +93,22 @@ tr:hover td{background:#1e1e1e}
         <option>IRD</option><option>Banquetes</option><option>Cozinha Central</option>
         <option>Padaria</option><option>Confeitaria</option><option>Commissary</option>
       </select>
-      <button class="btn btn-ghost btn-sm" onclick="carregarDashboard()">Atualizar</button>
+      <button class="btn btn-ghost btn-sm" onclick="carregarDashboard()">↺ Atualizar</button>
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="label">Requisicoes Hoje</div><div class="value" id="val-hoje">-</div><div class="sub">enviadas</div></div>
       <div class="stat-card"><div class="label">Aprovadas</div><div class="value" id="val-aprov" style="color:#2ecc71">-</div><div class="sub">no periodo</div></div>
       <div class="stat-card"><div class="label">Pendentes</div><div class="value" id="val-pend" style="color:#e74c3c">-</div><div class="sub">aguardando aprovacao</div></div>
     </div>
-    <div class="section">
-      <div class="section-header"><h3>Requisicoes Recentes por PDV</h3></div>
-      <div id="dash-body"><div class="empty">Carregando...</div></div>
-    </div>
+    <div class="section"><div class="section-header"><h3>Requisicoes Recentes</h3></div><div id="dash-body"><div class="empty">Carregando...</div></div></div>
   </div>
   <div class="page" id="page-requisicao">
-    <div class="page-header"><h1>Nova Requisicao</h1><p>Selecione o PDV desta requisicao</p></div>
-    <div class="card"><h3>Detalhes</h3>
+    <div class="page-header"><h1>Nova Requisicao</h1><p>Selecione o PDV desta requisicao executiva</p></div>
+    <div class="card"><h3>Detalhes do Pedido</h3>
       <div class="form-row">
         <div class="form-group"><label>PDV</label>
           <select id="req-pdv">
-            <option value="">- Selecione -</option>
+            <option value="">- Selecione o PDV -</option>
             <option>Le Jardin</option><option>Taraz</option><option>Blaise</option>
             <option>Bela Vista</option><option>Rabo di Galo</option><option>Emerald Pool</option>
             <option>IRD</option><option>Banquetes</option><option>Cozinha Central</option>
@@ -138,19 +128,19 @@ tr:hover td{background:#1e1e1e}
         <div class="form-group"><label>Unidade</label><input type="text" id="req-un" readonly style="background:#111;color:#888"></div>
         <div class="form-group"><label>Comentario</label><input type="text" id="req-com" placeholder="Opcional"></div>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="addItem()">+ Adicionar</button>
+      <button class="btn btn-ghost btn-sm" onclick="addItem()">+ Adicionar a lista</button>
     </div>
     <div class="card">
       <h3>Itens <span class="text-muted" id="req-cnt">(0)</span></h3>
-      <div id="req-list"><div class="empty">Nenhum item.</div></div>
+      <div id="req-list"><div class="empty">Nenhum item adicionado.</div></div>
       <div class="btn-actions">
-        <button class="btn btn-primary" onclick="enviarReq()">Enviar Requisicao</button>
-        <button class="btn btn-ghost" onclick="itens=[];renderItens()">Limpar</button>
+        <button class="btn btn-primary" onclick="enviarReq()">📤 Enviar Requisicao</button>
+        <button class="btn btn-ghost" onclick="itens=[];renderItens()">🗑 Limpar</button>
       </div>
     </div>
   </div>
   <div class="page" id="page-historico">
-    <div class="page-header"><h1>Historico Geral</h1></div>
+    <div class="page-header"><h1>Historico Geral</h1><p>Todas as requisicoes de todos os PDVs</p></div>
     <div class="card">
       <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
         <div class="form-group" style="flex:1;margin:0;min-width:110px"><label>PDV</label>
@@ -173,143 +163,22 @@ tr:hover td{background:#1e1e1e}
     </div>
   </div>
   <div class="page" id="page-consumo">
-    <div class="page-header"><h1>Consumo por PDV</h1></div>
+    <div class="page-header"><h1>Consumo por PDV</h1><p>Itens mais requisitados por ponto de venda</p></div>
     <div style="display:flex;gap:12px;margin-bottom:20px">
-      <div class="form-group" style="flex:1;margin:0"><label>Inicio</label><input type="date" id="cons-ini"></div>
-      <div class="form-group" style="flex:1;margin:0"><label>Fim</label><input type="date" id="cons-fim"></div>
+      <div class="form-group" style="flex:1;margin:0"><label>Inicio</label><input type="date" id="cons-ini" style="width:100%;background:#111;border:1px solid #2a2a2a;border-radius:7px;color:#fff;font-size:14px;padding:10px;outline:none"></div>
+      <div class="form-group" style="flex:1;margin:0"><label>Fim</label><input type="date" id="cons-fim" style="width:100%;background:#111;border:1px solid #2a2a2a;border-radius:7px;color:#fff;font-size:14px;padding:10px;outline:none"></div>
       <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="carregarConsumo()">Gerar</button></div>
     </div>
     <div id="cons-body"><div class="empty">Selecione o periodo e clique em Gerar.</div></div>
   </div>
 </div>
 <div class="modal-overlay" id="modal-det">
-  <div class="modal"><h3 id="det-titulo">Requisicao</h3>
-    <div id="det-body"></div>
+  <div class="modal">
+    <h3 id="det-titulo">Requisicao</h3>
+    <div id="det-body" style="max-height:300px;overflow-y:auto"></div>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="document.getElementById('modal-det').classList.remove('open')">Fechar</button></div>
   </div>
 </div>
-<script>
-const SURL='https://nyijprhukndlyijqljbm.supabase.co';
-const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55aWpwcmh1a25kbHlpanFsamJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MjUwMDgsImV4cCI6MjA5MjIwMTAwOH0.Vzljd9xesi1ZJ-l7du00v-elUSDQObRCUz2jPyqL5p8';
-const sb=supabase.createClient(SURL,SKEY);
-let user=null,ings=[],itens=[],itemAtual=null;
-
-window.addEventListener('DOMContentLoaded',async()=>{
-  user=JSON.parse(sessionStorage.getItem('rw_user')||'null');
-  if(!user||user.perfil!=='executivo'){location.href='index.html';return}
-  document.getElementById('user-nome').textContent=user.nome;
-  const hoje=new Date().toISOString().split('T')[0];
-  document.getElementById('req-entrega').value=hoje;
-  const m=new Date();m.setDate(m.getDate()-30);
-  document.getElementById('hist-ini').value=document.getElementById('cons-ini').value=m.toISOString().split('T')[0];
-  document.getElementById('hist-fim').value=document.getElementById('cons-fim').value=hoje;
-  const{data}=await sb.from('ingredientes').select('id,nome,unidade').eq('ativo',true).order('nome');
-  ings=data||[];
-  await carregarDashboard();
-  carregarHistorico();
-});
-function logout(){sessionStorage.clear();location.href='index.html'}
-function showPage(id,el){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  document.getElementById('page-'+id).classList.add('active');el.classList.add('active');
-  if(id==='historico')carregarHistorico();
-}
-async function carregarDashboard(){
-  const pdv=document.getElementById('filtro-pdv').value;
-  const hoje=new Date().toISOString().split('T')[0];
-  let q=sb.from('requisicoes').select('*,usuarios(nome),requisicao_itens(*)');
-  if(pdv)q=q.eq('pdv',pdv);
-  const{data:reqs}=await q.order('criado_em',{ascending:false}).limit(50);
-  const hr=(reqs||[]).filter(r=>r.criado_em.startsWith(hoje));
-  document.getElementById('val-hoje').textContent=hr.length;
-  document.getElementById('val-aprov').textContent=(reqs||[]).filter(r=>r.status==='aprovada').length;
-  document.getElementById('val-pend').textContent=(reqs||[]).filter(r=>r.status==='aberta').length;
-  const el=document.getElementById('dash-body');
-  if(!reqs||!reqs.length){el.innerHTML='<div class="empty">Nenhuma requisicao.</div>';return}
-  el.innerHTML='<table><thead><tr><th>Data</th><th>PDV</th><th>Solicitante</th><th>Itens</th><th>Status</th><th>Acoes</th></tr></thead><tbody>'+
-    reqs.slice(0,30).map(r=>'<tr><td>'+new Date(r.criado_em).toLocaleDateString('pt-BR')+'</td><td><strong>'+( r.pdv||'-')+'</strong></td><td>'+(r.usuarios?.nome||'-')+'</td><td>'+(r.requisicao_itens||[]).length+'</td><td><span class="status '+r.status+'">'+r.status+'</span></td><td><button class="btn btn-ghost btn-sm" onclick="verDet(''+r.id+'')">Ver</button></td></tr>'
-    ).join('')+'</tbody></table>';
-}
-function buscarIng(q){
-  const ac=document.getElementById('req-ac');
-  if(!q||q.length<2){ac.style.display='none';return}
-  const res=ings.filter(i=>i.nome.toLowerCase().includes(q.toLowerCase())).slice(0,10);
-  if(!res.length){ac.style.display='none';return}
-  ac.innerHTML=res.map(i=>'<div class="ac-item" onclick="selIng(''+i.id+'')">'+i.nome+' <span class="text-muted">('+( i.unidade||'-')+')</span></div>').join('');
-  ac.style.display='block';
-}
-document.addEventListener('click',e=>{if(!e.target.closest('#req-busca')&&!e.target.closest('#req-ac'))document.getElementById('req-ac').style.display='none'});
-function selIng(id){
-  itemAtual=ings.find(i=>i.id===id);if(!itemAtual)return;
-  document.getElementById('req-busca').value=itemAtual.nome;
-  document.getElementById('req-un').value=itemAtual.unidade||'-';
-  document.getElementById('req-ac').style.display='none';
-  document.getElementById('req-qtd').focus();
-}
-function addItem(){
-  if(!itemAtual){alert('Selecione um ingrediente.');return}
-  const q=parseFloat(document.getElementById('req-qtd').value);
-  if(!q||q<=0){alert('Informe a quantidade.');return}
-  const c=document.getElementById('req-com').value.trim();
-  const ex=itens.findIndex(i=>i.id===itemAtual.id);
-  if(ex>=0)itens[ex].quantidade+=q;
-  else itens.push({id:itemAtual.id,nome:itemAtual.nome,unidade:itemAtual.unidade||'-',quantidade:q,comentario:c});
-  ['req-busca','req-qtd','req-un','req-com'].forEach(id=>{document.getElementById(id).value=''});
-  itemAtual=null;renderItens();
-}
-function renderItens(){
-  const el=document.getElementById('req-list');
-  document.getElementById('req-cnt').textContent='('+itens.length+')';
-  if(!itens.length){el.innerHTML='<div class="empty">Nenhum item.</div>';return}
-  el.innerHTML=itens.map((it,i)=>'<div class="item-row"><span class="nome">'+it.nome+'</span>'+
-    '<input class="qtd-inp" type="number" value="'+it.quantidade+'" min="0.01" step="0.01" onchange="itens['+i+'].quantidade=parseFloat(this.value)||0">'+
-    '<span class="un-lbl">'+it.unidade+'</span>'+
-    '<input class="com-inp" type="text" value="'+(it.comentario||'')+'" placeholder="comentario..." onchange="itens['+i+'].comentario=this.value">'+
-    '<button class="rm-btn" onclick="itens.splice('+i+',1);renderItens()">x</button></div>').join('');
-}
-async function enviarReq(){
-  const pdv=document.getElementById('req-pdv').value;
-  if(!pdv){alert('Selecione o PDV.');return}
-  if(!itens.length){alert('Adicione ao menos um item.');return}
-  const ep=document.getElementById('req-entrega').value,obs=document.getElementById('req-obs').value.trim();
-  const{data:req,error}=await sb.from('requisicoes').insert({pdv,criado_por:user.id,status:'aberta',entrega_prevista:ep||null,observacao:obs||null}).select().single();
-  if(error){alert('Erro: '+error.message);return}
-  await sb.from('requisicao_itens').insert(itens.map(i=>({requisicao_id:req.id,ingrediente_id:i.id,item_nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,comentario:i.comentario||null})));
-  alert('Requisicao enviada!');itens=[];renderItens();carregarDashboard();
-}
-async function carregarHistorico(){
-  const pdv=document.getElementById('hist-pdv').value,ini=document.getElementById('hist-ini').value,fim=document.getElementById('hist-fim').value,st=document.getElementById('hist-st').value;
-  let q=sb.from('requisicoes').select('*,usuarios(nome),requisicao_itens(*)').order('criado_em',{ascending:false});
-  if(pdv)q=q.eq('pdv',pdv);if(ini)q=q.gte('criado_em',ini+'T00:00:00');if(fim)q=q.lte('criado_em',fim+'T23:59:59');if(st)q=q.eq('status',st);
-  const{data}=await q.limit(100);
-  const el=document.getElementById('hist-body');
-  if(!data||!data.length){el.innerHTML='<div class="empty">Nenhuma requisicao.</div>';return}
-  el.innerHTML='<table><thead><tr><th>Data</th><th>PDV</th><th>Solicitante</th><th>Itens</th><th>Status</th><th>Acoes</th></tr></thead><tbody>'+
-    data.map(r=>'<tr><td>'+new Date(r.criado_em).toLocaleDateString('pt-BR')+'</td><td><strong>'+(r.pdv||'-')+'</strong></td><td>'+(r.usuarios?.nome||'-')+'</td><td>'+(r.requisicao_itens||[]).length+'</td><td><span class="status '+r.status+'">'+r.status+'</span></td><td><button class="btn btn-ghost btn-sm" onclick="verDet(''+r.id+'')">Ver</button></td></tr>'
-    ).join('')+'</tbody></table>';
-}
-async function carregarConsumo(){
-  const ini=document.getElementById('cons-ini').value,fim=document.getElementById('cons-fim').value;
-  const{data:reqs}=await sb.from('requisicoes').select('pdv,requisicao_itens(item_nome,quantidade,ingredientes(nome))').eq('status','aprovada').gte('aprovado_em',ini+'T00:00:00').lte('aprovado_em',fim+'T23:59:59');
-  const pp={};
-  (reqs||[]).forEach(r=>{if(!pp[r.pdv||'-'])pp[r.pdv||'-']={};(r.requisicao_itens||[]).forEach(i=>{const n=i.ingredientes?.nome||i.item_nome||'?';pp[r.pdv||'-'][n]=(pp[r.pdv||'-'][n]||0)+(Number(i.quantidade)||0)})});
-  const el=document.getElementById('cons-body');
-  if(!Object.keys(pp).length){el.innerHTML='<div class="empty">Nenhum dado no periodo.</div>';return}
-  el.innerHTML=Object.entries(pp).map(([pdv,itens])=>'<div class="section" style="margin-bottom:16px"><div class="section-header"><h3>'+pdv+'</h3></div>'+
-    '<table><thead><tr><th>Item</th><th>Total Requisitado</th></tr></thead><tbody>'+
-    Object.entries(itens).sort(([,a],[,b])=>b-a).map(([n,q])=>'<tr><td>'+n+'</td><td><strong>'+q+'</strong></td></tr>').join('')+
-    '</tbody></table></div>').join('');
-}
-async function verDet(id){
-  const{data:r}=await sb.from('requisicoes').select('*,usuarios(nome),requisicao_itens(*,ingredientes(nome,unidade))').eq('id',id).single();
-  document.getElementById('det-titulo').textContent=(r.pdv||'-')+' - '+new Date(r.criado_em).toLocaleDateString('pt-BR');
-  document.getElementById('det-body').innerHTML='<div style="margin-bottom:12px"><span class="status '+r.status+'">'+r.status+'</span> <span style="color:#666;font-size:12px;margin-left:8px">por '+(r.usuarios?.nome||'-')+'</span>'+(r.motivo_rejeicao?'<div style="color:#e74c3c;font-size:12px;margin-top:6px">Motivo: '+r.motivo_rejeicao+'</div>':'')+'</div>'+
-    '<table><thead><tr><th>Item</th><th>Qtd</th><th>Un</th><th>Comentario</th></tr></thead><tbody>'+
-    (r.requisicao_itens||[]).map(i=>'<tr><td>'+(i.ingredientes?.nome||i.item_nome||'?')+'</td><td>'+i.quantidade+'</td><td>'+(i.unidade||'-')+'</td><td style="color:#666">'+(i.comentario||'')+'</td></tr>').join('')+
-    '</tbody></table>';
-  document.getElementById('modal-det').classList.add('open');
-}
-</script>
+<script src="executivo.js"></script>
 </body>
 </html>
