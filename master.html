@@ -75,6 +75,7 @@ tr:hover td{background:#1e1e1e}
   <div class="nav-item" onclick="showPage('lista-compras',this)"><span class="nav-icon">🛒</span>Lista de Compras</div>
   <div class="nav-item" onclick="showPage('food-cost',this)"><span class="nav-icon">💰</span>Food Cost</div>
   <div class="nav-item" onclick="showPage('usuarios',this)"><span class="nav-icon">👥</span>Usuarios</div>
+  <div class="nav-item" onclick="showPage('requisicao',this)"><span class="nav-icon">📋</span>Nova Requisicao</div>
   <div class="nav-item" onclick="showPage('beo',this)"><span class="nav-icon">📋</span>BEO</div>
   <div class="sidebar-bottom">
     <div class="user-info"><strong id="user-nome">-</strong><span>master</span></div>
@@ -128,6 +129,49 @@ tr:hover td{background:#1e1e1e}
     <div class="section"><div style="padding:60px;text-align:center"><div style="font-size:48px;margin-bottom:16px">📋</div><h2 style="color:#555;font-size:20px">Em breve</h2><p style="color:#444;font-size:14px;margin-top:8px">Modulo BEO em desenvolvimento.</p></div></div>
   </div>
 </div>
+
+<div class="page" id="page-requisicao">
+    <div class="page-header"><h1>Nova Requisicao</h1><p>Crie uma requisicao para qualquer PDV</p></div>
+    <div class="card" style="margin-bottom:16px">
+      <h3 style="font-size:14px;color:#ddd;font-weight:600;margin-bottom:16px">Detalhes do Pedido</h3>
+      <div class="form-row">
+        <div class="form-group"><label>PDV</label>
+          <select id="mreq-pdv">
+            <option value="">- Selecione o PDV -</option>
+            <option>Le Jardin</option><option>Taraz</option><option>Blaise</option>
+            <option>Bela Vista</option><option>Rabo di Galo</option><option>Emerald Pool</option>
+            <option>IRD</option><option>Banquetes</option><option>Cozinha Central</option>
+            <option>Padaria</option><option>Confeitaria</option><option>Commissary</option><option>Rosa Madeira</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Entrega Prevista</label><input type="date" id="mreq-entrega"></div>
+      </div>
+      <div class="form-group"><label>Observacao</label><input type="text" id="mreq-obs" placeholder="Opcional"></div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <h3 style="font-size:14px;color:#ddd;font-weight:600;margin-bottom:16px">Adicionar Item</h3>
+      <div class="form-row">
+        <div class="form-group" style="position:relative"><label>Ingrediente</label>
+          <input type="text" id="mreq-busca" placeholder="Digite o nome..." oninput="buscarIngMaster(this.value)" autocomplete="off">
+          <div id="mreq-ac" style="position:absolute;top:100%;left:0;right:0;background:#1e1e1e;border:1px solid #333;border-radius:7px;z-index:200;max-height:200px;overflow-y:auto;margin-top:2px;display:none"></div>
+        </div>
+        <div class="form-group"><label>Quantidade</label><input type="number" id="mreq-qtd" min="0.01" step="0.01" placeholder="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Unidade</label><input type="text" id="mreq-un" readonly style="background:#111;color:#888"></div>
+        <div class="form-group"><label>Comentario</label><input type="text" id="mreq-com" placeholder="Opcional"></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="adicionarItemMaster()">+ Adicionar a lista</button>
+    </div>
+    <div class="card">
+      <h3 style="font-size:14px;color:#ddd;font-weight:600;margin-bottom:16px">Itens <span style="color:#666" id="mreq-cnt">(0)</span></h3>
+      <div id="mreq-list"><div class="empty">Nenhum item adicionado.</div></div>
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="enviarReqMaster()">📤 Enviar Requisicao</button>
+        <button class="btn btn-ghost" onclick="itensMaster=[];renderItensMaster()">🗑 Limpar</button>
+      </div>
+    </div>
+  </div>
 
 <!-- MODAL APROVACAO -->
 <div class="modal-overlay" id="modal-aprov">
