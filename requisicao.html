@@ -13,13 +13,13 @@ body{font-family:'Segoe UI',sans-serif;background:#0f0f0f;color:#e0e0e0}
 .pdv-tag{background:#222;color:#aaa;font-size:12px;padding:4px 10px;border-radius:20px}
 .ml-auto{margin-left:auto;display:flex;gap:8px;align-items:center}
 .btn-logout{background:none;border:1px solid #333;color:#666;font-size:12px;padding:6px 12px;border-radius:6px;cursor:pointer}
+.btn-logout:hover{color:#aaa;border-color:#555}
 .container{max-width:900px;margin:0 auto;padding:28px 24px}
 .tabs{display:flex;gap:4px;margin-bottom:24px;background:#141414;border:1px solid #222;border-radius:10px;padding:4px}
 .tab{flex:1;text-align:center;padding:10px;border-radius:8px;cursor:pointer;font-size:13px;color:#666;transition:all .15s}
 .tab.active{background:#c9a96e;color:#000;font-weight:700}
 .tab:hover:not(.active){background:#1e1e1e;color:#aaa}
-.pane{display:none}
-.pane.active{display:block}
+.pane{display:none}.pane.active{display:block}
 .card{background:#1a1a1a;border:1px solid #252525;border-radius:10px;padding:20px;margin-bottom:16px}
 .card h3{font-size:14px;color:#ddd;font-weight:600;margin-bottom:16px}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -29,19 +29,16 @@ body{font-family:'Segoe UI',sans-serif;background:#0f0f0f;color:#e0e0e0}
 .form-group input:focus,.form-group select:focus{border-color:#c9a96e}
 .ac-list{position:absolute;top:100%;left:0;right:0;background:#1e1e1e;border:1px solid #333;border-radius:7px;z-index:200;max-height:200px;overflow-y:auto;margin-top:2px}
 .ac-item{padding:10px 14px;font-size:13px;cursor:pointer;color:#ccc;border-bottom:1px solid #252525}
-.ac-item:hover,.ac-item.sel{background:#2a2a2a;color:#fff}
+.ac-item:hover{background:#2a2a2a;color:#fff}
 .item-row{display:flex;align-items:center;gap:10px;padding:10px;background:#111;border:1px solid #222;border-radius:8px;margin-bottom:8px}
-.item-row .nome{flex:2;font-size:13px;color:#ddd}
+.nome{flex:2;font-size:13px;color:#ddd}
 .qtd-inp{width:80px;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#fff;font-size:13px;padding:6px 8px;text-align:center;outline:none}
 .un-lbl{font-size:12px;color:#666;width:60px}
 .com-inp{flex:2;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#ccc;font-size:12px;padding:6px 8px;outline:none}
-.rm-btn{background:none;border:none;color:#555;font-size:18px;cursor:pointer;padding:0 4px}
-.rm-btn:hover{color:#e74c3c}
+.rm-btn{background:none;border:none;color:#555;font-size:18px;cursor:pointer;padding:0 4px}.rm-btn:hover{color:#e74c3c}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
-.btn-primary{background:#c9a96e;color:#000}
-.btn-primary:hover{background:#e0c080}
-.btn-ghost{background:none;border:1px solid #333;color:#888}
-.btn-ghost:hover{background:#1e1e1e;color:#ccc}
+.btn-primary{background:#c9a96e;color:#000}.btn-primary:hover{background:#e0c080}
+.btn-ghost{background:none;border:1px solid #333;color:#888}.btn-ghost:hover{background:#1e1e1e;color:#ccc}
 .btn-danger{background:#3a1a1a;color:#e74c3c;border:1px solid #333}
 .btn-sm{padding:6px 12px;font-size:12px}
 .btn-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
@@ -50,10 +47,8 @@ th{background:#161616;color:#666;font-size:11px;text-transform:uppercase;letter-
 td{padding:11px 14px;border-top:1px solid #1e1e1e;font-size:13px;color:#ccc}
 tr:hover td{background:#1a1a1a}
 .status{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
-.status.rascunho{background:#2a2a2a;color:#888}
-.status.aberta{background:#1a2a4a;color:#5b9cf6}
-.status.aprovada{background:#1a3a2a;color:#2ecc71}
-.status.rejeitada{background:#3a1a1a;color:#e74c3c}
+.status.rascunho{background:#2a2a2a;color:#888}.status.aberta{background:#1a2a4a;color:#5b9cf6}
+.status.aprovada{background:#1a3a2a;color:#2ecc71}.status.rejeitada{background:#3a1a1a;color:#e74c3c}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:500}
 .modal-overlay.open{display:flex}
 .modal{background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:24px;width:100%;max-width:520px;max-height:80vh;overflow-y:auto}
@@ -67,7 +62,7 @@ tr:hover td{background:#1a1a1a}
 </head>
 <body>
 <div class="topbar">
-  <h1>ROSEWOOD SP</h1>
+  <h1>🍽 ROSEWOOD SP</h1>
   <span class="pdv-tag" id="pdv-label">-</span>
   <div class="ml-auto">
     <span style="color:#666;font-size:12px" id="user-nome">-</span>
@@ -75,56 +70,62 @@ tr:hover td{background:#1a1a1a}
   </div>
 </div>
 <div class="container">
-  <div class="notif-bar" id="notif-bar"><span id="notif-text"></span><button class="btn btn-ghost btn-sm" onclick="this.parentElement.classList.remove('show')">x</button></div>
+  <div class="notif-bar" id="notif-bar">
+    <span id="notif-text"></span>
+    <button class="btn btn-ghost btn-sm" onclick="this.parentElement.classList.remove('show')">×</button>
+  </div>
   <div class="tabs">
     <div class="tab active" onclick="showTab('nova',this)">Nova Requisicao</div>
     <div class="tab" onclick="showTab('rascunhos',this)">Rascunhos</div>
     <div class="tab" onclick="showTab('historico',this)">Historico</div>
   </div>
   <div class="pane active" id="pane-nova">
-    <div class="card"><h3>Detalhes</h3>
+    <div class="card"><h3>Detalhes do Pedido</h3>
       <div class="form-row">
         <div class="form-group"><label>Entrega Prevista</label><input type="date" id="entrega-prevista"></div>
-        <div class="form-group"><label>Observacao</label><input type="text" id="obs-geral" placeholder="Opcional"></div>
+        <div class="form-group"><label>Observacao Geral</label><input type="text" id="obs-geral" placeholder="Opcional"></div>
       </div>
     </div>
     <div class="card"><h3>Adicionar Item</h3>
       <div class="form-row">
-        <div class="form-group"><label>Ingrediente</label><input type="text" id="busca-item" placeholder="Digite o nome..." oninput="buscarIng(this.value)" autocomplete="off"><div class="ac-list" id="ac-list" style="display:none"></div></div>
+        <div class="form-group"><label>Buscar Ingrediente</label><input type="text" id="busca-item" placeholder="Digite o nome..." oninput="buscarIng(this.value)" autocomplete="off"><div class="ac-list" id="ac-list" style="display:none"></div></div>
         <div class="form-group"><label>Quantidade</label><input type="number" id="qtd-item" min="0.01" step="0.01" placeholder="0"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Unidade</label><input type="text" id="un-item" readonly style="background:#111;color:#888"></div>
         <div class="form-group"><label>Comentario</label><input type="text" id="coment-item" placeholder="Opcional"></div>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="adicionarItem()">+ Adicionar</button>
+      <button class="btn btn-ghost btn-sm" onclick="adicionarItem()">+ Adicionar a lista</button>
     </div>
     <div class="card">
-      <h3>Itens <span class="text-muted" id="count-itens">(0)</span></h3>
+      <h3>Itens da Requisicao <span class="text-muted" id="count-itens">(0 itens)</span></h3>
       <div id="item-list"><div class="empty">Nenhum item adicionado.</div></div>
       <div class="btn-actions">
-        <button class="btn btn-ghost" onclick="salvarRascunho()">Salvar Rascunho</button>
-        <button class="btn btn-primary" onclick="abrirModalEnvio()">Enviar Requisicao</button>
-        <button class="btn btn-danger btn-sm" onclick="limpar()">Limpar</button>
+        <button class="btn btn-ghost" onclick="salvarRascunho()">💾 Salvar Rascunho</button>
+        <button class="btn btn-primary" onclick="abrirModalEnvio()">📤 Enviar Requisicao</button>
+        <button class="btn btn-danger btn-sm" onclick="limpar()">🗑 Limpar</button>
       </div>
     </div>
   </div>
   <div class="pane" id="pane-rascunhos">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <h3 style="margin:0">Rascunhos <span class="text-muted" id="count-rasc"></span></h3>
-        <button class="btn btn-ghost btn-sm" onclick="carregarRascunhos()">Atualizar</button>
+        <h3 style="margin:0">Rascunhos Salvos <span class="text-muted" id="count-rasc"></span></h3>
+        <button class="btn btn-ghost btn-sm" onclick="carregarRascunhos()">↺ Atualizar</button>
       </div>
       <div id="lista-rascunhos"><div class="empty">Carregando...</div></div>
     </div>
   </div>
   <div class="pane" id="pane-historico">
-    <div class="card"><h3>Historico</h3>
+    <div class="card"><h3>Historico de Requisicoes</h3>
       <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-        <div class="form-group" style="flex:1;margin:0;min-width:130px"><label>Inicio</label><input type="date" id="hist-ini"></div>
-        <div class="form-group" style="flex:1;margin:0;min-width:130px"><label>Fim</label><input type="date" id="hist-fim"></div>
-        <div class="form-group" style="flex:1;margin:0;min-width:110px"><label>Status</label>
-          <select id="hist-status"><option value="">Todos</option><option value="rascunho">Rascunho</option><option value="aberta">Aberta</option><option value="aprovada">Aprovada</option><option value="rejeitada">Rejeitada</option></select>
+        <div class="form-group" style="flex:1;margin:0;min-width:140px"><label>Data inicio</label><input type="date" id="hist-ini"></div>
+        <div class="form-group" style="flex:1;margin:0;min-width:140px"><label>Data fim</label><input type="date" id="hist-fim"></div>
+        <div class="form-group" style="flex:1;margin:0;min-width:120px"><label>Status</label>
+          <select id="hist-status">
+            <option value="">Todos</option><option value="rascunho">Rascunho</option>
+            <option value="aberta">Aberta</option><option value="aprovada">Aprovada</option><option value="rejeitada">Rejeitada</option>
+          </select>
         </div>
         <div style="display:flex;align-items:flex-end"><button class="btn btn-ghost btn-sm" onclick="carregarHistorico()">Filtrar</button></div>
       </div>
@@ -133,8 +134,9 @@ tr:hover td{background:#1a1a1a}
   </div>
 </div>
 <div class="modal-overlay" id="modal-envio">
-  <div class="modal"><h3>Confirmar Envio</h3>
-    <p style="color:#888;font-size:13px;margin-bottom:16px">A requisicao sera enviada para aprovacao.</p>
+  <div class="modal">
+    <h3>Confirmar Envio</h3>
+    <p style="color:#888;font-size:13px;margin-bottom:16px">A requisicao sera enviada para aprovacao do master.</p>
     <div id="modal-resumo" style="background:#111;border-radius:8px;padding:14px;font-size:13px;max-height:200px;overflow-y:auto"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="document.getElementById('modal-envio').classList.remove('open')">Cancelar</button>
@@ -143,174 +145,15 @@ tr:hover td{background:#1a1a1a}
   </div>
 </div>
 <div class="modal-overlay" id="modal-detalhe">
-  <div class="modal"><h3 id="det-titulo">Requisicao</h3>
+  <div class="modal">
+    <h3 id="det-titulo">Requisicao</h3>
     <div id="det-body" style="max-height:300px;overflow-y:auto;font-size:13px"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="document.getElementById('modal-detalhe').classList.remove('open')">Fechar</button>
-      <button class="btn btn-ghost btn-sm" onclick="repetirPedido()">Repetir este pedido</button>
+      <button class="btn btn-ghost btn-sm" onclick="repetirPedido()">↺ Repetir este pedido</button>
     </div>
   </div>
 </div>
-<script>
-const SURL='https://nyijprhukndlyijqljbm.supabase.co';
-const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55aWpwcmh1a25kbHlpanFsamJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MjUwMDgsImV4cCI6MjA5MjIwMTAwOH0.Vzljd9xesi1ZJ-l7du00v-elUSDQObRCUz2jPyqL5p8';
-const sb=supabase.createClient(SURL,SKEY);
-let user=null,ings=[],itens=[],itemAtual=null,detAtual=null;
-
-window.addEventListener('DOMContentLoaded',async()=>{
-  user=JSON.parse(sessionStorage.getItem('rw_user')||'null');
-  if(!user||user.perfil!=='operacional'||user.subtipo!=='pdv'){location.href='index.html';return}
-  document.getElementById('user-nome').textContent=user.nome;
-  document.getElementById('pdv-label').textContent=user.pdv||'Sem PDV';
-  const hoje=new Date().toISOString().split('T')[0];
-  document.getElementById('entrega-prevista').value=hoje;
-  const m=new Date();m.setDate(m.getDate()-30);
-  document.getElementById('hist-ini').value=m.toISOString().split('T')[0];
-  document.getElementById('hist-fim').value=hoje;
-  const{data}=await sb.from('ingredientes').select('id,nome,unidade').eq('ativo',true).order('nome');
-  ings=data||[];
-  await verificarNotifs();
-  carregarHistorico();
-});
-function logout(){sessionStorage.clear();location.href='index.html'}
-function showTab(id,el){
-  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('pane-'+id).classList.add('active');el.classList.add('active');
-  if(id==='rascunhos')carregarRascunhos();
-  if(id==='historico')carregarHistorico();
-}
-async function verificarNotifs(){
-  const{data}=await sb.from('requisicoes').select('id,status,motivo_rejeicao').eq('pdv',user.pdv).in('status',['aprovada','rejeitada']).order('aprovado_em',{ascending:false}).limit(5);
-  const rec=(data||[]).filter(r=>!localStorage.getItem('visto_'+r.id));
-  if(!rec.length)return;
-  const ap=rec.filter(r=>r.status==='aprovada').length,rj=rec.filter(r=>r.status==='rejeitada').length;
-  let msg='';if(ap)msg+=ap+' requisicao(oes) aprovada(s). ';if(rj)msg+=rj+' rejeitada(s).';
-  document.getElementById('notif-text').textContent=msg;
-  document.getElementById('notif-bar').classList.add('show');
-  rec.forEach(r=>localStorage.setItem('visto_'+r.id,'1'));
-}
-function buscarIng(q){
-  const ac=document.getElementById('ac-list');
-  if(!q||q.length<2){ac.style.display='none';return}
-  const res=ings.filter(i=>i.nome.toLowerCase().includes(q.toLowerCase())).slice(0,10);
-  if(!res.length){ac.style.display='none';return}
-  ac.innerHTML=res.map((i,idx)=>'<div class="ac-item" onclick="selIng(''+i.id+'')" data-idx="'+idx+'">'+i.nome+' <span class="text-muted">('+( i.unidade||'-')+')</span></div>').join('');
-  ac.style.display='block';
-}
-document.addEventListener('click',e=>{if(!e.target.closest('#busca-item')&&!e.target.closest('#ac-list'))document.getElementById('ac-list').style.display='none'});
-function selIng(id){
-  itemAtual=ings.find(i=>i.id===id);if(!itemAtual)return;
-  document.getElementById('busca-item').value=itemAtual.nome;
-  document.getElementById('un-item').value=itemAtual.unidade||'-';
-  document.getElementById('ac-list').style.display='none';
-  document.getElementById('qtd-item').focus();
-}
-function adicionarItem(){
-  if(!itemAtual){alert('Selecione um ingrediente.');return}
-  const q=parseFloat(document.getElementById('qtd-item').value);
-  if(!q||q<=0){alert('Informe a quantidade.');return}
-  const c=document.getElementById('coment-item').value.trim();
-  const ex=itens.findIndex(i=>i.id===itemAtual.id);
-  if(ex>=0)itens[ex].quantidade+=q;
-  else itens.push({id:itemAtual.id,nome:itemAtual.nome,unidade:itemAtual.unidade||'-',quantidade:q,comentario:c});
-  ['busca-item','qtd-item','un-item','coment-item'].forEach(id=>{document.getElementById(id).value=''});
-  itemAtual=null;renderItens();
-}
-function renderItens(){
-  const el=document.getElementById('item-list');
-  document.getElementById('count-itens').textContent='('+itens.length+')';
-  if(!itens.length){el.innerHTML='<div class="empty">Nenhum item.</div>';return}
-  el.innerHTML=itens.map((it,i)=>'<div class="item-row"><span class="nome">'+it.nome+'</span>'+
-    '<input class="qtd-inp" type="number" value="'+it.quantidade+'" min="0.01" step="0.01" onchange="itens['+i+'].quantidade=parseFloat(this.value)||0">'+
-    '<span class="un-lbl">'+it.unidade+'</span>'+
-    '<input class="com-inp" type="text" value="'+(it.comentario||'')+'" placeholder="comentario..." onchange="itens['+i+'].comentario=this.value">'+
-    '<button class="rm-btn" onclick="itens.splice('+i+',1);renderItens()">x</button></div>').join('');
-}
-function limpar(){if(confirm('Limpar todos os itens?')){itens=[];renderItens()}}
-async function salvarRascunho(){
-  if(!itens.length){alert('Adicione ao menos um item.');return}
-  const{count}=await sb.from('requisicoes').select('*',{count:'exact',head:true}).eq('pdv',user.pdv).eq('status','rascunho');
-  if(count>=10){alert('Limite de 10 rascunhos atingido.');return}
-  const ep=document.getElementById('entrega-prevista').value;
-  const{data:req,error}=await sb.from('requisicoes').insert({pdv:user.pdv,criado_por:user.id,status:'rascunho',entrega_prevista:ep||null}).select().single();
-  if(error||!req){alert('Erro ao salvar.');return}
-  await sb.from('requisicao_itens').insert(itens.map(i=>({requisicao_id:req.id,ingrediente_id:i.id,item_nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,comentario:i.comentario||null})));
-  alert('Rascunho salvo!');
-}
-function abrirModalEnvio(){
-  if(!itens.length){alert('Adicione ao menos um item.');return}
-  document.getElementById('modal-resumo').innerHTML=itens.map(i=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #222"><span>'+i.nome+'</span><span>'+i.quantidade+' '+i.unidade+'</span></div>').join('');
-  document.getElementById('modal-envio').classList.add('open');
-}
-async function enviarRequisicao(){
-  const ep=document.getElementById('entrega-prevista').value;
-  const obs=document.getElementById('obs-geral').value.trim();
-  const{data:req,error}=await sb.from('requisicoes').insert({pdv:user.pdv,criado_por:user.id,status:'aberta',entrega_prevista:ep||null,observacao:obs||null}).select().single();
-  if(error||!req){alert('Erro: '+error?.message);return}
-  await sb.from('requisicao_itens').insert(itens.map(i=>({requisicao_id:req.id,ingrediente_id:i.id,item_nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,comentario:i.comentario||null})));
-  document.getElementById('modal-envio').classList.remove('open');
-  itens=[];renderItens();
-  document.getElementById('obs-geral').value='';
-  alert('Requisicao enviada!');carregarHistorico();
-}
-async function carregarRascunhos(){
-  const{data}=await sb.from('requisicoes').select('*,requisicao_itens(*)').eq('pdv',user.pdv).eq('status','rascunho').order('criado_em',{ascending:false});
-  const el=document.getElementById('lista-rascunhos');
-  document.getElementById('count-rasc').textContent='('+(data||[]).length+'/10)';
-  if(!data||!data.length){el.innerHTML='<div class="empty">Nenhum rascunho.</div>';return}
-  el.innerHTML='<table><thead><tr><th>Data</th><th>Itens</th><th>Entrega</th><th>Acoes</th></tr></thead><tbody>'+
-    data.map(r=>'<tr><td>'+new Date(r.criado_em).toLocaleString('pt-BR')+'</td><td>'+(r.requisicao_itens||[]).length+'</td><td>'+(r.entrega_prevista?new Date(r.entrega_prevista+'T12:00:00').toLocaleDateString('pt-BR'):'-')+'</td>'+
-      '<td style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" onclick="editarRasc(''+r.id+'')">Editar</button>'+
-      '<button class="btn btn-primary btn-sm" onclick="enviarRasc(''+r.id+'')">Enviar</button>'+
-      '<button class="btn btn-danger btn-sm" onclick="excluirRasc(''+r.id+'')">x</button></td></tr>'
-    ).join('')+'</tbody></table>';
-}
-async function editarRasc(id){
-  const{data:r}=await sb.from('requisicoes').select('*,requisicao_itens(*,ingredientes(nome,unidade))').eq('id',id).single();
-  itens=(r.requisicao_itens||[]).map(i=>({id:i.ingrediente_id,nome:i.ingredientes?.nome||i.item_nome||'?',unidade:i.unidade||i.ingredientes?.unidade||'-',quantidade:i.quantidade,comentario:i.comentario||''}));
-  document.getElementById('entrega-prevista').value=r.entrega_prevista||'';
-  renderItens();showTab('nova',document.querySelectorAll('.tab')[0]);
-  await sb.from('requisicao_itens').delete().eq('requisicao_id',id);
-  await sb.from('requisicoes').delete().eq('id',id);
-}
-async function enviarRasc(id){await sb.from('requisicoes').update({status:'aberta'}).eq('id',id);alert('Enviado!');carregarRascunhos()}
-async function excluirRasc(id){
-  if(!confirm('Excluir?'))return;
-  await sb.from('requisicao_itens').delete().eq('requisicao_id',id);
-  await sb.from('requisicoes').delete().eq('id',id);
-  carregarRascunhos();
-}
-async function carregarHistorico(){
-  const ini=document.getElementById('hist-ini').value,fim=document.getElementById('hist-fim').value,st=document.getElementById('hist-status').value;
-  let q=sb.from('requisicoes').select('*,requisicao_itens(*)').eq('pdv',user.pdv).order('criado_em',{ascending:false});
-  if(ini)q=q.gte('criado_em',ini+'T00:00:00');
-  if(fim)q=q.lte('criado_em',fim+'T23:59:59');
-  if(st)q=q.eq('status',st);
-  const{data}=await q;
-  const el=document.getElementById('lista-historico');
-  if(!data||!data.length){el.innerHTML='<div class="empty">Nenhuma requisicao.</div>';return}
-  el.innerHTML='<table><thead><tr><th>Data</th><th>Status</th><th>Itens</th><th>Motivo Rej.</th><th>Acoes</th></tr></thead><tbody>'+
-    data.map(r=>'<tr><td>'+new Date(r.criado_em).toLocaleDateString('pt-BR')+'</td><td><span class="status '+r.status+'">'+r.status+'</span></td><td>'+(r.requisicao_itens||[]).length+'</td><td style="color:#666;font-size:11px">'+(r.motivo_rejeicao||'')+'</td>'+
-      '<td><button class="btn btn-ghost btn-sm" onclick="verDet(''+r.id+'')">Ver</button></td></tr>'
-    ).join('')+'</tbody></table>';
-}
-async function verDet(id){
-  const{data:r}=await sb.from('requisicoes').select('*,requisicao_itens(*,ingredientes(nome,unidade))').eq('id',id).single();
-  detAtual=r;
-  document.getElementById('det-titulo').textContent=(r.pdv||'-')+' - '+new Date(r.criado_em).toLocaleDateString('pt-BR');
-  document.getElementById('det-body').innerHTML='<div style="margin-bottom:10px"><span class="status '+r.status+'">'+r.status+'</span>'+(r.motivo_rejeicao?'<span style="color:#e74c3c;font-size:11px;margin-left:8px">'+r.motivo_rejeicao+'</span>':'')+'</div>'+
-    '<table><thead><tr><th>Item</th><th>Qtd</th><th>Un</th><th>Comentario</th></tr></thead><tbody>'+
-    (r.requisicao_itens||[]).map(i=>'<tr><td>'+(i.ingredientes?.nome||i.item_nome||'?')+'</td><td>'+i.quantidade+'</td><td>'+(i.unidade||'-')+'</td><td style="color:#666">'+(i.comentario||'')+'</td></tr>').join('')+
-    '</tbody></table>';
-  document.getElementById('modal-detalhe').classList.add('open');
-}
-function repetirPedido(){
-  if(!detAtual)return;
-  itens=(detAtual.requisicao_itens||[]).map(i=>({id:i.ingrediente_id,nome:i.ingredientes?.nome||i.item_nome||'?',unidade:i.unidade||i.ingredientes?.unidade||'-',quantidade:i.quantidade,comentario:i.comentario||''}));
-  document.getElementById('modal-detalhe').classList.remove('open');
-  renderItens();showTab('nova',document.querySelectorAll('.tab')[0]);
-}
-</script>
+<script src="requisicao.js"></script>
 </body>
 </html>
