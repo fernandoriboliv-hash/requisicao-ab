@@ -12,6 +12,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0f0f0f;color:#e0e0e0}
 .topbar h1{color:#c9a96e;font-size:16px;font-weight:600}
 .ml-auto{margin-left:auto;display:flex;gap:8px;align-items:center}
 .btn-logout{background:none;border:1px solid #333;color:#666;font-size:12px;padding:6px 12px;border-radius:6px;cursor:pointer}
+.btn-logout:hover{color:#aaa}
 .progress-bar-wrap{background:#141414;border-bottom:1px solid #222;padding:12px 24px}
 .progress-label{display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:6px}
 .progress-bar{height:6px;background:#222;border-radius:3px;overflow:hidden}
@@ -21,10 +22,9 @@ body{font-family:'Segoe UI',sans-serif;background:#0f0f0f;color:#e0e0e0}
 .tab{flex:1;text-align:center;padding:10px;border-radius:8px;cursor:pointer;font-size:13px;color:#666;transition:all .15s}
 .tab.active{background:#c9a96e;color:#000;font-weight:700}
 .tab:hover:not(.active){background:#1e1e1e;color:#aaa}
-.pane{display:none}
-.pane.active{display:block}
+.pane{display:none}.pane.active{display:block}
 .area-section{margin-bottom:20px}
-.area-header{background:#1e1e1e;border:1px solid #2a2a2a;border-radius:10px 10px 0 0;padding:14px 20px;display:flex;align-items:center;gap:12px;cursor:pointer}
+.area-header{background:#1e1e1e;border:1px solid #2a2a2a;border-radius:10px 10px 0 0;padding:14px 20px;display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none}
 .area-header h3{color:#c9a96e;font-size:14px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
 .area-prog{margin-left:auto;font-size:12px;color:#666}
 .area-body{background:#161616;border:1px solid #2a2a2a;border-top:none;border-radius:0 0 10px 10px}
@@ -32,19 +32,17 @@ body{font-family:'Segoe UI',sans-serif;background:#0f0f0f;color:#e0e0e0}
 .item-row{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid #1e1e1e;transition:background .1s}
 .item-row:last-child{border-bottom:none}
 .item-row:hover{background:#1a1a1a}
-.item-check{width:20px;height:20px;border-radius:50%;border:2px solid #333;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.item-check{width:22px;height:22px;border-radius:50%;border:2px solid #333;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;transition:all .2s}
 .item-check.checked{border-color:#2ecc71;background:#2ecc71;color:#000}
 .item-nome{flex:1;font-size:13px;color:#ddd}
-.item-nota{font-size:11px;color:#555}
+.item-nota{font-size:11px;color:#555;margin-top:2px}
 .item-un{font-size:12px;color:#666;width:80px;text-align:right}
 .item-input{width:90px;background:#111;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:14px;padding:7px 10px;text-align:center;outline:none;transition:border-color .2s}
 .item-input:focus{border-color:#c9a96e}
 .item-input.filled{border-color:#2ecc71;background:#0f2a1a}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
-.btn-primary{background:#c9a96e;color:#000}
-.btn-primary:hover{background:#e0c080}
-.btn-ghost{background:none;border:1px solid #333;color:#888}
-.btn-ghost:hover{background:#1e1e1e;color:#ccc}
+.btn-primary{background:#c9a96e;color:#000}.btn-primary:hover{background:#e0c080}
+.btn-ghost{background:none;border:1px solid #333;color:#888}.btn-ghost:hover{background:#1e1e1e;color:#ccc}
 .btn-sm{padding:6px 12px;font-size:12px}
 .search-box{background:#1a1a1a;border:1px solid #252525;border-radius:10px;padding:20px;margin-bottom:16px}
 .search-box label{display:block;color:#777;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
@@ -56,28 +54,26 @@ td{padding:11px 16px;border-top:1px solid #1e1e1e;font-size:13px;color:#ccc}
 tr:hover td{background:#1a1a1a}
 .empty{text-align:center;padding:40px;color:#555;font-size:14px}
 .card{background:#1a1a1a;border:1px solid #252525;border-radius:10px;padding:20px;margin-bottom:16px}
-.btn-fixed{position:fixed;bottom:24px;right:24px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
-.trend-up{color:#e74c3c}
-.trend-down{color:#2ecc71}
+.btn-fixed{position:fixed;bottom:24px;right:24px;box-shadow:0 8px 24px rgba(0,0,0,.6);z-index:50}
 </style>
 </head>
 <body>
 <div class="topbar">
-  <h1>ROSEWOOD SP - Contagem de Estoque</h1>
+  <h1>🍽 ROSEWOOD SP — Contagem de Estoque</h1>
   <div class="ml-auto">
     <span style="color:#666;font-size:12px" id="user-nome">-</span>
     <button class="btn-logout" onclick="logout()">Sair</button>
   </div>
 </div>
 <div class="progress-bar-wrap">
-  <div class="progress-label"><span id="prog-label">Progresso</span><span id="prog-pct">0%</span></div>
+  <div class="progress-label"><span id="prog-label">Progresso do checklist</span><span id="prog-pct">0%</span></div>
   <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
 </div>
 <div class="container">
   <div class="tabs">
-    <div class="tab active" onclick="showTab('checklist',this)">Checklist Diario</div>
-    <div class="tab" onclick="showTab('historico',this)">Historico de Variacao</div>
-    <div class="tab" onclick="showTab('busca',this)">Busca por PDV</div>
+    <div class="tab active" onclick="showTab('checklist',this)">📋 Checklist Diario</div>
+    <div class="tab" onclick="showTab('historico',this)">📈 Historico de Variacao</div>
+    <div class="tab" onclick="showTab('busca',this)">🔍 Busca por PDV</div>
   </div>
   <div class="pane active" id="pane-checklist"><div id="checklist-container"><div class="empty">Carregando checklist...</div></div></div>
   <div class="pane" id="pane-historico">
@@ -86,132 +82,14 @@ tr:hover td{background:#1a1a1a}
   </div>
   <div class="pane" id="pane-busca">
     <div class="search-box">
-      <label>Buscar ingrediente</label>
+      <label>Buscar ingrediente requisitado</label>
       <input type="text" id="busca-pdv" placeholder="Ex: Tomate cereja..." oninput="buscarPorIngrediente(this.value)">
-      <div style="margin-top:10px"><label>Data de consulta</label><input type="date" id="busca-data" style="background:#111;border:1px solid #2a2a2a;border-radius:7px;color:#fff;font-size:14px;padding:8px 12px;margin-top:6px;outline:none"></div>
+      <div style="margin-top:10px"><label>Data de consulta</label><input type="date" id="busca-data" style="background:#111;border:1px solid #2a2a2a;border-radius:7px;color:#fff;font-size:14px;padding:8px 12px;margin-top:6px;outline:none;width:100%"></div>
     </div>
     <div class="card" id="busca-resultado"><div class="empty">Digite um ingrediente para buscar.</div></div>
   </div>
 </div>
-<button class="btn btn-primary btn-fixed" onclick="confirmarContagem()">Confirmar Contagem</button>
-<script>
-const SURL='https://nyijprhukndlyijqljbm.supabase.co';
-const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55aWpwcmh1a25kbHlpanFsamJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MjUwMDgsImV4cCI6MjA5MjIwMTAwOH0.Vzljd9xesi1ZJ-l7du00v-elUSDQObRCUz2jPyqL5p8';
-const sb=supabase.createClient(SURL,SKEY);
-let user=null,checklistItens=[],valores={},historicoData=[];
-
-window.addEventListener('DOMContentLoaded',async()=>{
-  user=JSON.parse(sessionStorage.getItem('rw_user')||'null');
-  if(!user||user.perfil!=='operacional'||user.subtipo!=='estoque'){location.href='index.html';return}
-  document.getElementById('user-nome').textContent=user.nome;
-  document.getElementById('busca-data').value=new Date().toISOString().split('T')[0];
-  await carregarChecklist();
-  await carregarHistoricoCompleto();
-});
-function logout(){sessionStorage.clear();location.href='index.html'}
-function showTab(id,el){
-  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('pane-'+id).classList.add('active');
-  el.classList.add('active');
-}
-async function carregarChecklist(){
-  const{data}=await sb.from('checklist_itens').select('*').eq('ativo',true).order('area').order('ordem');
-  checklistItens=data||[];
-  const areas={};
-  checklistItens.forEach(it=>{
-    if(!areas[it.area])areas[it.area]={};
-    const s=it.secao||'__';
-    if(!areas[it.area][s])areas[it.area][s]=[];
-    areas[it.area][s].push(it);
-  });
-  const c=document.getElementById('checklist-container');
-  c.innerHTML=Object.entries(areas).map(([area,secoes])=>{
-    const aid=area.replace(/s/g,'_');
-    const total=Object.values(secoes).flat().length;
-    return '<div class="area-section"><div class="area-header" onclick="toggleArea(''+aid+'')">' +
-      '<h3>'+area+'</h3><span class="area-prog" id="prog-area-'+aid+'">0/'+total+'</span></div>' +
-      '<div class="area-body" id="body-area-'+aid+'">'+
-      Object.entries(secoes).map(([sec,itens])=>
-        (sec!=='__'?'<div class="secao-label">'+sec+'</div>':'')+
-        itens.map(it=>'<div class="item-row" id="row-'+it.id+'">'+
-          '<div class="item-check" id="check-'+it.id+'" onclick="toggleCheck(''+it.id+'')"></div>'+
-          '<div><div class="item-nome">'+it.item+'</div>'+(it.nota?'<div class="item-nota">'+it.nota+'</div>':'')+'</div>'+
-          '<span class="item-un">'+(it.unidade_padrao||'-')+'</span>'+
-          '<input class="item-input" type="number" id="input-'+it.id+'" min="0" step="0.01" placeholder="0" oninput="onInput(''+it.id+'',this.value)" onchange="onInput(''+it.id+'',this.value)">'+
-          '</div>').join('')
-      ).join('')+'</div></div>';
-  }).join('');
-  atualizarProgresso();
-}
-function toggleArea(id){const b=document.getElementById('body-area-'+id);b.style.display=b.style.display==='none'?'block':'none'}
-function onInput(id,val){
-  const v=parseFloat(val);valores[id]=isNaN(v)?null:v;
-  document.getElementById('input-'+id).classList.toggle('filled',v>0);
-  const ch=document.getElementById('check-'+id);
-  if(val!==''&&v>=0)ch.classList.add('checked');else ch.classList.remove('checked');
-  ch.textContent=ch.classList.contains('checked')?'v':'';
-  atualizarProgresso();
-}
-function toggleCheck(id){
-  const ch=document.getElementById('check-'+id),inp=document.getElementById('input-'+id);
-  if(ch.classList.contains('checked')){ch.classList.remove('checked');ch.textContent='';inp.value='';valores[id]=null;}
-  else{ch.classList.add('checked');ch.textContent='v';if(!inp.value){inp.value='0';valores[id]=0;inp.classList.add('filled')}}
-  atualizarProgresso();
-}
-function atualizarProgresso(){
-  const total=checklistItens.length,pre=Object.values(valores).filter(v=>v!==null).length;
-  const pct=total>0?Math.round((pre/total)*100):0;
-  document.getElementById('prog-fill').style.width=pct+'%';
-  document.getElementById('prog-pct').textContent=pct+'%';
-  document.getElementById('prog-label').textContent=pre+' de '+total+' itens contados';
-  const am={};
-  checklistItens.forEach(it=>{if(!am[it.area])am[it.area]={t:0,f:0};am[it.area].t++;if(valores[it.id]!==undefined&&valores[it.id]!==null)am[it.area].f++});
-  Object.entries(am).forEach(([a,v])=>{const el=document.getElementById('prog-area-'+a.replace(/s/g,'_'));if(el)el.textContent=v.f+'/'+v.t});
-}
-async function confirmarContagem(){
-  const pre=Object.entries(valores).filter(([,v])=>v!==null);
-  if(!pre.length){alert('Nenhum item contado.');return}
-  if(!confirm('Confirmar contagem de '+pre.length+' itens?'))return;
-  const hoje=new Date().toISOString().split('T')[0];
-  await sb.from('contagens').delete().eq('data',hoje);
-  const regs=pre.map(([id,qtd])=>{const it=checklistItens.find(c=>c.id===id);return{data:hoje,item:it?.item||id,area:it?.area||'-',quantidade:qtd,contado_por:user.id}});
-  const{error}=await sb.from('contagens').insert(regs);
-  if(error){alert('Erro: '+error.message);return}
-  alert('Contagem salva! '+regs.length+' itens registrados.');
-  await carregarHistoricoCompleto();
-}
-async function carregarHistoricoCompleto(){
-  const{data}=await sb.from('contagens').select('*').order('data',{ascending:false}).limit(500);
-  historicoData=data||[];renderHistorico(historicoData);
-}
-function filtrarHistorico(q){
-  if(!q){renderHistorico(historicoData);return}
-  renderHistorico(historicoData.filter(c=>c.item.toLowerCase().includes(q.toLowerCase())));
-}
-function renderHistorico(data){
-  const el=document.getElementById('historico-body');
-  if(!data||!data.length){el.innerHTML='<div class="empty">Nenhum registro.</div>';return}
-  const pi={};data.forEach(c=>{if(!pi[c.item])pi[c.item]=[];pi[c.item].push(c)});
-  el.innerHTML='<table><thead><tr><th>Item</th><th>Data</th><th>Qtd</th><th>Variacao</th></tr></thead><tbody>'+
-    Object.entries(pi).map(([item,regs])=>regs.map((c,i)=>{
-      const ant=regs[i+1];let vh='-';
-      if(ant){const d=c.quantidade-ant.quantidade,p=((d/Math.max(ant.quantidade,1))*100).toFixed(0);vh='<span class="'+(d>0?'trend-up':'trend-down')+'">'+(d>0?'+':'')+p+'%</span>'}
-      return '<tr><td>'+(i===0?'<strong>'+item+'</strong>':'')+'</td><td>'+new Date(c.data+'T12:00:00').toLocaleDateString('pt-BR')+'</td><td>'+c.quantidade+'</td><td>'+vh+'</td></tr>';
-    }).join('')).join('')+'</tbody></table>';
-}
-async function buscarPorIngrediente(q){
-  const el=document.getElementById('busca-resultado');
-  if(!q||q.length<2){el.innerHTML='<div class="empty">Digite ao menos 2 caracteres.</div>';return}
-  const data=document.getElementById('busca-data').value||new Date().toISOString().split('T')[0];
-  const{data:reqs}=await sb.from('requisicoes').select('pdv,requisicao_itens(item_nome,quantidade,unidade,ingredientes(nome))').eq('status','aprovada').gte('criado_em',data+'T00:00:00').lte('criado_em',data+'T23:59:59');
-  const res=[];
-  (reqs||[]).forEach(r=>(r.requisicao_itens||[]).forEach(i=>{const n=i.ingredientes?.nome||i.item_nome||'?';if(n.toLowerCase().includes(q.toLowerCase()))res.push({pdv:r.pdv,item:n,qtd:i.quantidade,un:i.unidade||'-'})}));
-  if(!res.length){el.innerHTML='<div class="empty">Nenhuma requisicao com "'+q+'" em '+new Date(data+'T12:00:00').toLocaleDateString('pt-BR')+'</div>';return}
-  el.innerHTML='<h3 style="margin-bottom:12px;font-size:14px">Requisicoes com "'+q+'" em '+new Date(data+'T12:00:00').toLocaleDateString('pt-BR')+'</h3>'+
-    '<table><thead><tr><th>PDV</th><th>Item</th><th>Qtd</th><th>Un</th></tr></thead><tbody>'+
-    res.map(r=>'<tr><td><strong>'+r.pdv+'</strong></td><td>'+r.item+'</td><td>'+r.qtd+'</td><td>'+r.un+'</td></tr>').join('')+'</tbody></table>';
-}
-</script>
+<button class="btn btn-primary btn-fixed" onclick="confirmarContagem()">✅ Confirmar Contagem</button>
+<script src="contagem.js"></script>
 </body>
 </html>
