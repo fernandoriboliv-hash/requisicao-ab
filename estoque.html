@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estoque — Rosewood A&B</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --gold: #B8963E; --gold-light: #D4AF6A;
+    --dark: #0F1117; --surface: #161B27; --panel: #1D2333;
+    --border: rgba(184,150,62,0.2); --border-subtle: rgba(255,255,255,0.07);
+    --text: #E8E4DC; --muted: #7A8094; --muted2: #4A5066;
+    --green: #4CAF7D; --orange: #E08C3E; --error: #E05252;
+    --proteina: #5B8DD9; --laticinios: #9B6DD9; --hortifruti: #4CAF7D;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--dark); color: var(--text); min-height: 100vh; }
+
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 24px; display: flex; align-items: center;
+    justify-content: space-between; height: 60px; position: sticky; top: 0; z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .hotel-mark { font-family: 'Cormorant Garamond', serif; font-size: 16px; color: var(--gold); letter-spacing: 2px; }
+  .divider-v { width: 1px; height: 20px; background: var(--border); }
+  .page-title { font-size: 13px; color: var(--muted); letter-spacing: 1px; }
+  .logout-btn { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; }
+  .logout-btn:hover { color: var(--text); }
+
+  /* FILTROS */
+  .filters-bar {
+    background: var(--surface); border-bottom: 1px solid var(--border-subtle);
+    padding: 12px 24px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .filter-btn {
+    padding: 6px 14px; background: none; border: 1px solid var(--border-subtle);
+    color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 12px;
+    cursor: pointer; transition: all 0.15s; letter-spacing: 0.5px;
+  }
+  .filter-btn.active { border-color: var(--gold); color: var(--gold); background: rgba(184,150,62,0.1); }
+  .filter-date { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  input[type="date"] {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    color: var(--text); font-family: 'DM Sans', sans-serif;
+    font-size: 13px; padding: 6px 10px; outline: none;
+  }
+  .date-label { font-size: 12px; color: var(--muted); }
+  .btn-buscar {
+    padding: 6px 16px; background: rgba(184,150,62,0.15);
+    border: 1px solid var(--border); color: var(--gold);
+    font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer;
+  }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+  /* STATS */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    padding: 16px 20px;
+  }
+  .stat-label { font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+  .stat-val { font-size: 28px; font-weight: 300; }
+  .stat-val.orange { color: var(--orange); }
+  .stat-val.green { color: var(--green); }
+  .stat-val.muted { color: var(--muted); }
+  .stat-val.error { color: var(--error); }
+
+  /* LISTA */
+  .req-section-title {
+    font-size: 11px; letter-spacing: 2px; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .req-card {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    margin-bottom: 8px; transition: border-color 0.2s;
+  }
+  .req-card:hover { border-color: rgba(184,150,62,0.3); }
+  .req-head {
+    padding: 16px 20px; display: flex; align-items: center;
+    gap: 16px; cursor: pointer;
+  }
+  .req-num { font-size: 13px; color: var(--muted); min-width: 60px; }
+  .req-pdv { font-size: 15px; font-weight: 500; flex: 1; }
+  .req-meta { font-size: 12px; color: var(--muted); }
+  .req-count { font-size: 12px; color: var(--muted); }
+  .status-badge {
+    font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    padding: 4px 12px; font-weight: 500;
+  }
+  .status-enviado { background: rgba(122,128,148,0.15); color: var(--muted); }
+  .status-separacao { background: rgba(224,140,62,0.15); color: var(--orange); }
+  .status-entregue { background: rgba(76,175,125,0.15); color: var(--green); }
+  .chevron { transition: transform 0.2s; color: var(--muted2); }
+  .chevron.open { transform: rotate(180deg); }
+
+  /* DETALHE */
+  .req-detail { display: none; border-top: 1px solid var(--border-subtle); padding: 0 20px 20px; }
+  .req-detail.open { display: block; }
+  .detail-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  .detail-table th {
+    font-size: 10px; letter-spacing: 1.5px; color: var(--muted);
+    text-transform: uppercase; text-align: left; padding: 6px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .detail-table td { padding: 10px 12px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .cat-pill {
+    font-size: 10px; padding: 2px 8px; letter-spacing: 0.5px;
+    display: inline-block;
+  }
+  .cat-proteina { background: rgba(91,141,217,0.15); color: var(--proteina); }
+  .cat-laticinios { background: rgba(155,109,217,0.15); color: var(--laticinios); }
+  .cat-hortifruti { background: rgba(76,175,125,0.15); color: var(--hortifruti); }
+  .cat-livre { background: rgba(224,140,62,0.15); color: var(--orange); }
+  .qty-entrega {
+    width: 80px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle);
+    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px;
+    padding: 6px 8px; text-align: center; outline: none;
+  }
+  .qty-entrega:focus { border-color: rgba(184,150,62,0.4); }
+  .motivo-input {
+    width: 100%; background: rgba(224,82,82,0.06); border: 1px solid rgba(224,82,82,0.2);
+    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px;
+    padding: 6px 8px; outline: none; display: none;
+    transition: border-color 0.2s;
+  }
+  .motivo-input.visible { display: block; }
+  .obs-box {
+    margin-top: 12px; padding: 10px 14px;
+    background: rgba(255,255,255,0.03); border-left: 2px solid var(--border);
+    font-size: 13px; color: var(--muted);
+  }
+  .req-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+  .btn-entregar {
+    padding: 10px 24px; background: var(--green); color: #0F1117;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+    letter-spacing: 1px; text-transform: uppercase; border: none; cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .btn-entregar:hover { opacity: 0.85; }
+  .btn-entregar:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-separacao {
+    padding: 10px 20px; background: none; border: 1px solid var(--orange);
+    color: var(--orange); font-family: 'DM Sans', sans-serif; font-size: 13px;
+    cursor: pointer; transition: background 0.2s;
+  }
+  .btn-separacao:hover { background: rgba(224,140,62,0.1); }
+
+  .empty-text { text-align: center; color: var(--muted2); padding: 60px 20px; font-size: 14px; }
+  .loading-text { text-align: center; color: var(--muted); padding: 40px; font-size: 14px; }
+
+  /* HISTÓRICO */
+  .hist-section { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-subtle); }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <div class="hotel-mark">Rosewood</div>
+    <div class="divider-v"></div>
+    <div class="page-title">Comissário — Fila do Dia</div>
+  </div>
+  <button class="logout-btn" onclick="logout()">Sair</button>
+</header>
+
+<div class="filters-bar">
+  <button class="filter-btn active" onclick="setFiltro('pendentes', this)">Pendentes</button>
+  <button class="filter-btn" onclick="setFiltro('todos', this)">Todos do Dia</button>
+  <button class="filter-btn" onclick="setFiltro('entregues', this)">Entregues</button>
+  <div class="filter-date">
+    <span class="date-label">Data:</span>
+    <input type="date" id="dateFilter">
+    <button class="btn-buscar" onclick="carregar()">Buscar</button>
+  </div>
+</div>
+
+<main>
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-label">Aguardando</div><div class="stat-val orange" id="statAguardando">—</div></div>
+    <div class="stat-card"><div class="stat-label">Em Separação</div><div class="stat-val" id="statSeparacao">—</div></div>
+    <div class="stat-card"><div class="stat-label">Entregues</div><div class="stat-val green" id="statEntregues">—</div></div>
+    <div class="stat-card"><div class="stat-label">Divergências</div><div class="stat-val error" id="statDivergencias">—</div></div>
+  </div>
+
+  <div class="req-section-title">
+    <span id="listaTitle">Requisições Pendentes</span>
+    <span id="listaCount" style="font-size:13px; font-weight:400"></span>
+  </div>
+  <div id="listaContainer"><div class="loading-text">Carregando...</div></div>
+
+  <div class="hist-section">
+    <div class="req-section-title">Entregues Hoje</div>
+    <div id="entreguesContainer"><div class="loading-text">Carregando...</div></div>
+  </div>
+</main>
+
+<script>
+const SUPABASE_URL = 'https://nyijprhukndlyijqljbm.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55aWpwcmh1a25kbHlpanFsamJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MjUwMDgsImV4cCI6MjA5MjIwMTAwOH0.Vzljd9xesi1ZJ-l7du00v-elUSDQObRCUz2jPyqL5p8';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let filtroAtual = 'pendentes';
+let todosReqs = [];
+
+window.addEventListener('load', async () => {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { window.location.href = 'index.html'; return; }
+  const { data: perfil } = await sb.from('usuarios').select('perfil').eq('auth_uid', user.id).single();
+  if (!perfil || perfil.perfil !== 'estoque') { window.location.href = 'index.html'; return; }
+
+  const hoje = new Date().toISOString().split('T')[0];
+  document.getElementById('dateFilter').value = hoje;
+  await carregar();
+});
+
+function setFiltro(f, btn) {
+  filtroAtual = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderLista();
+}
+
+async function carregar() {
+  const data = document.getElementById('dateFilter').value;
+  const { data: reqs } = await sb.from('requisicoes')
+    .select('*, pdvs(nome), requisicao_itens(*)')
+    .eq('data_competencia', data)
+    .order('created_at', { ascending: true });
+
+  todosReqs = reqs || [];
+  atualizarStats();
+  renderLista();
+  renderEntregues();
+}
+
+function atualizarStats() {
+  const aguardando = todosReqs.filter(r => r.status === 'enviado').length;
+  const separacao = todosReqs.filter(r => r.status === 'separacao').length;
+  const entregues = todosReqs.filter(r => r.status === 'entregue').length;
+  const divs = todosReqs.reduce((acc, r) => acc + (r.requisicao_itens || []).filter(i => i.divergencia).length, 0);
+  document.getElementById('statAguardando').textContent = aguardando;
+  document.getElementById('statSeparacao').textContent = separacao;
+  document.getElementById('statEntregues').textContent = entregues;
+  document.getElementById('statDivergencias').textContent = divs;
+}
+
+function renderLista() {
+  let filtrados = todosReqs;
+  if (filtroAtual === 'pendentes') filtrados = todosReqs.filter(r => r.status === 'enviado' || r.status === 'separacao');
+  if (filtroAtual === 'entregues') filtrados = todosReqs.filter(r => r.status === 'entregue');
+  const labels = { pendentes: 'Requisições Pendentes', todos: 'Todas as Requisições', entregues: 'Requisições Entregues' };
+  document.getElementById('listaTitle').textContent = labels[filtroAtual];
+  document.getElementById('listaCount').textContent = `${filtrados.length} requisição(ões)`;
+
+  const cont = document.getElementById('listaContainer');
+  if (filtrados.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma requisição encontrada.</div>'; return; }
+  cont.innerHTML = filtrados.map(r => buildReqCard(r)).join('');
+}
+
+function renderEntregues() {
+  const entregues = todosReqs.filter(r => r.status === 'entregue');
+  const cont = document.getElementById('entreguesContainer');
+  if (entregues.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma entrega registrada.</div>'; return; }
+  cont.innerHTML = entregues.map(r => buildReqCard(r, true)).join('');
+}
+
+function buildReqCard(r, compacto = false) {
+  const itens = r.requisicao_itens || [];
+  const catLabels = { proteina: 'Proteína', laticinios: 'Laticínio', hortifruti: 'Hortifruti' };
+  const hora = new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const statusLabel = { enviado: 'Aguardando', separacao: 'Em Separação', entregue: 'Entregue' }[r.status] || r.status;
+  const entregue = r.status === 'entregue';
+
+  const linhasItens = itens.map((it, idx) => {
+    const catCls = it.item_livre ? 'cat-livre' : `cat-${it.item_categoria}`;
+    const catTxt = it.item_livre ? '⚠ Livre' : (catLabels[it.item_categoria] || it.item_categoria);
+    const qEntrega = it.quantidade_entregue ?? it.quantidade_solicitada;
+    return `
+      <tr>
+        <td><span class="cat-pill ${catCls}">${catTxt}</span></td>
+        <td>${it.item_nome}</td>
+        <td>${it.quantidade_solicitada} ${it.item_unidade || ''}</td>
+        <td>${entregue
+          ? `${it.quantidade_entregue ?? '—'} ${it.item_unidade || ''}`
+          : `<input class="qty-entrega" type="number" step="0.1" min="0" value="${it.quantidade_solicitada}"
+              id="qe-${r.id}-${idx}" onchange="checkDivergencia('${r.id}',${idx},${it.quantidade_solicitada},this.value,'${it.item_unidade||''}')">`
+        }</td>
+        <td>${entregue && it.divergencia
+          ? `<span style="color:var(--error);font-size:12px">⚠ ${it.motivo_divergencia || 'Divergência'}</span>`
+          : (!entregue ? `<input class="motivo-input" type="text" placeholder="Motivo da divergência..." id="mot-${r.id}-${idx}">` : '—')
+        }</td>
+      </tr>`;
+  }).join('');
+
+  const acoes = !entregue ? `
+    <div class="req-actions">
+      ${r.status === 'enviado' ? `<button class="btn-separacao" onclick="marcarSeparacao('${r.id}')">Em Separação</button>` : ''}
+      <button class="btn-entregar" onclick="registrarEntrega('${r.id}')">Registrar Entrega</button>
+    </div>` : '';
+
+  return `
+    <div class="req-card" id="card-${r.id}">
+      <div class="req-head" onclick="toggleDetail('${r.id}')">
+        <span class="req-num">#${String(r.id).padStart(5,'0')}</span>
+        <span class="req-pdv">${r.pdvs?.nome || 'PDV'}</span>
+        <span class="req-meta">${hora}</span>
+        <span class="req-count">${itens.length} iten(s)</span>
+        <span class="status-badge status-${r.status}">${statusLabel}</span>
+        <span class="chevron" id="chev-${r.id}">▼</span>
+      </div>
+      <div class="req-detail" id="detail-${r.id}">
+        ${r.observacao ? `<div class="obs-box">💬 ${r.observacao}</div>` : ''}
+        <table class="detail-table">
+          <thead><tr>
+            <th>Categoria</th><th>Item</th>
+            <th>Solicitado</th><th>Entregue</th><th>Divergência</th>
+          </tr></thead>
+          <tbody>${linhasItens}</tbody>
+        </table>
+        ${acoes}
+      </div>
+    </div>`;
+}
+
+function toggleDetail(id) {
+  const det = document.getElementById(`detail-${id}`);
+  const chev = document.getElementById(`chev-${id}`);
+  det.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+
+function checkDivergencia(reqId, idx, solicitado, entregueVal, unidade) {
+  const motInput = document.getElementById(`mot-${reqId}-${idx}`);
+  if (!motInput) return;
+  const diff = parseFloat(entregueVal) !== parseFloat(solicitado);
+  if (diff) motInput.classList.add('visible');
+  else motInput.classList.remove('visible');
+}
+
+async function marcarSeparacao(id) {
+  await sb.from('requisicoes').update({ status: 'separacao' }).eq('id', id);
+  await carregar();
+}
+
+async function registrarEntrega(reqId) {
+  const btn = document.querySelector(`#card-${reqId} .btn-entregar`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+
+  const req = todosReqs.find(r => r.id === reqId);
+  if (!req) return;
+  const itens = req.requisicao_itens || [];
+
+  // Atualizar cada item
+  for (let idx = 0; idx < itens.length; idx++) {
+    const it = itens[idx];
+    const qeEl = document.getElementById(`qe-${reqId}-${idx}`);
+    const motEl = document.getElementById(`mot-${reqId}-${idx}`);
+    const qEntregue = qeEl ? parseFloat(qeEl.value) : it.quantidade_solicitada;
+    const motivo = motEl?.value.trim() || null;
+    const divergencia = qEntregue !== parseFloat(it.quantidade_solicitada);
+
+    await sb.from('requisicao_itens').update({
+      quantidade_entregue: qEntregue,
+      divergencia,
+      motivo_divergencia: divergencia ? motivo : null
+    }).eq('id', it.id);
+  }
+
+  await sb.from('requisicoes').update({ status: 'entregue', entregue_em: new Date().toISOString() }).eq('id', reqId);
+  await carregar();
+}
+
+async function logout() {
+  await sb.auth.signOut();
+  window.location.href = 'index.html';
+}
+</script>
+</body>
+</html>

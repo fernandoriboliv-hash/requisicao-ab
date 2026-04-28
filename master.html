@@ -3,240 +3,727 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Master - Rosewood SP</title>
+<title>Master — Rosewood A&B</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',sans-serif;background:#0f0f0f;color:#e0e0e0;display:flex;min-height:100vh}
-.sidebar{width:220px;background:#141414;border-right:1px solid #222;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100}
-.sidebar-logo{padding:20px 16px;border-bottom:1px solid #222}
-.sidebar-logo h2{color:#c9a96e;font-size:15px;font-weight:600}
-.sidebar-logo p{color:#555;font-size:11px;margin-top:2px}
-.nav-item{display:flex;align-items:center;gap:10px;padding:12px 16px;color:#888;font-size:13px;cursor:pointer;border-left:3px solid transparent;transition:all .15s}
-.nav-item:hover{background:#1e1e1e;color:#ccc}
-.nav-item.active{background:#1e1e1e;color:#c9a96e;border-left-color:#c9a96e}
-.nav-icon{font-size:15px;width:22px;text-align:center}
-.badge{background:#e74c3c;color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:2px 6px;margin-left:auto}
-.sidebar-bottom{margin-top:auto;padding:16px;border-top:1px solid #222}
-.user-info{font-size:12px;color:#666}
-.user-info strong{color:#aaa;display:block;margin-bottom:2px}
-.btn-logout{margin-top:8px;background:none;border:1px solid #333;color:#666;font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;width:100%}
-.main{margin-left:220px;flex:1;padding:28px}
-.page{display:none}
-.page.active{display:block}
-.page-header{margin-bottom:24px}
-.page-header h1{font-size:22px;color:#fff;font-weight:600}
-.page-header p{color:#666;font-size:13px;margin-top:4px}
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
-.stat-card{background:#1a1a1a;border:1px solid #252525;border-radius:10px;padding:20px}
-.stat-card .label{color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
-.stat-card .value{color:#fff;font-size:32px;font-weight:700;margin-top:8px}
-.stat-card .sub{color:#555;font-size:11px;margin-top:4px}
-.section{background:#1a1a1a;border:1px solid #252525;border-radius:10px;margin-bottom:20px;overflow:hidden}
-.section-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #222}
-.section-header h3{font-size:15px;color:#ddd;font-weight:600}
-table{width:100%;border-collapse:collapse}
-th{background:#161616;color:#666;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:10px 16px;text-align:left}
-td{padding:12px 16px;border-top:1px solid #1e1e1e;font-size:13px;color:#ccc}
-tr:hover td{background:#1e1e1e}
-.status{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
-.status.rascunho{background:#2a2a2a;color:#888}
-.status.aberta{background:#1a2a4a;color:#5b9cf6}
-.status.aprovada{background:#1a3a2a;color:#2ecc71}
-.status.rejeitada{background:#3a1a1a;color:#e74c3c}
-.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
-.btn-primary{background:#c9a96e;color:#000}.btn-primary:hover{background:#e0c080}
-.btn-success{background:#1a3a2a;color:#2ecc71;border:1px solid #2ecc71}.btn-success:hover{background:#2ecc71;color:#000}
-.btn-danger{background:#3a1a1a;color:#e74c3c;border:1px solid #e74c3c}.btn-danger:hover{background:#e74c3c;color:#fff}
-.btn-ghost{background:none;border:1px solid #333;color:#888}.btn-ghost:hover{background:#222;color:#ccc}
-.btn-sm{padding:5px 10px;font-size:12px}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:1000}
-.modal-overlay.open{display:flex}
-.modal{background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:28px;width:100%;max-width:520px;max-height:85vh;overflow-y:auto}
-.modal h3{font-size:17px;color:#fff;margin-bottom:16px}
-.modal label{display:block;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;margin-top:16px}
-.modal input,.modal select,.modal textarea{width:100%;background:#111;border:1px solid #333;border-radius:7px;color:#fff;font-size:14px;padding:10px 12px;outline:none}
-.modal textarea{resize:vertical;min-height:80px}
-.modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.form-group{margin-bottom:16px}
-.form-group label{display:block;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-.form-group input,.form-group select{width:100%;background:#111;border:1px solid #333;border-radius:7px;color:#fff;font-size:14px;padding:10px 12px;outline:none}
-.empty{text-align:center;padding:40px;color:#555;font-size:14px}
-.pill{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;background:#222;color:#888}
+  :root {
+    --gold: #B8963E; --gold-light: #D4AF6A;
+    --dark: #0F1117; --surface: #161B27; --panel: #1D2333; --panel2: #222A3A;
+    --border: rgba(184,150,62,0.2); --border-subtle: rgba(255,255,255,0.07);
+    --text: #E8E4DC; --muted: #7A8094; --muted2: #4A5066;
+    --green: #4CAF7D; --orange: #E08C3E; --error: #E05252;
+    --proteina: #5B8DD9; --laticinios: #9B6DD9; --hortifruti: #4CAF7D;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--dark); color: var(--text); display: flex; min-height: 100vh; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 220px; background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; z-index: 100;
+  }
+  .sidebar-brand {
+    padding: 24px 20px; border-bottom: 1px solid var(--border-subtle);
+  }
+  .brand-name { font-family: 'Cormorant Garamond', serif; font-size: 16px; letter-spacing: 2px; color: var(--gold); }
+  .brand-sub { font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+  .nav { padding: 16px 0; flex: 1; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 20px; font-size: 13px; color: var(--muted);
+    cursor: pointer; transition: all 0.15s; border-left: 2px solid transparent;
+    user-select: none;
+  }
+  .nav-item:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .nav-item.active { color: var(--gold); border-left-color: var(--gold); background: rgba(184,150,62,0.08); }
+  .nav-icon { width: 16px; text-align: center; }
+  .sidebar-foot {
+    padding: 16px 20px; border-top: 1px solid var(--border-subtle);
+    font-size: 12px; color: var(--muted);
+  }
+  .logout-btn { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; display: block; margin-top: 4px; }
+  .logout-btn:hover { color: var(--error); }
+
+  /* MAIN */
+  .main-wrap { margin-left: 220px; flex: 1; display: flex; flex-direction: column; }
+  .top-bar {
+    padding: 16px 32px; background: var(--surface); border-bottom: 1px solid var(--border-subtle);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .top-title { font-size: 18px; font-weight: 500; }
+  .top-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .top-right { display: flex; align-items: center; gap: 12px; }
+  .date-badge { font-size: 12px; color: var(--muted); letter-spacing: 0.5px; }
+  .pending-chip {
+    background: rgba(224,82,82,0.15); border: 1px solid rgba(224,82,82,0.3);
+    color: var(--error); font-size: 11px; padding: 3px 10px; cursor: pointer;
+    display: none;
+  }
+  .pending-chip.visible { display: inline-block; }
+
+  .tab-content { padding: 28px 32px; flex: 1; display: none; }
+  .tab-content.active { display: block; }
+
+  /* STATS */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+  .stat-card { background: var(--panel); border: 1px solid var(--border-subtle); padding: 20px; }
+  .stat-label { font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+  .stat-val { font-size: 32px; font-weight: 300; }
+  .stat-val.gold { color: var(--gold); }
+  .stat-val.green { color: var(--green); }
+  .stat-val.orange { color: var(--orange); }
+  .stat-val.error { color: var(--error); }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* SEÇÃO */
+  .section-title {
+    font-size: 11px; letter-spacing: 2px; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 14px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+
+  /* REQUISIÇÕES DO DIA */
+  .req-table { width: 100%; border-collapse: collapse; }
+  .req-table th {
+    font-size: 10px; letter-spacing: 1.5px; color: var(--muted);
+    text-transform: uppercase; text-align: left; padding: 8px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .req-table td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .req-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .status-badge { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; padding: 3px 10px; }
+  .status-enviado { background: rgba(122,128,148,0.15); color: var(--muted); }
+  .status-separacao { background: rgba(224,140,62,0.15); color: var(--orange); }
+  .status-entregue { background: rgba(76,175,125,0.15); color: var(--green); }
+
+  /* GENERIC TABLE */
+  .data-table { width: 100%; border-collapse: collapse; }
+  .data-table th {
+    font-size: 10px; letter-spacing: 1.5px; color: var(--muted); text-transform: uppercase;
+    text-align: left; padding: 8px 14px; border-bottom: 1px solid var(--border-subtle);
+  }
+  .data-table td { padding: 11px 14px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .btn-sm {
+    padding: 5px 12px; font-family: 'DM Sans', sans-serif; font-size: 11px;
+    cursor: pointer; letter-spacing: 0.5px; border: none; transition: opacity 0.15s;
+  }
+  .btn-sm:hover { opacity: 0.8; }
+  .btn-gold { background: var(--gold); color: #0F1117; }
+  .btn-outline { background: none; border: 1px solid var(--border-subtle); color: var(--muted); }
+  .btn-outline:hover { border-color: var(--muted); color: var(--text); }
+  .btn-danger { background: rgba(224,82,82,0.15); border: 1px solid rgba(224,82,82,0.3); color: var(--error); }
+  .btn-green { background: rgba(76,175,125,0.15); border: 1px solid rgba(76,175,125,0.3); color: var(--green); }
+
+  /* FORM INLINE */
+  .form-panel {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    padding: 24px; margin-bottom: 20px; display: none;
+  }
+  .form-panel.open { display: block; }
+  .form-row { display: grid; gap: 12px; margin-bottom: 16px; }
+  .form-row.col2 { grid-template-columns: 1fr 1fr; }
+  .form-row.col3 { grid-template-columns: 1fr 1fr 1fr; }
+  .form-row.col4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .form-label { font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; display: block; }
+  .form-input, .form-select {
+    width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--border-subtle);
+    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px;
+    padding: 10px 12px; outline: none; transition: border-color 0.2s;
+  }
+  .form-input:focus, .form-select:focus { border-color: rgba(184,150,62,0.4); }
+  .form-select option { background: var(--panel); }
+  .form-actions { display: flex; gap: 8px; }
+  .btn-primary {
+    padding: 10px 24px; background: var(--gold); color: #0F1117;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+    letter-spacing: 1px; text-transform: uppercase; border: none; cursor: pointer;
+  }
+  .btn-secondary {
+    padding: 10px 20px; background: none; border: 1px solid var(--border-subtle);
+    color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer;
+  }
+
+  /* RELATÓRIOS */
+  .rel-filters { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+  .rel-filter-input {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px;
+    padding: 8px 12px; outline: none;
+  }
+  select.rel-filter-input option { background: var(--panel); }
+  .btn-rel {
+    padding: 8px 20px; background: rgba(184,150,62,0.15);
+    border: 1px solid var(--border); color: var(--gold);
+    font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer;
+  }
+  .rel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .rel-card { background: var(--panel); border: 1px solid var(--border-subtle); padding: 20px; }
+  .rel-card-title { font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin-bottom: 14px; }
+  .rel-item-row {
+    display: flex; justify-content: space-between; padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 13px;
+  }
+  .rel-item-row:last-child { border-bottom: none; }
+  .rel-val { color: var(--gold); font-weight: 500; }
+  .cat-pill { font-size: 10px; padding: 2px 8px; display: inline-block; }
+  .cat-proteina { background: rgba(91,141,217,0.15); color: var(--proteina); }
+  .cat-laticinios { background: rgba(155,109,217,0.15); color: var(--laticinios); }
+  .cat-hortifruti { background: rgba(76,175,125,0.15); color: var(--hortifruti); }
+
+  /* PENDENTES */
+  .pend-card {
+    background: var(--panel); border: 1px solid rgba(224,82,82,0.2);
+    padding: 16px 20px; margin-bottom: 8px; display: flex; align-items: center; gap: 16px;
+  }
+  .pend-nome { flex: 1; font-size: 14px; }
+  .pend-meta { font-size: 12px; color: var(--muted); }
+  .pend-actions { display: flex; gap: 8px; }
+
+  .empty-text { text-align: center; color: var(--muted2); padding: 48px; font-size: 14px; }
+  .loading-text { text-align: center; color: var(--muted); padding: 32px; font-size: 13px; }
+  .tag { font-size: 10px; padding: 2px 8px; }
+  .tag-master { background: rgba(184,150,62,0.15); color: var(--gold); }
+  .tag-estoque { background: rgba(224,140,62,0.15); color: var(--orange); }
+  .tag-pdv { background: rgba(91,141,217,0.15); color: var(--proteina); }
+  .tag-ativo { background: rgba(76,175,125,0.15); color: var(--green); }
+  .tag-inativo { background: rgba(122,128,148,0.15); color: var(--muted); }
 </style>
 </head>
 <body>
-<div class="sidebar">
-  <div class="sidebar-logo"><h2>🍽 ROSEWOOD SP</h2><p>Painel Master</p></div>
-  <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">📊</span>Dashboard<span class="badge" id="badge-nav" style="display:none">0</span></div>
-  <div class="nav-item" onclick="showPage('aprovacao',this)"><span class="nav-icon">✅</span>Aprovacao<span class="badge" id="badge-apr" style="display:none">0</span></div>
-  <div class="nav-item" onclick="showPage('programados',this)"><span class="nav-icon">📅</span>Programados</div>
-  <div class="nav-item" onclick="showPage('lista-compras',this)"><span class="nav-icon">🛒</span>Lista de Compras</div>
-  <div class="nav-item" onclick="showPage('food-cost',this)"><span class="nav-icon">💰</span>Food Cost</div>
-  <div class="nav-item" onclick="showPage('usuarios',this)"><span class="nav-icon">👥</span>Usuarios</div>
-  <div class="nav-item" onclick="showPage('requisicao',this)"><span class="nav-icon">📋</span>Nova Requisicao</div>
-  <div class="nav-item" onclick="showPage('beo',this)"><span class="nav-icon">📋</span>BEO</div>
-  <div class="sidebar-bottom">
-    <div class="user-info"><strong id="user-nome">-</strong><span>master</span></div>
-    <button class="btn-logout" onclick="logout()">Sair</button>
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-name">Rosewood</div>
+    <div class="brand-sub">A&amp;B · Master</div>
   </div>
-</div>
-<div class="main">
-  <div class="page active" id="page-dashboard">
-    <div class="page-header"><h1>Dashboard</h1><p id="data-hoje"></p></div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="label">Pendentes</div><div class="value" id="val-pend">-</div><div class="sub">requisicoes abertas</div></div>
-      <div class="stat-card"><div class="label">Contagens Hoje</div><div class="value" id="val-cont">-</div><div class="sub">itens contados</div></div>
-      <div class="stat-card"><div class="label">Itens Aprovados Hoje</div><div class="value" id="val-itens">-</div><div class="sub">em requisicoes</div></div>
-      <div class="stat-card"><div class="label">Usuarios Ativos</div><div class="value" id="val-users">-</div><div class="sub">no sistema</div></div>
+  <div class="nav">
+    <div class="nav-item active" onclick="goTab('dashboard', this)">
+      <span class="nav-icon">◈</span> Dashboard
     </div>
-    <div class="section"><div class="section-header"><h3>📦 Variacao de Estoque - Ontem vs Hoje</h3></div><div id="comp-cont"><div class="empty">Carregando...</div></div></div>
-  </div>
-  <div class="page" id="page-aprovacao">
-    <div class="page-header"><h1>Fila de Aprovacao</h1><p>Requisicoes aguardando revisao</p></div>
-    <div class="section"><div id="lista-aprov"><div class="empty">Carregando...</div></div></div>
-  </div>
-  <div class="page" id="page-programados">
-    <div class="page-header"><h1>Pedidos Programados</h1><p>Agrupados por dia de compra</p></div>
-    <div id="lista-prog"><div class="empty">Carregando...</div></div>
-  </div>
-  <div class="page" id="page-lista-compras">
-    <div class="page-header"><h1>Lista de Compras do Dia</h1></div>
-    <div class="section">
-      <div class="section-header"><h3>Itens de Hoje</h3><button class="btn btn-ghost btn-sm" onclick="carregarListaCompras()">↺ Atualizar</button></div>
-      <div id="lista-compras-body"><div class="empty">Carregando...</div></div>
+    <div class="nav-item" onclick="goTab('requisicoes', this)">
+      <span class="nav-icon">≡</span> Requisições
+    </div>
+    <div class="nav-item" onclick="goTab('relatorios', this)">
+      <span class="nav-icon">▣</span> Relatórios
+    </div>
+    <div class="nav-item" onclick="goTab('pendentes', this)">
+      <span class="nav-icon">⚠</span> Itens Pendentes
+      <span id="pendBadge" style="margin-left:auto;background:var(--error);color:#fff;font-size:10px;padding:1px 7px;border-radius:10px;display:none"></span>
+    </div>
+    <div class="nav-item" onclick="goTab('catalogo', this)">
+      <span class="nav-icon">◎</span> Catálogo
+    </div>
+    <div class="nav-item" onclick="goTab('usuarios', this)">
+      <span class="nav-icon">⊕</span> Usuários
     </div>
   </div>
-  <div class="page" id="page-food-cost">
-    <div class="page-header"><h1>Food Cost por PDV</h1><p>Quantidade requisitada × preco unitario</p></div>
-    <div style="display:flex;gap:12px;margin-bottom:20px">
-      <div style="flex:1"><label style="display:block;color:#888;font-size:11px;text-transform:uppercase;margin-bottom:6px">Inicio</label><input type="date" id="fc-ini" style="width:100%;background:#111;border:1px solid #333;border-radius:7px;color:#fff;font-size:14px;padding:10px 12px;outline:none"></div>
-      <div style="flex:1"><label style="display:block;color:#888;font-size:11px;text-transform:uppercase;margin-bottom:6px">Fim</label><input type="date" id="fc-fim" style="width:100%;background:#111;border:1px solid #333;border-radius:7px;color:#fff;font-size:14px;padding:10px 12px;outline:none"></div>
-      <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="carregarFoodCost()">Gerar Relatorio</button></div>
-    </div>
-    <div class="section"><div id="fc-body"><div class="empty">Selecione o periodo e clique em Gerar</div></div></div>
+  <div class="sidebar-foot">
+    <div id="masterName" style="font-weight:500">—</div>
+    <button class="logout-btn" onclick="logout()">Sair do sistema</button>
   </div>
-  <div class="page" id="page-usuarios">
-    <div class="page-header"><h1>Gestao de Usuarios</h1><p>Criar, editar e ativar/desativar usuarios</p></div>
-    <div class="section">
-      <div class="section-header"><h3>Usuarios Cadastrados</h3><button class="btn btn-primary btn-sm" onclick="abrirModalUser()">+ Novo Usuario</button></div>
-      <div id="lista-users"><div class="empty">Carregando...</div></div>
-    </div>
-  </div>
-  <div class="page" id="page-beo">
-    <div class="page-header"><h1>BEO - Banquet Event Order</h1></div>
-    <div class="section"><div style="padding:60px;text-align:center"><div style="font-size:48px;margin-bottom:16px">📋</div><h2 style="color:#555;font-size:20px">Em breve</h2><p style="color:#444;font-size:14px;margin-top:8px">Modulo BEO em desenvolvimento.</p></div></div>
-  </div>
-</div>
+</nav>
 
-<div class="page" id="page-requisicao">
-    <div class="page-header"><h1>Nova Requisicao</h1><p>Crie uma requisicao para qualquer PDV</p></div>
-    <div class="card" style="margin-bottom:16px">
-      <h3 style="font-size:14px;color:#ddd;font-weight:600;margin-bottom:16px">Detalhes do Pedido</h3>
-      <div class="form-row">
-        <div class="form-group"><label>PDV</label>
-          <select id="mreq-pdv">
-            <option value="">- Selecione o PDV -</option>
-            <option>Le Jardin</option><option>Taraz</option><option>Blaise</option>
-            <option>Bela Vista</option><option>Rabo di Galo</option><option>Emerald Pool</option>
-            <option>IRD</option><option>Banquetes</option><option>Cozinha Central</option>
-            <option>Padaria</option><option>Confeitaria</option><option>Commissary</option><option>Rosa Madeira</option>
+<div class="main-wrap">
+  <div class="top-bar">
+    <div>
+      <div class="top-title" id="topTitle">Dashboard</div>
+      <div class="top-sub" id="topSub">Visão geral do dia</div>
+    </div>
+    <div class="top-right">
+      <span class="date-badge" id="dateBadge"></span>
+      <span class="pending-chip" id="pendingChip" onclick="goTab('pendentes')">⚠ Itens para revisão</span>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="tab-content active" id="tab-dashboard">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Aguardando</div><div class="stat-val orange" id="d-aguardando">—</div><div class="stat-sub">requisições</div></div>
+      <div class="stat-card"><div class="stat-label">Em Separação</div><div class="stat-val" id="d-separacao">—</div><div class="stat-sub">requisições</div></div>
+      <div class="stat-card"><div class="stat-label">Entregues Hoje</div><div class="stat-val green" id="d-entregues">—</div><div class="stat-sub">requisições</div></div>
+      <div class="stat-card"><div class="stat-label">Divergências</div><div class="stat-val error" id="d-divs">—</div><div class="stat-sub">itens</div></div>
+    </div>
+    <div class="section-title">Requisições do Dia</div>
+    <div id="dashReqs"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- REQUISIÇÕES -->
+  <div class="tab-content" id="tab-requisicoes">
+    <div class="rel-filters" style="margin-bottom:20px">
+      <input type="date" id="reqDate" class="rel-filter-input">
+      <select id="reqPdvFilter" class="rel-filter-input"><option value="">Todos os PDVs</option></select>
+      <select id="reqStatusFilter" class="rel-filter-input">
+        <option value="">Todos os status</option>
+        <option value="enviado">Aguardando</option>
+        <option value="separacao">Em Separação</option>
+        <option value="entregue">Entregue</option>
+      </select>
+      <button class="btn-rel" onclick="carregarRequisicoes()">Buscar</button>
+    </div>
+    <div id="reqContainer"><div class="loading-text">Selecione os filtros e clique em Buscar.</div></div>
+  </div>
+
+  <!-- RELATÓRIOS -->
+  <div class="tab-content" id="tab-relatorios">
+    <div class="rel-filters">
+      <label style="font-size:12px;color:var(--muted)">De</label>
+      <input type="date" id="relDe" class="rel-filter-input">
+      <label style="font-size:12px;color:var(--muted)">Até</label>
+      <input type="date" id="relAte" class="rel-filter-input">
+      <select id="relPdv" class="rel-filter-input"><option value="">Todos os PDVs</option></select>
+      <select id="relCat" class="rel-filter-input">
+        <option value="">Todas as categorias</option>
+        <option value="proteina">Proteína</option>
+        <option value="laticinios">Laticínios</option>
+        <option value="hortifruti">Hortifruti</option>
+      </select>
+      <button class="btn-rel" onclick="gerarRelatorio()">Gerar</button>
+    </div>
+    <div class="rel-grid" id="relContainer">
+      <div style="grid-column:1/-1;text-align:center;color:var(--muted2);padding:48px;font-size:14px">Selecione o período e clique em Gerar.</div>
+    </div>
+  </div>
+
+  <!-- ITENS PENDENTES -->
+  <div class="tab-content" id="tab-pendentes">
+    <div class="section-title">Itens digitados pelos PDVs não encontrados no catálogo</div>
+    <div id="pendentesContainer"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- CATÁLOGO -->
+  <div class="tab-content" id="tab-catalogo">
+    <div class="section-title">
+      <span>Itens do Catálogo</span>
+      <button class="btn-sm btn-gold" onclick="toggleForm('formCatalogo')">+ Novo Item</button>
+    </div>
+    <div class="form-panel" id="formCatalogo">
+      <div class="form-row col4">
+        <div><label class="form-label">Nome</label><input class="form-input" id="c-nome" placeholder="Nome do item"></div>
+        <div><label class="form-label">Categoria</label>
+          <select class="form-select" id="c-cat">
+            <option value="proteina">Proteína</option>
+            <option value="laticinios">Laticínios</option>
+            <option value="hortifruti">Hortifruti</option>
           </select>
         </div>
-        <div class="form-group"><label>Entrega Prevista</label><input type="date" id="mreq-entrega"></div>
-      </div>
-      <div class="form-group"><label>Observacao</label><input type="text" id="mreq-obs" placeholder="Opcional"></div>
-    </div>
-    <div class="card" style="margin-bottom:16px">
-      <h3 style="font-size:14px;color:#ddd;font-weight:600;margin-bottom:16px">Adicionar Item</h3>
-      <div class="form-row">
-        <div class="form-group" style="position:relative"><label>Ingrediente</label>
-          <input type="text" id="mreq-busca" placeholder="Digite o nome..." oninput="buscarIngMaster(this.value)" autocomplete="off">
-          <div id="mreq-ac" style="position:absolute;top:100%;left:0;right:0;background:#1e1e1e;border:1px solid #333;border-radius:7px;z-index:200;max-height:200px;overflow-y:auto;margin-top:2px;display:none"></div>
+        <div><label class="form-label">Unidade</label><input class="form-input" id="c-unid" placeholder="kg, un, cx..."></div>
+        <div><label class="form-label">Inventário</label>
+          <select class="form-select" id="c-inv">
+            <option value="true">Sim</option>
+            <option value="false">Não</option>
+          </select>
         </div>
-        <div class="form-group"><label>Quantidade</label><input type="number" id="mreq-qtd" min="0.01" step="0.01" placeholder="0"></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label>Unidade</label><input type="text" id="mreq-un" readonly style="background:#111;color:#888"></div>
-        <div class="form-group"><label>Comentario</label><input type="text" id="mreq-com" placeholder="Opcional"></div>
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="adicionarItemMaster()">+ Adicionar a lista</button>
-    </div>
-    <div class="card">
-      <h3 style="font-size:14px;color:#ddd;font-weight:600;margin-bottom:16px">Itens <span style="color:#666" id="mreq-cnt">(0)</span></h3>
-      <div id="mreq-list"><div class="empty">Nenhum item adicionado.</div></div>
-      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="enviarReqMaster()">📤 Enviar Requisicao</button>
-        <button class="btn btn-ghost" onclick="itensMaster=[];renderItensMaster()">🗑 Limpar</button>
+      <div class="form-actions">
+        <button class="btn-primary" onclick="salvarItem()">Salvar Item</button>
+        <button class="btn-secondary" onclick="toggleForm('formCatalogo')">Cancelar</button>
       </div>
     </div>
+    <div id="catalogoContainer"><div class="loading-text">Carregando...</div></div>
   </div>
 
-<!-- MODAL APROVACAO -->
-<div class="modal-overlay" id="modal-aprov">
-  <div class="modal">
-    <h3 id="modal-aprov-titulo">Requisicao</h3>
-    <div id="modal-aprov-itens" style="max-height:260px;overflow-y:auto;margin-bottom:16px"></div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-success" onclick="aprovar()">✅ Aprovar</button>
-      <button class="btn btn-danger" onclick="document.getElementById('div-rejeitar').style.display='block'">❌ Rejeitar</button>
-      <button class="btn btn-ghost" onclick="document.getElementById('modal-aprov').classList.remove('open')">Cancelar</button>
+  <!-- USUÁRIOS -->
+  <div class="tab-content" id="tab-usuarios">
+    <div class="section-title">
+      <span>Usuários do Sistema</span>
+      <button class="btn-sm btn-gold" onclick="toggleForm('formUsuario')">+ Novo Usuário</button>
     </div>
-    <div id="div-rejeitar" style="display:none;margin-top:16px">
-      <label>Motivo da rejeicao</label>
-      <textarea id="motivo-rej" placeholder="Descreva o motivo..."></textarea>
-      <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="document.getElementById('div-rejeitar').style.display='none'">Cancelar</button>
-        <button class="btn btn-danger" onclick="rejeitar()">Confirmar Rejeicao</button>
+    <div class="form-panel" id="formUsuario">
+      <div class="form-row col3">
+        <div><label class="form-label">Nome</label><input class="form-input" id="u-nome" placeholder="Nome completo"></div>
+        <div><label class="form-label">E-mail</label><input class="form-input" id="u-email" placeholder="email@hotel.com" type="email"></div>
+        <div><label class="form-label">Senha</label><input class="form-input" id="u-senha" placeholder="Senha inicial" type="password"></div>
+      </div>
+      <div class="form-row col2">
+        <div><label class="form-label">Perfil</label>
+          <select class="form-select" id="u-perfil" onchange="togglePdvField()">
+            <option value="pdv">PDV</option>
+            <option value="estoque">Estoque</option>
+            <option value="master">Master</option>
+          </select>
+        </div>
+        <div id="pdvFieldWrap"><label class="form-label">PDV</label>
+          <select class="form-select" id="u-pdv"><option value="">Selecione...</option></select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-primary" onclick="salvarUsuario()">Criar Usuário</button>
+        <button class="btn-secondary" onclick="toggleForm('formUsuario')">Cancelar</button>
       </div>
     </div>
-  </div>
-</div>
-
-<!-- MODAL USUARIO -->
-<div class="modal-overlay" id="modal-user">
-  <div class="modal">
-    <h3 id="modal-user-titulo">Usuario</h3>
-    <input type="hidden" id="uid">
-    <div class="form-row">
-      <div class="form-group"><label>Nome</label><input id="u-nome" type="text" placeholder="Nome completo"></div>
-      <div class="form-group"><label>E-mail</label><input id="u-email" type="email" placeholder="email@rosewood"></div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Perfil</label>
-        <select id="u-perfil" onchange="toggleSub()">
-          <option value="executivo">Executivo</option>
-          <option value="operacional">Operacional</option>
-        </select>
-      </div>
-      <div class="form-group" id="sub-grp"><label>Subtipo</label>
-        <select id="u-sub" onchange="toggleSub()">
-          <option value="pdv">PDV</option>
-          <option value="estoque">Estoque</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-group" id="pdv-grp"><label>PDV</label>
-      <select id="u-pdv">
-        <option value="">- Selecione -</option>
-        <option>Le Jardin</option><option>Taraz</option><option>Blaise</option>
-        <option>Bela Vista</option><option>Rabo di Galo</option><option>Emerald Pool</option>
-        <option>IRD</option><option>Banquetes</option><option>Cozinha Central</option>
-        <option>Padaria</option><option>Confeitaria</option><option>Commissary</option><option>Rosa Madeira</option>
-      </select>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Senha</label><input id="u-senha" type="password" placeholder="Deixe vazio para manter"></div>
-      <div class="form-group"><label>Status</label><select id="u-ativo"><option value="true">Ativo</option><option value="false">Inativo</option></select></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="document.getElementById('modal-user').classList.remove('open')">Cancelar</button>
-      <button class="btn btn-primary" onclick="salvarUser()">Salvar</button>
-    </div>
+    <div id="usuariosContainer"><div class="loading-text">Carregando...</div></div>
   </div>
 </div>
 
-<script src="master.js"></script>
+<script>
+const SUPABASE_URL = 'https://nyijprhukndlyijqljbm.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55aWpwcmh1a25kbHlpanFsamJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MjUwMDgsImV4cCI6MjA5MjIwMTAwOH0.Vzljd9xesi1ZJ-l7du00v-elUSDQObRCUz2jPyqL5p8';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let pdvsList = [];
+const tabTitles = {
+  dashboard: ['Dashboard', 'Visão geral do dia'],
+  requisicoes: ['Requisições', 'Histórico completo'],
+  relatorios: ['Relatórios', 'Consumo por período e categoria'],
+  pendentes: ['Itens Pendentes', 'Aguardando revisão para catálogo'],
+  catalogo: ['Catálogo', 'Itens disponíveis para requisição'],
+  usuarios: ['Usuários', 'Gestão de acesso ao sistema'],
+};
+
+window.addEventListener('load', async () => {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { window.location.href = 'index.html'; return; }
+  const { data: perfil } = await sb.from('usuarios').select('*').eq('auth_uid', user.id).single();
+  if (!perfil || perfil.perfil !== 'master') { window.location.href = 'index.html'; return; }
+  document.getElementById('masterName').textContent = perfil.nome || 'Master';
+
+  const hoje = new Date();
+  document.getElementById('dateBadge').textContent = hoje.toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' });
+  document.getElementById('reqDate').value = hoje.toISOString().split('T')[0];
+
+  // Datas padrão relatório
+  const primMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+  document.getElementById('relDe').value = primMes;
+  document.getElementById('relAte').value = hoje.toISOString().split('T')[0];
+
+  await carregarPDVs();
+  await carregarDashboard();
+  await checarPendentes();
+});
+
+async function carregarPDVs() {
+  const { data } = await sb.from('pdvs').select('*').eq('ativo', true).order('nome');
+  pdvsList = data || [];
+  ['reqPdvFilter','relPdv'].forEach(id => {
+    const sel = document.getElementById(id);
+    pdvsList.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; sel.appendChild(o); });
+  });
+  const uPdv = document.getElementById('u-pdv');
+  pdvsList.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; uPdv.appendChild(o); });
+}
+
+function goTab(tab, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  if (el) el.classList.add('active');
+  else document.querySelector(`.nav-item[onclick*="${tab}"]`)?.classList.add('active');
+  const [title, sub] = tabTitles[tab] || [tab, ''];
+  document.getElementById('topTitle').textContent = title;
+  document.getElementById('topSub').textContent = sub;
+  if (tab === 'catalogo') carregarCatalogo();
+  if (tab === 'usuarios') carregarUsuarios();
+  if (tab === 'pendentes') carregarPendentes();
+  if (tab === 'dashboard') carregarDashboard();
+}
+
+async function carregarDashboard() {
+  const hoje = new Date().toISOString().split('T')[0];
+  const { data: reqs } = await sb.from('requisicoes')
+    .select('*, pdvs(nome), requisicao_itens(*)')
+    .eq('data_competencia', hoje)
+    .order('created_at', { ascending: false });
+
+  const todos = reqs || [];
+  document.getElementById('d-aguardando').textContent = todos.filter(r => r.status === 'enviado').length;
+  document.getElementById('d-separacao').textContent = todos.filter(r => r.status === 'separacao').length;
+  document.getElementById('d-entregues').textContent = todos.filter(r => r.status === 'entregue').length;
+  const divs = todos.reduce((acc, r) => acc + (r.requisicao_itens||[]).filter(i => i.divergencia).length, 0);
+  document.getElementById('d-divs').textContent = divs;
+
+  const cont = document.getElementById('dashReqs');
+  if (todos.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma requisição para hoje.</div>'; return; }
+
+  cont.innerHTML = `<table class="req-table">
+    <thead><tr><th>#</th><th>PDV</th><th>Horário</th><th>Itens</th><th>Competência</th><th>Status</th></tr></thead>
+    <tbody>${todos.map(r => {
+      const hora = new Date(r.created_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+      const statusLabel = { enviado:'Aguardando', separacao:'Em Separação', entregue:'Entregue' }[r.status] || r.status;
+      const itens = r.requisicao_itens?.length || 0;
+      const comp = new Date(r.data_competencia + 'T12:00:00').toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
+      return `<tr>
+        <td style="color:var(--muted)">#${String(r.id).padStart(5,'0')}</td>
+        <td>${r.pdvs?.nome || '—'}</td>
+        <td style="color:var(--muted)">${hora}</td>
+        <td>${itens}</td>
+        <td style="color:var(--muted)">${comp}</td>
+        <td><span class="status-badge status-${r.status}">${statusLabel}</span></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+async function carregarRequisicoes() {
+  const data = document.getElementById('reqDate').value;
+  const pdv = document.getElementById('reqPdvFilter').value;
+  const status = document.getElementById('reqStatusFilter').value;
+
+  let q = sb.from('requisicoes').select('*, pdvs(nome), requisicao_itens(*)')
+    .eq('data_competencia', data).order('created_at', { ascending: false });
+  if (pdv) q = q.eq('pdv_id', pdv);
+  if (status) q = q.eq('status', status);
+  const { data: reqs } = await q;
+  const todos = reqs || [];
+  const cont = document.getElementById('reqContainer');
+  if (todos.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma requisição encontrada.</div>'; return; }
+
+  cont.innerHTML = `<table class="req-table">
+    <thead><tr><th>#</th><th>PDV</th><th>Criado em</th><th>Itens</th><th>Divergências</th><th>Status</th><th>Obs</th></tr></thead>
+    <tbody>${todos.map(r => {
+      const criado = new Date(r.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      const itens = r.requisicao_itens?.length || 0;
+      const divs = (r.requisicao_itens||[]).filter(i => i.divergencia).length;
+      const statusLabel = { enviado:'Aguardando', separacao:'Em Separação', entregue:'Entregue' }[r.status] || r.status;
+      return `<tr>
+        <td style="color:var(--muted)">#${String(r.id).padStart(5,'0')}</td>
+        <td>${r.pdvs?.nome || '—'}</td>
+        <td style="color:var(--muted)">${criado}</td>
+        <td>${itens}</td>
+        <td>${divs > 0 ? `<span style="color:var(--error)">${divs}</span>` : '—'}</td>
+        <td><span class="status-badge status-${r.status}">${statusLabel}</span></td>
+        <td style="color:var(--muted);font-size:12px">${r.observacao || '—'}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+async function gerarRelatorio() {
+  const de = document.getElementById('relDe').value;
+  const ate = document.getElementById('relAte').value;
+  const pdvId = document.getElementById('relPdv').value;
+  const cat = document.getElementById('relCat').value;
+
+  let q = sb.from('requisicao_itens')
+    .select('*, requisicoes!inner(data_competencia, pdv_id, status, pdvs(nome))')
+    .gte('requisicoes.data_competencia', de)
+    .lte('requisicoes.data_competencia', ate)
+    .eq('requisicoes.status', 'entregue');
+  if (pdvId) q = q.eq('requisicoes.pdv_id', pdvId);
+  if (cat) q = q.eq('item_categoria', cat);
+  const { data: itens } = await q;
+
+  const cont = document.getElementById('relContainer');
+  if (!itens || itens.length === 0) { cont.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--muted2);padding:48px">Nenhum dado encontrado para o período.</div>'; return; }
+
+  // Agrupar por item
+  const porItem = {};
+  const porPDV = {};
+  itens.forEach(it => {
+    const k = it.item_nome;
+    if (!porItem[k]) porItem[k] = { cat: it.item_categoria, total: 0, unidade: it.item_unidade };
+    porItem[k].total += parseFloat(it.quantidade_entregue || it.quantidade_solicitada || 0);
+    const pdvNome = it.requisicoes?.pdvs?.nome || 'Desconhecido';
+    if (!porPDV[pdvNome]) porPDV[pdvNome] = 0;
+    porPDV[pdvNome] += parseFloat(it.quantidade_entregue || it.quantidade_solicitada || 0);
+  });
+
+  // Separar inventário vs hortifruti
+  const invItens = Object.entries(porItem).filter(([,v]) => v.cat !== 'hortifruti');
+  const hortItens = Object.entries(porItem).filter(([,v]) => v.cat === 'hortifruti');
+  const top10 = Object.entries(porItem).sort((a,b) => b[1].total - a[1].total).slice(0,10);
+
+  const catLabel = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti' };
+
+  cont.innerHTML = `
+    <div class="rel-card">
+      <div class="rel-card-title">Inventário — Proteína &amp; Laticínios</div>
+      ${invItens.length === 0 ? '<div style="color:var(--muted2);font-size:13px">Sem dados</div>' :
+        invItens.sort((a,b)=>b[1].total-a[1].total).map(([nome,v]) => `
+        <div class="rel-item-row">
+          <span><span class="cat-pill cat-${v.cat}">${catLabel[v.cat]||v.cat}</span> ${nome}</span>
+          <span class="rel-val">${v.total.toFixed(1)} ${v.unidade||''}</span>
+        </div>`).join('')}
+    </div>
+    <div class="rel-card">
+      <div class="rel-card-title">Hortifruti — Operacional</div>
+      ${hortItens.length === 0 ? '<div style="color:var(--muted2);font-size:13px">Sem dados</div>' :
+        hortItens.sort((a,b)=>b[1].total-a[1].total).map(([nome,v]) => `
+        <div class="rel-item-row">
+          <span><span class="cat-pill cat-hortifruti">Hortifruti</span> ${nome}</span>
+          <span class="rel-val">${v.total.toFixed(1)} ${v.unidade||''}</span>
+        </div>`).join('')}
+    </div>
+    <div class="rel-card">
+      <div class="rel-card-title">Volume por PDV (total)</div>
+      ${Object.entries(porPDV).sort((a,b)=>b[1]-a[1]).map(([pdv,tot]) => `
+        <div class="rel-item-row">
+          <span>${pdv}</span>
+          <span class="rel-val">${tot.toFixed(1)}</span>
+        </div>`).join('')}
+    </div>
+    <div class="rel-card">
+      <div class="rel-card-title">Top 10 Itens Mais Solicitados</div>
+      ${top10.map(([nome,v],i) => `
+        <div class="rel-item-row">
+          <span><span style="color:var(--muted2);font-size:11px">${i+1}.</span> ${nome}</span>
+          <span class="rel-val">${v.total.toFixed(1)} ${v.unidade||''}</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+async function checarPendentes() {
+  const { data } = await sb.from('itens_pendentes').select('id').eq('status', 'pendente');
+  const n = data?.length || 0;
+  const badge = document.getElementById('pendBadge');
+  const chip = document.getElementById('pendingChip');
+  if (n > 0) {
+    badge.textContent = n; badge.style.display = 'inline';
+    chip.textContent = `⚠ ${n} iten(s) para revisão`;
+    chip.classList.add('visible');
+  } else {
+    badge.style.display = 'none'; chip.classList.remove('visible');
+  }
+}
+
+async function carregarPendentes() {
+  const { data } = await sb.from('itens_pendentes')
+    .select('*, pdvs(nome), requisicoes(id)')
+    .eq('status', 'pendente').order('created_at', { ascending: false });
+  const cont = document.getElementById('pendentesContainer');
+  if (!data || data.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item pendente de revisão.</div>'; return;
+  }
+  cont.innerHTML = data.map(p => `
+    <div class="pend-card" id="pend-${p.id}">
+      <div style="font-size:11px;color:var(--muted)">#${String(p.requisicao_id||0).padStart(5,'0')} · ${p.pdvs?.nome||'—'}</div>
+      <div class="pend-nome">${p.nome_digitado}</div>
+      <div class="pend-actions">
+        <button class="btn-sm btn-green" onclick="decidirItem('${p.id}','aprovado')">Adicionar ao Catálogo</button>
+        <button class="btn-sm btn-outline" onclick="decidirItem('${p.id}','rejeitado')">Manter só no histórico</button>
+      </div>
+    </div>`).join('');
+}
+
+async function decidirItem(id, decisao) {
+  if (decisao === 'aprovado') {
+    const { data: pend } = await sb.from('itens_pendentes').select('*').eq('id', id).single();
+    if (pend) {
+      const cat = (prompt('Categoria? (proteina / laticinios / hortifruti)', 'proteina') || '').trim();
+      if (\!['proteina','laticinios','hortifruti'].includes(cat)) {
+        alert('Categoria inválida. Item não foi adicionado ao catálogo.');
+        return;
+      }
+      const unid = ((prompt('Unidade? (kg, un, cx, l...)', 'un') || '').trim()) || 'un';
+      const { error } = await sb.from('itens').insert({
+        nome: pend.nome_digitado, categoria: cat, unidade: unid, ativo: true, inventario: false
+      });
+      if (error) { alert('Erro ao cadastrar item: ' + error.message); return; }
+    }
+  }
+  await sb.from('itens_pendentes').update({ status: decisao }).eq('id', id);
+  document.getElementById(`pend-${id}`)?.remove();
+  await checarPendentes();
+}
+
+async function carregarCatalogo() {
+  const { data } = await sb.from('itens').select('*').order('categoria').order('nome');
+  const cont = document.getElementById('catalogoContainer');
+  if (!data || data.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item cadastrado.</div>'; return; }
+  const catLabel = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti' };
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr><th>Nome</th><th>Categoria</th><th>Unidade</th><th>Inventário</th><th>Status</th><th>Ações</th></tr></thead>
+    <tbody>${data.map(it => `<tr>
+      <td>${it.nome}</td>
+      <td><span class="cat-pill cat-${it.categoria}">${catLabel[it.categoria]||it.categoria}</span></td>
+      <td>${it.unidade}</td>
+      <td>${it.inventario ? '<span style="color:var(--green)">Sim</span>' : '<span style="color:var(--muted)">Não</span>'}</td>
+      <td><span class="tag ${it.ativo ? 'tag-ativo' : 'tag-inativo'}">${it.ativo ? 'Ativo' : 'Inativo'}</span></td>
+      <td><button class="btn-sm ${it.ativo ? 'btn-outline' : 'btn-gold'}" onclick="toggleItem('${it.id}', ${it.ativo})">${it.ativo ? 'Desativar' : 'Ativar'}</button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function salvarItem() {
+  const nome = document.getElementById('c-nome').value.trim();
+  const cat = document.getElementById('c-cat').value;
+  const unid = document.getElementById('c-unid').value.trim();
+  const inv = document.getElementById('c-inv').value === 'true';
+  if (!nome || !unid) { alert('Preencha nome e unidade.'); return; }
+  const { error } = await sb.from('itens').insert({ nome, categoria: cat, unidade: unid, inventario: inv, ativo: true });
+  if (error) { alert('Erro: ' + error.message); return; }
+  ['c-nome','c-unid'].forEach(id => document.getElementById(id).value = '');
+  toggleForm('formCatalogo');
+  await carregarCatalogo();
+}
+
+async function toggleItem(id, ativo) {
+  await sb.from('itens').update({ ativo: !ativo }).eq('id', id);
+  await carregarCatalogo();
+}
+
+async function carregarUsuarios() {
+  const { data } = await sb.from('usuarios').select('*, pdvs(nome)').order('nome');
+  const cont = document.getElementById('usuariosContainer');
+  if (!data || data.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum usuário cadastrado.</div>'; return; }
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>PDV</th><th>Status</th><th>Ações</th></tr></thead>
+    <tbody>${data.map(u => `<tr>
+      <td>${u.nome}</td>
+      <td style="color:var(--muted)">${u.email}</td>
+      <td><span class="tag tag-${u.perfil}">${u.perfil}</span></td>
+      <td>${u.pdvs?.nome || '—'}</td>
+      <td><span class="tag ${u.ativo ? 'tag-ativo' : 'tag-inativo'}">${u.ativo ? 'Ativo' : 'Inativo'}</span></td>
+      <td><button class="btn-sm ${u.ativo ? 'btn-outline' : 'btn-gold'}" onclick="toggleUsuario('${u.id}', ${u.ativo})">${u.ativo ? 'Desativar' : 'Ativar'}</button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function togglePdvField() {
+  const perfil = document.getElementById('u-perfil').value;
+  document.getElementById('pdvFieldWrap').style.display = perfil === 'pdv' ? 'block' : 'none';
+}
+
+async function salvarUsuario() {
+  const nome = document.getElementById('u-nome').value.trim();
+  const email = document.getElementById('u-email').value.trim();
+  const senha = document.getElementById('u-senha').value;
+  const perfil = document.getElementById('u-perfil').value;
+  const pdvId = document.getElementById('u-pdv').value || null;
+  if (!nome || !email || !senha) { alert('Preencha nome, e-mail e senha.'); return; }
+  if (perfil === 'pdv' && !pdvId) { alert('Selecione o PDV para este usuário.'); return; }
+
+  // Salva a sessão atual (master) — signUp faz auto-login no usuário criado
+  // e sobrescreveria a sessão do master se não restaurássemos depois.
+  const { data: { session: masterSession } } = await sb.auth.getSession();
+
+  // Cria via Auth (signUp). Em produção, use Edge Function com Service Role Key.
+  const { data: authData, error: authErr } = await sb.auth.signUp({ email, password: senha });
+  if (authErr) { alert('Erro ao criar conta: ' + authErr.message); return; }
+
+  // Restaura sessão do master antes do INSERT (RLS exige perfil=master).
+  if (masterSession) {
+    await sb.auth.setSession({
+      access_token: masterSession.access_token,
+      refresh_token: masterSession.refresh_token
+    });
+  }
+
+  const { error: perfilErr } = await sb.from('usuarios').insert({
+    auth_uid: authData.user.id, nome, email, perfil, pdv_id: pdvId, ativo: true
+  });
+  if (perfilErr) { alert('Conta criada mas erro no perfil: ' + perfilErr.message); return; }
+
+  ['u-nome','u-email','u-senha'].forEach(id => document.getElementById(id).value = '');
+  toggleForm('formUsuario');
+  alert('Usuário criado. Se a confirmação por e-mail estiver ativa no Supabase, o usuário precisará confirmar antes de fazer login.');
+  await carregarUsuarios();
+}
+
+async function toggleUsuario(id, ativo) {
+  await sb.from('usuarios').update({ ativo: !ativo }).eq('id', id);
+  await carregarUsuarios();
+}
+
+function toggleForm(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+async function logout() {
+  await sb.auth.signOut();
+  window.location.href = 'index.html';
+}
+</script>
 </body>
 </html>
