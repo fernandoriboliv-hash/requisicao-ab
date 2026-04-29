@@ -171,6 +171,9 @@
   <button class="filter-btn active" onclick="setFiltro('pendentes', this)">Pendentes</button>
   <button class="filter-btn" onclick="setFiltro('todos', this)">Todos do Dia</button>
   <button class="filter-btn" onclick="setFiltro('entregues', this)">Entregues</button>
+  <select id="pdvFilter" style="padding:6px 10px;background:var(--panel);border:1px solid var(--border-subtle);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;cursor:pointer;">
+    <option value="">Todos os PDVs</option>
+  </select>
   <div class="filter-date">
     <span class="date-label">Data:</span>
     <input type="date" id="dateFilter">
@@ -214,6 +217,15 @@ window.addEventListener('load', async () => {
 
   const hoje = new Date().toISOString().split('T')[0];
   document.getElementById('dateFilter').value = hoje;
+
+  const { data: pdvs } = await sb.from('pdvs').select('id, nome').eq('ativo', true).order('nome');
+  const pdvSel = document.getElementById('pdvFilter');
+  (pdvs || []).forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id; o.textContent = p.nome;
+    pdvSel.appendChild(o);
+  });
+
   await carregar();
 });
 
@@ -226,10 +238,13 @@ function setFiltro(f, btn) {
 
 async function carregar() {
   const data = document.getElementById('dateFilter').value;
-  const { data: reqs } = await sb.from('requisicoes')
+  const pdvId = document.getElementById('pdvFilter').value;
+  let q = sb.from('requisicoes')
     .select('*, pdvs(nome), requisicao_itens(*)')
     .eq('data_competencia', data)
     .order('created_at', { ascending: true });
+  if (pdvId) q = q.eq('pdv_id', pdvId);
+  const { data: reqs } = await q;
 
   todosReqs = reqs || [];
   atualizarStats();

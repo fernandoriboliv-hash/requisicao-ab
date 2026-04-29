@@ -353,7 +353,16 @@
     <div class="item-livre-row">
       <input class="input-livre" id="itemLivreNome" placeholder="Nome do item">
       <input class="input-livre" id="itemLivreQtd" placeholder="Qtd" style="width:80px;flex:none">
-      <input class="input-livre" id="itemLivreUnid" placeholder="Un." style="width:60px;flex:none">
+      <select class="input-livre" id="itemLivreUnid" style="width:90px;flex:none">
+        <option value="kg">KG</option>
+        <option value="g">G</option>
+        <option value="un">UND</option>
+        <option value="pç">PÇ</option>
+        <option value="bdj">BDJ</option>
+        <option value="cx">Caixa</option>
+        <option value="meia-cx">Meia Caixa</option>
+        <option value="l">L</option>
+      </select>
       <button class="btn-add-livre" onclick="addItemLivre()">+ Adicionar</button>
     </div>
     <div class="itens-livres-list" id="itensLivresList"></div>
@@ -582,14 +591,15 @@ function abrirModal() {
 
   if (itensLivres.length > 0) {
     html += `<div class="modal-section">
-      <div class="modal-section-title">⚠ Itens para Revisão pelo Master</div>
+      <div class="modal-section-title">Itens não encontrados no catálogo</div>
       ${itensLivres.map(it => `<div class="modal-livre-row">${it.nome} — ${it.qtd} ${it.unidade}</div>`).join('')}
     </div>`;
   }
 
   if (obs) html += `<div class="modal-section"><div class="modal-section-title">Observação</div><div style="font-size:13px;color:var(--muted)">${obs}</div></div>`;
 
-  html += `<div class="modal-meta">📅 Esta requisição será incluída na lista de <strong style="color:var(--text)">${competencia}</strong>.</div>`;
+  const pdvNome = document.getElementById('pdvChip').textContent;
+  html += `<div class="modal-meta">🏨 PDV: <strong style="color:var(--text)">${pdvNome}</strong> &nbsp;·&nbsp; 📅 Lista de <strong style="color:var(--text)">${competencia}</strong>.</div>`;
 
   body.innerHTML = html;
   document.getElementById('modalOverlay').classList.add('open');

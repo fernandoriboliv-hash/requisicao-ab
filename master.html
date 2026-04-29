@@ -308,7 +308,18 @@
             <option value="hortifruti">Hortifruti</option>
           </select>
         </div>
-        <div><label class="form-label">Unidade</label><input class="form-input" id="c-unid" placeholder="kg, un, cx..."></div>
+        <div><label class="form-label">Unidade</label>
+          <select class="form-select" id="c-unid">
+            <option value="kg">KG</option>
+            <option value="g">G</option>
+            <option value="un">UND</option>
+            <option value="pç">PÇ</option>
+            <option value="bdj">BDJ</option>
+            <option value="cx">Caixa</option>
+            <option value="meia-cx">Meia Caixa</option>
+            <option value="l">L</option>
+          </select>
+        </div>
         <div><label class="form-label">Inventário</label>
           <select class="form-select" id="c-inv">
             <option value="true">Sim</option>
@@ -601,11 +612,13 @@ async function decidirItem(id, decisao) {
     const { data: pend } = await sb.from('itens_pendentes').select('*').eq('id', id).single();
     if (pend) {
       const cat = (prompt('Categoria? (proteina / laticinios / hortifruti)', 'proteina') || '').trim();
-      if (\!['proteina','laticinios','hortifruti'].includes(cat)) {
+      if (!['proteina','laticinios','hortifruti'].includes(cat)) {
         alert('Categoria inválida. Item não foi adicionado ao catálogo.');
         return;
       }
-      const unid = ((prompt('Unidade? (kg, un, cx, l...)', 'un') || '').trim()) || 'un';
+      const unidOpts = ['kg','g','un','pç','bdj','cx','meia-cx','l'];
+      const unid = ((prompt('Unidade?\nkg / g / un / pç / bdj / cx / meia-cx / l', 'kg') || '').trim().toLowerCase()) || 'kg';
+      if (!unidOpts.includes(unid)) { alert('Unidade inválida. Use: ' + unidOpts.join(', ')); return; }
       const { error } = await sb.from('itens').insert({
         nome: pend.nome_digitado, categoria: cat, unidade: unid, ativo: true, inventario: false
       });
@@ -640,7 +653,7 @@ async function salvarItem() {
   const cat = document.getElementById('c-cat').value;
   const unid = document.getElementById('c-unid').value.trim();
   const inv = document.getElementById('c-inv').value === 'true';
-  if (!nome || !unid) { alert('Preencha nome e unidade.'); return; }
+  if (!nome) { alert('Preencha o nome do item.'); return; }
   const { error } = await sb.from('itens').insert({ nome, categoria: cat, unidade: unid, inventario: inv, ativo: true });
   if (error) { alert('Erro: ' + error.message); return; }
   ['c-nome','c-unid'].forEach(id => document.getElementById(id).value = '');
