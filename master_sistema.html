@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Master de Sistema — Rosewood A&B</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+  body { display: flex; }
+  .form-panel {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    padding: 20px; margin-bottom: 20px; display: none;
+  }
+  .form-panel.open { display: block; }
+  .perfil-tag { font-size: 10px; padding: 2px 8px; letter-spacing: 0.5px; }
+  .perfil-master_sistema  { background: rgba(184,150,62,0.15); color: var(--gold); }
+  .perfil-gerente_compras { background: rgba(76,175,125,0.15); color: var(--green); }
+  .perfil-executivo       { background: rgba(155,109,217,0.15); color: #B498E0; }
+  .perfil-pdv             { background: rgba(91,141,217,0.15); color: #5B8DD9; }
+  .perfil-estoque         { background: rgba(224,140,62,0.15); color: var(--orange); }
+</style>
+</head>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="name">Rosewood</div>
+    <div class="sub">A&amp;B · Master de Sistema</div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-item active" onclick="goTab('usuarios',this)"><span class="nav-icon">⊕</span> Usuários</div>
+    <div class="nav-item" onclick="goTab('pdvs',this)"><span class="nav-icon">▦</span> PDVs</div>
+
+    <div class="nav-group" id="grp-estoque">
+      <div class="nav-group-head" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">◐</span> Estoque
+        <span class="chev">▸</span>
+      </div>
+      <div class="nav-group-items">
+        <div class="nav-item" onclick="goTab('niveis',this)"><span class="nav-icon">◐</span> Consultar Estoque</div>
+        <div class="nav-item" onclick="goTab('divergencias',this)">
+          <span class="nav-icon">△</span> Divergências
+          <span class="nav-badge" id="badgeDivergencias"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-item" onclick="goTab('logs',this)"><span class="nav-icon">≡</span> Atividade</div>
+  </div>
+  <div class="sidebar-foot">
+    <div class="name" id="userName">—</div>
+    <button class="logout-btn" onclick="logout()">Sair do sistema</button>
+  </div>
+</nav>
+
+<div class="main-with-sidebar">
+  <div class="top-bar">
+    <div class="top-title" id="topTitle">Usuários</div>
+    <div class="top-sub" id="topSub">Gestão de acesso ao sistema</div>
+  </div>
+
+  <!-- ====================== USUÁRIOS ====================== -->
+  <div class="tab-content active" id="tab-usuarios">
+    <div class="main full">
+      <div class="aviso aviso-info">
+        Para criar um novo usuário primeiro adicione a conta em <strong>Supabase Authentication → Users → Add user</strong>,
+        copie o UUID e cole no formulário abaixo. (Edge Function automática virá em fase posterior.)
+      </div>
+      <div class="section-title">
+        <span>Usuários cadastrados (<span id="usCount">0</span>)</span>
+        <button class="btn btn-sm btn-gold" onclick="toggleForm('formUsuario')">+ Vincular Usuário</button>
+      </div>
+      <div class="form-panel" id="formUsuario">
+        <div class="form-row col2">
+          <div><label class="field-label">UUID do auth.users *</label>
+            <input class="input" id="u-uid" placeholder="cole o UUID copiado do Supabase Authentication">
+          </div>
+          <div><label class="field-label">Nome *</label>
+            <input class="input" id="u-nome" placeholder="Nome completo">
+          </div>
+        </div>
+        <div class="form-row col2">
+          <div><label class="field-label">E-mail *</label>
+            <input class="input" id="u-email" type="email" placeholder="email@hotel.com">
+          </div>
+          <div><label class="field-label">Perfil *</label>
+            <select class="select" id="u-perfil" onchange="togglePdvField()">
+              <option value="pdv">PDV (cozinheiro)</option>
+              <option value="estoque">Estoque (Comissaria)</option>
+              <option value="executivo">Executivo (chefes)</option>
+              <option value="gerente_compras">Gerente de Compras</option>
+              <option value="master_sistema">Master de Sistema</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row col2" id="row-pdv">
+          <div><label class="field-label">PDV vinculado *</label>
+            <select class="select" id="u-pdv">
+              <option value="">Selecione o PDV...</option>
+            </select>
+          </div>
+          <div></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="vincularUsuario()">Vincular</button>
+          <button class="btn btn-secondary" onclick="toggleForm('formUsuario')">Cancelar</button>
+        </div>
+      </div>
+      <div class="filters-bar mb-3" style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <input class="input" id="us-busca" placeholder="Buscar por nome ou e-mail..." oninput="renderUsuarios()">
+        <select class="select" id="us-perfil" onchange="renderUsuarios()" style="max-width:200px">
+          <option value="">Todos os perfis</option>
+          <option value="master_sistema">Master de Sistema</option>
+          <option value="gerente_compras">Gerente de Compras</option>
+          <option value="executivo">Executivo</option>
+          <option value="pdv">PDV</option>
+          <option value="estoque">Estoque</option>
+        </select>
+      </div>
+      <div id="usuariosContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== PDVs ====================== -->
+  <div class="tab-content" id="tab-pdvs">
+    <div class="main full">
+      <div class="section-title">
+        <span>Pontos de Demanda (<span id="pdvCount">0</span>)</span>
+        <button class="btn btn-sm btn-gold" onclick="toggleForm('formPdv')">+ Novo PDV</button>
+      </div>
+      <div class="form-panel" id="formPdv">
+        <div class="form-row col3">
+          <div><label class="field-label">Nome *</label><input class="input" id="p-nome" placeholder="Ex.: Le Jardin"></div>
+          <div><label class="field-label">Tipo</label>
+            <select class="select" id="p-tipo">
+              <option value="pdv">PDV (consumidor)</option>
+              <option value="comissaria">Comissaria (atende fila)</option>
+            </select>
+          </div>
+          <div><label class="field-label">Ordem (exibição)</label><input class="input" id="p-ordem" type="number" value="100"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="criarPdv()">Criar PDV</button>
+          <button class="btn btn-secondary" onclick="toggleForm('formPdv')">Cancelar</button>
+        </div>
+      </div>
+      <div id="pdvsContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== NÍVEIS DE ESTOQUE ====================== -->
+  <div class="tab-content" id="tab-niveis">
+    <div class="main full">
+      <div class="aviso aviso-info">
+        Saldo teórico atual dos itens de câmara — atualizado conforme requisições e recebimentos.
+      </div>
+      <div class="chk-filters">
+        <div class="chk-filter-item">
+          <label>Categorias</label>
+          <select class="select" id="nv-cat" onchange="renderNiveisMst()">
+            <option value="camara" selected>Proteínas + Laticínios</option>
+            <option value="proteina">Só Proteína</option>
+            <option value="laticinios">Só Laticínios</option>
+            <option value="">Todas</option>
+          </select>
+        </div>
+        <div class="chk-filter-item">
+          <label>Status</label>
+          <select class="select" id="nv-status" onchange="renderNiveisMst()">
+            <option value="">Todos</option>
+            <option value="vermelho">Só vermelho</option>
+            <option value="amarelo">Só amarelo</option>
+            <option value="verde">Só verde</option>
+            <option value="pend">Só sem contagem</option>
+          </select>
+        </div>
+        <div class="chk-filter-item chk-filter-search">
+          <label>Buscar</label>
+          <input class="input" type="text" id="nv-search" placeholder="Nome do item..." oninput="renderNiveisMst()">
+        </div>
+        <div class="chk-filter-item" style="align-self:end">
+          <button class="btn btn-sm btn-outline" onclick="carregarNiveisMst()">↻ Recarregar</button>
+        </div>
+      </div>
+      <div class="chk-summary">
+        <div class="card verde"><div class="lbl">Verde (OK)</div><div class="val verde" id="nvVerde">—</div></div>
+        <div class="card amarelo"><div class="lbl">Amarelo (Repor)</div><div class="val amarelo" id="nvAmarelo">—</div></div>
+        <div class="card vermelho"><div class="lbl">Vermelho (Crítico)</div><div class="val vermelho" id="nvVermelho">—</div></div>
+        <div class="card pend"><div class="lbl">Sem contagem</div><div class="val pend" id="nvPend">—</div></div>
+      </div>
+      <div class="section-title"><span>Estoque atual</span><span id="nvCount" class="text-muted" style="font-size:12px"></span></div>
+      <div id="nvContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== DIVERGÊNCIAS DE ESTOQUE ====================== -->
+  <div class="tab-content" id="tab-divergencias">
+    <div class="main full">
+      <div class="aviso aviso-info">
+        Itens em que a contagem física divergiu do saldo teórico em <strong>10% ou mais</strong>.
+        Como master, você pode ver e apagar registros (correção grosseira).
+      </div>
+      <div class="chk-filters">
+        <div class="chk-filter-item">
+          <label>Status</label>
+          <select class="select" id="dv-status" onchange="renderDivergenciasMst()">
+            <option value="pendente" selected>Pendentes</option>
+            <option value="recontagem">Aguardando recontagem</option>
+            <option value="perda_registrada">Perda registrada</option>
+            <option value="ajuste_ok">Ajuste OK</option>
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="chk-filter-item">
+          <label>Categoria</label>
+          <select class="select" id="dv-cat" onchange="renderDivergenciasMst()">
+            <option value="camara" selected>Proteínas + Laticínios</option>
+            <option value="proteina">Só Proteína</option>
+            <option value="laticinios">Só Laticínios</option>
+            <option value="">Todas</option>
+          </select>
+        </div>
+        <div class="chk-filter-item chk-filter-search">
+          <label>Buscar</label>
+          <input class="input" type="text" id="dv-search" placeholder="Nome do item..." oninput="renderDivergenciasMst()">
+        </div>
+        <div class="chk-filter-item" style="align-self:end">
+          <button class="btn btn-sm btn-outline" onclick="carregarDivergenciasMst()">↻ Recarregar</button>
+        </div>
+      </div>
+      <div class="section-title"><span>Divergências</span><span id="dvCount" class="text-muted" style="font-size:12px"></span></div>
+      <div id="dvContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== ATIVIDADE ====================== -->
+  <div class="tab-content" id="tab-logs">
+    <div class="main full">
+      <div class="aviso aviso-info">
+        Atividade recente do sistema. Filtros por tipo virão em iteração futura.
+      </div>
+      <div class="section-title">Últimas ações</div>
+      <div id="logsContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const tabTitles = {
+  usuarios:     ['Usuários', 'Gestão de acesso ao sistema'],
+  pdvs:         ['PDVs', 'Pontos de demanda do hotel'],
+  niveis:       ['Consultar Estoque', 'Saldo teórico atual dos itens de câmara'],
+  divergencias: ['Divergências de Estoque', 'Diferenças entre contagem física e saldo teórico'],
+  logs:         ['Atividade', 'Últimas ações no sistema'],
+};
+
+function toggleNavGroup(headEl) {
+  const grp = headEl.closest('.nav-group');
+  if (grp) grp.classList.toggle('open');
+}
+function openParentGroup(itemEl) {
+  const grp = itemEl?.closest?.('.nav-group');
+  if (grp) grp.classList.add('open');
+}
+
+const state = { user: null, perfil: null, usuarios: [], pdvs: [] };
+
+window.addEventListener('load', async () => {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { window.location.href = 'index.html'; return; }
+  const { data: perfil } = await sb.from('usuarios').select('id, perfil, nome').eq('auth_uid', user.id).single();
+  if (!perfil || perfil.perfil !== 'master_sistema') { window.location.href = 'index.html'; return; }
+  state.user = user; state.perfil = perfil;
+  document.getElementById('userName').textContent = perfil.nome || '';
+  await Promise.all([carregarPDVs(), carregarUsuarios()]);
+});
+
+function escapeHtml(s) { if (s==null) return ''; return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toggleForm(id) { document.getElementById(id).classList.toggle('open'); }
+
+function goTab(tab, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (el) el.classList.add('active');
+  const [t, s] = tabTitles[tab] || [tab, ''];
+  document.getElementById('topTitle').textContent = t;
+  document.getElementById('topSub').textContent = s;
+  if (tab === 'pdvs') renderPDVs();
+  if (tab === 'logs') carregarLogs();
+  if (tab === 'niveis') carregarNiveisMst();
+  if (tab === 'divergencias') carregarDivergenciasMst();
+  openParentGroup(el);
+}
+
+function togglePdvField() {
+  const perfil = document.getElementById('u-perfil').value;
+  document.getElementById('row-pdv').style.display = perfil === 'pdv' ? 'grid' : 'none';
+}
+
+// =====================================================================
+// PDVs
+// =====================================================================
+async function carregarPDVs() {
+  const { data } = await sb.from('pdvs').select('*').order('ordem');
+  state.pdvs = data || [];
+  document.getElementById('pdvCount').textContent = state.pdvs.length;
+  // popular select de criar usuário
+  const sel = document.getElementById('u-pdv');
+  sel.innerHTML = '<option value="">Selecione o PDV...</option>';
+  state.pdvs.filter(p => p.ativo && p.tipo !== 'comissaria').forEach(p => {
+    const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; sel.appendChild(o);
+  });
+  renderPDVs();
+}
+
+function renderPDVs() {
+  const cont = document.getElementById('pdvsContainer');
+  if (state.pdvs.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum PDV cadastrado.</div>'; return; }
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr><th>Nome</th><th>Tipo</th><th class="center">Ordem</th><th>Status</th><th class="center">Ações</th></tr></thead>
+    <tbody>${state.pdvs.map(p => `<tr>
+      <td>${escapeHtml(p.nome)}</td>
+      <td><span class="badge ${p.tipo === 'comissaria' ? 'badge-orange' : 'badge-blue'}">${p.tipo}</span></td>
+      <td class="center text-muted">${p.ordem}</td>
+      <td><span class="badge ${p.ativo?'badge-green':'badge-muted'}">${p.ativo?'Ativo':'Inativo'}</span></td>
+      <td class="center"><button class="btn btn-sm ${p.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoPdv('${p.id}',${p.ativo})">${p.ativo?'Desativar':'Ativar'}</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+async function criarPdv() {
+  const nome = document.getElementById('p-nome').value.trim();
+  if (!nome) { showToast('Informe o nome do PDV.', 'error'); return; }
+  const tipo = document.getElementById('p-tipo').value;
+  const ordem = parseInt(document.getElementById('p-ordem').value, 10) || 100;
+  const { error } = await sb.from('pdvs').insert({ nome, tipo, ordem, ativo: true });
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  ['p-nome'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('p-ordem').value = '100';
+  toggleForm('formPdv');
+  showToast('PDV criado.', 'success');
+  await carregarPDVs();
+}
+
+async function toggleAtivoPdv(id, ativo) {
+  await sb.from('pdvs').update({ ativo: !ativo }).eq('id', id);
+  await carregarPDVs();
+}
+
+// =====================================================================
+// USUÁRIOS
+// =====================================================================
+async function carregarUsuarios() {
+  const { data } = await sb.from('usuarios').select('*, pdvs(nome)').order('nome');
+  state.usuarios = data || [];
+  document.getElementById('usCount').textContent = state.usuarios.length;
+  renderUsuarios();
+}
+
+function renderUsuarios() {
+  const q = (document.getElementById('us-busca').value || '').toLowerCase();
+  const pf = document.getElementById('us-perfil').value;
+  let lista = state.usuarios;
+  if (pf) lista = lista.filter(u => u.perfil === pf);
+  if (q) lista = lista.filter(u => (u.nome||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q));
+  const cont = document.getElementById('usuariosContainer');
+  if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum usuário.</div>'; return; }
+  const labelPerfil = {
+    master_sistema: 'Master Sistema', gerente_compras: 'Gerente Compras',
+    executivo: 'Executivo', pdv: 'PDV', estoque: 'Estoque'
+  };
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>PDV</th><th>Status</th><th class="center">Ações</th></tr></thead>
+    <tbody>${lista.map(u => `<tr>
+      <td>${escapeHtml(u.nome||'—')}</td>
+      <td class="text-muted">${escapeHtml(u.email||'—')}</td>
+      <td><span class="perfil-tag perfil-${u.perfil}">${labelPerfil[u.perfil] || u.perfil}</span></td>
+      <td>${escapeHtml(u.pdvs?.nome || '—')}</td>
+      <td><span class="badge ${u.ativo?'badge-green':'badge-muted'}">${u.ativo?'Ativo':'Inativo'}</span></td>
+      <td class="center"><button class="btn btn-sm ${u.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoUsuario('${u.id}',${u.ativo})">${u.ativo?'Desativar':'Ativar'}</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+async function vincularUsuario() {
+  const auth_uid = document.getElementById('u-uid').value.trim();
+  const nome = document.getElementById('u-nome').value.trim();
+  const email = document.getElementById('u-email').value.trim();
+  const perfil = document.getElementById('u-perfil').value;
+  const pdv_id = perfil === 'pdv' ? document.getElementById('u-pdv').value || null : null;
+
+  if (!auth_uid || !nome || !email) { showToast('Preencha UUID, nome e e-mail.', 'error'); return; }
+  if (perfil === 'pdv' && !pdv_id) { showToast('Selecione um PDV para o usuário.', 'error'); return; }
+
+  // Validar formato UUID
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(auth_uid)) {
+    showToast('UUID inválido. Verifique se copiou corretamente do Supabase Authentication.', 'error');
+    return;
+  }
+
+  const { error } = await sb.from('usuarios').insert({
+    auth_uid, nome, email, perfil, pdv_id, ativo: true,
+  });
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  ['u-uid','u-nome','u-email'].forEach(id => document.getElementById(id).value = '');
+  toggleForm('formUsuario');
+  showToast('Usuário vinculado com sucesso.', 'success');
+  await carregarUsuarios();
+}
+
+async function toggleAtivoUsuario(id, ativo) {
+  await sb.from('usuarios').update({ ativo: !ativo }).eq('id', id);
+  await carregarUsuarios();
+}
+
+// =====================================================================
+// LOGS DE ATIVIDADE (visão simples)
+// =====================================================================
+async function carregarLogs() {
+  // Combinação simples: últimas solicitações de compra + últimas requisições
+  const [{ data: comp }, { data: req }] = await Promise.all([
+    sb.from('solicitacoes_compra').select('id, status, created_at, pdvs(nome)').order('created_at', { ascending: false }).limit(20),
+    sb.from('requisicoes').select('id, status, created_at, pdvs(nome), criada_pelo_estoque').order('created_at', { ascending: false }).limit(20),
+  ]);
+  const eventos = [];
+  (comp || []).forEach(c => eventos.push({
+    tipo: 'compra', when: c.created_at, label: `Solicitação de compra (#${String(c.id).slice(0,8)}) — ${c.pdvs?.nome||'?'} · status ${c.status}`,
+  }));
+  (req || []).forEach(r => eventos.push({
+    tipo: 'req', when: r.created_at, label: `Requisição${r.criada_pelo_estoque?' MANUAL':''} (#${String(r.id).slice(0,8)}) — ${r.pdvs?.nome||'?'} · status ${r.status}`,
+  }));
+  eventos.sort((a,b) => new Date(b.when) - new Date(a.when));
+  const cont = document.getElementById('logsContainer');
+  if (eventos.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma atividade ainda.</div>'; return; }
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr><th>Quando</th><th>Tipo</th><th>Ação</th></tr></thead>
+    <tbody>${eventos.slice(0, 30).map(e => `<tr>
+      <td class="text-muted">${new Date(e.when).toLocaleString('pt-BR')}</td>
+      <td><span class="badge ${e.tipo==='compra'?'badge-gold':'badge-blue'}">${e.tipo}</span></td>
+      <td>${escapeHtml(e.label)}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+// =====================================================================
+function showToast(msg, tipo='info') {
+  const stack = document.getElementById('toasts');
+  const t = document.createElement('div'); t.className = 'toast ' + tipo; t.textContent = msg;
+  stack.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+// =====================================================================
+// NÍVEIS DE ESTOQUE (só leitura) e DIVERGÊNCIAS (master pode apagar)
+// =====================================================================
+state.est = { itens: [], saldo: {}, consumo: {}, divergencias: [] };
+
+function classificarSemaforo(qtdAtual, mediaDiaria) {
+  if (qtdAtual === null || qtdAtual === undefined || isNaN(qtdAtual)) return 'pend';
+  if (!mediaDiaria || mediaDiaria <= 0) return qtdAtual > 0 ? 'verde' : 'vermelho';
+  const dias = qtdAtual / mediaDiaria;
+  if (dias >= 3) return 'verde';
+  if (dias >= 1) return 'amarelo';
+  return 'vermelho';
+}
+function consumoDiarioMst(item) {
+  const c = state.est.consumo?.[item.id];
+  if (c) { const t = parseFloat(c.saidas_30d) || 0; if (t > 0) return t / 30; }
+  return parseFloat(item.media_diaria) || 0;
+}
+
+async function carregarNiveisMst() {
+  const cont = document.getElementById('nvContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const [itensR, saldoR, consumoR] = await Promise.all([
+    sb.from('itens').select('id, nome, categoria, unidade, media_diaria, fornecedor_principal')
+      .eq('ativo', true).eq('inventario', true).order('categoria').order('nome'),
+    sb.from('v_estoque_saldo').select('*'),
+    sb.from('v_estoque_consumo').select('*'),
+  ]);
+  state.est.itens = itensR.data || [];
+  state.est.saldo = {}; (saldoR.data || []).forEach(s => { state.est.saldo[s.item_id] = s; });
+  state.est.consumo = {}; (consumoR.data || []).forEach(c => { state.est.consumo[c.item_id] = c; });
+  renderNiveisMst();
+}
+function renderNiveisMst() {
+  const cont = document.getElementById('nvContainer');
+  const catFilt = document.getElementById('nv-cat').value;
+  const stFilt  = document.getElementById('nv-status').value;
+  const q       = (document.getElementById('nv-search').value || '').toLowerCase();
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  const dados = state.est.itens.map(it => {
+    const saldo = state.est.saldo?.[it.id];
+    const qtd = saldo && !saldo.sem_baseline && saldo.saldo_teorico !== null ? parseFloat(saldo.saldo_teorico) : null;
+    const md = consumoDiarioMst(it);
+    const dias = md > 0 && qtd !== null ? qtd / md : null;
+    return { it, qtd, md, dias, semaforo: classificarSemaforo(qtd, md), saldo };
+  });
+  const cnt = { verde:0, amarelo:0, vermelho:0, pend:0 };
+  dados.forEach(d => cnt[d.semaforo]++);
+  document.getElementById('nvVerde').textContent    = cnt.verde;
+  document.getElementById('nvAmarelo').textContent  = cnt.amarelo;
+  document.getElementById('nvVermelho').textContent = cnt.vermelho;
+  document.getElementById('nvPend').textContent     = cnt.pend;
+  let filtrados = dados;
+  if (catFilt === 'camara')  filtrados = filtrados.filter(d => d.it.categoria === 'proteina' || d.it.categoria === 'laticinios');
+  else if (catFilt)          filtrados = filtrados.filter(d => d.it.categoria === catFilt);
+  if (stFilt) filtrados = filtrados.filter(d => d.semaforo === stFilt);
+  if (q) filtrados = filtrados.filter(d => d.it.nome.toLowerCase().includes(q));
+  document.getElementById('nvCount').textContent = `${filtrados.length} item(ns)`;
+  if (filtrados.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item nesses filtros.</div>'; return; }
+  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3 };
+  filtrados.sort((a,b) => (ordem[a.semaforo] - ordem[b.semaforo]) || a.it.nome.localeCompare(b.it.nome));
+  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—' };
+  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○' };
+  cont.innerHTML = filtrados.map(d => {
+    const it = d.it;
+    const qtdTxt = d.qtd !== null ? `${d.qtd.toFixed(1)}<small>${it.unidade||''}</small>` : '<span class="text-muted">— sem baseline</span>';
+    const cobTxt = d.md > 0 ? (d.dias !== null ? `<strong>${d.dias.toFixed(1)}</strong> dia(s)` : '—') : '<span class="text-muted">s/ consumo</span>';
+    let breakdown = '';
+    if (d.saldo && !d.saldo.sem_baseline) {
+      const base = parseFloat(d.saldo.baseline_contagem) || 0;
+      const ent = parseFloat(d.saldo.entradas_desde_contagem) || 0;
+      const sai = parseFloat(d.saldo.saidas_desde_contagem) || 0;
+      const dataUlt = d.saldo.ultima_contagem_data ? d.saldo.ultima_contagem_data.split('-').reverse().join('/') : '—';
+      breakdown = `Base ${base.toFixed(1)} (${dataUlt}) &nbsp;+ ent ${ent.toFixed(1)} − sai ${sai.toFixed(1)}`;
+    } else breakdown = '<em>sem contagem ainda</em>';
+    return `
+      <div class="nv-row ${d.semaforo}">
+        <div class="chk-semaforo ${d.semaforo}"><span class="dot">${semDot[d.semaforo]}</span><span class="txt">${semLabel[d.semaforo]}</span></div>
+        <div class="nv-nome">${escapeHtml(it.nome)}<span class="cat-pill cat-${it.categoria}" style="font-size:10px;margin-left:6px">${catLabels[it.categoria]||''}</span>${it.fornecedor_principal ? `<div class="text-muted" style="font-size:11px;margin-top:2px">${escapeHtml(it.fornecedor_principal)}</div>` : ''}</div>
+        <div class="nv-qty">${qtdTxt}</div>
+        <div class="nv-cob">${cobTxt}</div>
+        <div class="nv-ultima">${breakdown}</div>
+      </div>`;
+  }).join('');
+}
+
+async function carregarDivergenciasMst() {
+  const cont = document.getElementById('dvContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const { data, error } = await sb.from('divergencias_estoque')
+    .select('*, itens(nome, categoria, unidade, fornecedor_principal)')
+    .order('data_contagem', { ascending: false })
+    .order('diff_pct', { ascending: false });
+  if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + error.message + '</div>'; return; }
+  state.est.divergencias = data || [];
+  renderDivergenciasMst();
+  atualizarBadgeDivergenciasMst();
+}
+function renderDivergenciasMst() {
+  const cont = document.getElementById('dvContainer');
+  const st = document.getElementById('dv-status').value;
+  const catFilt = document.getElementById('dv-cat').value;
+  const q = (document.getElementById('dv-search').value || '').toLowerCase();
+  let lista = state.est.divergencias || [];
+  if (st) lista = lista.filter(d => d.status === st);
+  if (catFilt === 'camara') lista = lista.filter(d => d.itens && (d.itens.categoria === 'proteina' || d.itens.categoria === 'laticinios'));
+  else if (catFilt)         lista = lista.filter(d => d.itens && d.itens.categoria === catFilt);
+  if (q) lista = lista.filter(d => (d.itens?.nome||'').toLowerCase().includes(q));
+
+  document.getElementById('dvCount').textContent = `${lista.length} divergência(s)`;
+  if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma divergência com esses filtros.</div>'; return; }
+
+  const stLabel = { pendente:'Pendente', recontagem:'Recontagem', perda_registrada:'Perda', ajuste_ok:'Ajuste OK' };
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+
+  cont.innerHTML = lista.map(d => {
+    const it = d.itens || {};
+    const teo = parseFloat(d.qtd_teorica);
+    const con = parseFloat(d.qtd_contada);
+    const diff = parseFloat(d.diff);
+    const pct = parseFloat(d.diff_pct).toFixed(1);
+    const sobra = diff < 0;
+    const diffTxt = sobra
+      ? `<span class="dv-diff sobra">+${Math.abs(diff).toFixed(1)} ${it.unidade||''} <small>(${pct}% a mais)</small></span>`
+      : `<span class="dv-diff">−${diff.toFixed(1)} ${it.unidade||''} <small>(${pct}% a menos)</small></span>`;
+    const tag = `<span class="dv-status-tag ${d.status}">${stLabel[d.status]||d.status}</span>`;
+    const del = `<button class="dv-action-btn perda" onclick="apagarDivergencia('${d.id}')" title="Apagar registro (master)">✕ Apagar</button>`;
+    return `
+      <div class="dv-row ${d.status}">
+        <div class="dv-nome">
+          ${escapeHtml(it.nome||'—')}
+          <span class="cat-pill cat-${it.categoria||'diversos'}" style="font-size:10px;margin-left:6px">${catLabels[it.categoria]||''}</span>
+          <small>Contagem: ${d.data_contagem ? d.data_contagem.split('-').reverse().join('/') : '—'}${d.motivo ? ' · Motivo: ' + escapeHtml(d.motivo) : ''}</small>
+        </div>
+        <div class="dv-teo-cell"><div class="dv-num teorico">${teo.toFixed(1)}<small>teórico</small></div></div>
+        <div class="dv-con-cell"><div class="dv-num contado">${con.toFixed(1)}<small>contado</small></div></div>
+        ${diffTxt}
+        <div class="dv-actions">${tag}${del}</div>
+      </div>`;
+  }).join('');
+}
+async function apagarDivergencia(id) {
+  if (!confirm('Apagar este registro de divergência? Ação irreversível.')) return;
+  const { error } = await sb.from('divergencias_estoque').delete().eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  showToast('Divergência apagada.', 'success');
+  await carregarDivergenciasMst();
+}
+async function atualizarBadgeDivergenciasMst() {
+  const badge = document.getElementById('badgeDivergencias');
+  if (!badge) return;
+  const { count } = await sb.from('divergencias_estoque')
+    .select('*', { count: 'exact', head: true }).eq('status', 'pendente');
+  if (count && count > 0) {
+    badge.textContent = String(count);
+    badge.style.background = 'rgba(224,82,82,0.7)';
+    badge.style.color = '#fff';
+    badge.style.display = 'inline-block';
+  } else badge.style.display = 'none';
+}
+window.addEventListener('load', () => setTimeout(atualizarBadgeDivergenciasMst, 500));
+
+async function logout() { await sb.auth.signOut(); window.location.href = 'index.html'; }
+</script>
+</body>
+</html>

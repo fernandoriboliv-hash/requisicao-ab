@@ -1,0 +1,2052 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerente de Compras — Rosewood A&B</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+  body { display: flex; }
+  .pend-card {
+    background: var(--panel);
+    border: 1px solid var(--border-subtle);
+    margin-bottom: 8px;
+  }
+  .pend-head {
+    padding: 14px 18px;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto auto auto;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+  }
+  .pend-detail { display: none; padding: 14px 20px; border-top: 1px solid var(--border-subtle); }
+  .pend-detail.open { display: block; }
+  .chevron { color: var(--muted2); transition: transform 0.2s; }
+  .chevron.open { transform: rotate(180deg); }
+  .lista-categoria {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    margin-bottom: 16px; padding: 16px 20px;
+  }
+  .lista-cat-title {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .lista-cat-title .total { color: var(--gold); font-weight: 500; }
+  .lista-item-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 80px;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 13px;
+  }
+  .lista-item-row:last-child { border-bottom: none; }
+  .lista-pdv-list { font-size: 11px; color: var(--muted); }
+  .lista-final-input {
+    background: rgba(184,150,62,0.08);
+    border: 1px solid rgba(184,150,62,0.3);
+    color: var(--gold); font-weight: 500;
+    font-family: inherit; font-size: 13px;
+    padding: 4px 8px; outline: none;
+    text-align: right; width: 70px;
+  }
+  .lista-qtd-cell { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .btn-remove-lista {
+    background: transparent; border: 1px solid rgba(224,82,82,0.3);
+    color: rgba(224,82,82,0.75); font-family: inherit;
+    padding: 3px 8px; cursor: pointer; font-size: 11px;
+    transition: all 0.15s;
+  }
+  .btn-remove-lista:hover { background: rgba(224,82,82,0.15); color: #ff8888; }
+  .badge-manual {
+    display: inline-block; font-size: 9px; padding: 1px 6px;
+    background: rgba(184,150,62,0.15); color: var(--gold);
+    border: 1px solid rgba(184,150,62,0.3); margin-left: 6px;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    vertical-align: middle;
+  }
+  /* Painel adicionar itens avulsos — catálogo navegável */
+  .add-panel-wrap {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--gold);
+    margin-bottom: 16px;
+  }
+  .add-panel-head {
+    padding: 12px 18px; display: flex; align-items: center; gap: 12px;
+    cursor: pointer;
+  }
+  .add-panel-head:hover { background: rgba(255,255,255,0.02); }
+  .add-panel-title { flex: 1; font-size: 13px; color: var(--gold); letter-spacing: 0.5px; }
+  .add-panel-chev { color: var(--muted2); transition: transform 0.2s; }
+  .add-panel-chev.open { transform: rotate(180deg); }
+  .add-panel-body { display: none; padding: 16px 18px; border-top: 1px solid var(--border-subtle); }
+  .add-panel-body.open { display: block; }
+
+  /* Catálogo navegável (mesmo padrão do PDV) */
+  .cat-tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .cat-btn {
+    padding: 8px 16px; background: var(--surface); border: 1px solid var(--border-subtle);
+    color: var(--muted); font-family: inherit; font-size: 12px;
+    letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .cat-btn:hover { color: var(--text); }
+  .cat-btn.on-proteina    { background: rgba(192,57,43,0.15);  border-color: var(--c-proteina);   color: var(--c-proteina); }
+  .cat-btn.on-laticinios  { background: rgba(37,99,168,0.15);  border-color: var(--c-laticinios); color: var(--c-laticinios); }
+  .cat-btn.on-hortifruti  { background: rgba(74,124,89,0.15);  border-color: var(--c-hortifruti); color: var(--c-hortifruti); }
+  .cat-btn.on-diversos    { background: rgba(184,150,62,0.15); border-color: var(--c-diversos);   color: var(--c-diversos); }
+
+  .search-wrap { position: relative; margin-bottom: 12px; }
+  .search-wrap .icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted2); }
+  .search-input { padding-left: 42px; }
+
+  .add-item-row {
+    display: grid; grid-template-columns: 22px 1fr auto auto;
+    align-items: center; gap: 12px;
+    background: var(--surface); padding: 8px 14px; margin-bottom: 2px;
+    border: 1px solid transparent; transition: border-color 0.15s;
+  }
+  .add-item-row:hover { border-color: var(--border-subtle); }
+  .add-item-check { width: 18px; text-align: center; color: var(--gold); font-size: 11px; }
+  .add-item-name { font-size: 13px; }
+  .add-item-name .forn { font-size: 10px; color: var(--muted); margin-left: 8px; }
+  .add-item-unit { font-size: 11px; color: var(--muted); width: 45px; text-align: center; }
+  .add-item-qty-wrap { display: flex; align-items: center; gap: 6px; }
+  .add-qty-btn {
+    width: 24px; height: 24px; background: rgba(255,255,255,0.08);
+    border: none; color: var(--text); font-size: 14px; cursor: pointer;
+  }
+  .add-qty-input {
+    width: 55px; text-align: center; background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border-subtle); color: var(--text);
+    font-family: inherit; font-size: 13px; padding: 3px; outline: none;
+  }
+  .add-item-btn {
+    background: rgba(184,150,62,0.15); border: 1px solid var(--gold);
+    color: var(--gold); font-family: inherit; font-size: 12px;
+    letter-spacing: 0.5px; padding: 5px 14px; cursor: pointer;
+    transition: background 0.15s; white-space: nowrap;
+  }
+  .add-item-btn:hover { background: rgba(184,150,62,0.28); }
+  #lista-add-items { max-height: 400px; overflow-y: auto; }
+  .pend-item-card {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--panel); border: 1px solid rgba(224,82,82,0.2);
+    padding: 14px 18px; margin-bottom: 8px;
+  }
+  .pend-item-name { flex: 1; font-size: 14px; }
+  .pend-item-meta { font-size: 11px; color: var(--muted); }
+  .preco-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 12px; align-items: center; }
+  .form-panel {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    padding: 20px; margin-bottom: 20px; display: none;
+  }
+  .form-panel.open { display: block; }
+</style>
+</head>
+
+<!-- ========================== SIDEBAR ========================== -->
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="name">Rosewood</div>
+    <div class="sub">A&amp;B · Gerente de Compras</div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-item active" onclick="goTab('dashboard',this)"><span class="nav-icon">◈</span> Dashboard</div>
+    <div class="nav-item" onclick="goTab('aprovacao',this)">
+      <span class="nav-icon">⚖</span> Fila de Aprovação
+      <span class="nav-badge" id="badgeAprovacao"></span>
+    </div>
+    <div class="nav-item" onclick="goTab('lista',this)"><span class="nav-icon">📋</span> Lista do Dia</div>
+
+    <div class="nav-group" id="grp-estoque">
+      <div class="nav-group-head" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">◐</span> Estoque
+        <span class="chev">▸</span>
+      </div>
+      <div class="nav-group-items">
+        <div class="nav-item" onclick="goTab('reqCreate',this)"><span class="nav-icon">＋</span> Solicitar Requisição</div>
+        <div class="nav-item" onclick="goTab('niveis',this)"><span class="nav-icon">◐</span> Consultar Estoque</div>
+        <div class="nav-item" onclick="goTab('divergencias',this)">
+          <span class="nav-icon">△</span> Divergências
+          <span class="nav-badge" id="badgeDivergencias"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-item" onclick="goTab('compras',this)"><span class="nav-icon">$</span> Solicitações Compra</div>
+    <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
+    <div class="nav-item" onclick="goTab('catalogo',this)"><span class="nav-icon">◎</span> Catálogo</div>
+    <div class="nav-item" onclick="goTab('precos',this)"><span class="nav-icon">¤</span> Preços</div>
+    <div class="nav-item" onclick="goTab('pendentes',this)">
+      <span class="nav-icon">⚠</span> Itens Pendentes
+      <span class="nav-badge" id="badgePendentes"></span>
+    </div>
+  </div>
+  <div class="sidebar-foot">
+    <div class="name" id="userName">—</div>
+    <button class="logout-btn" onclick="logout()">Sair do sistema</button>
+  </div>
+</nav>
+
+<div class="main-with-sidebar">
+  <div class="top-bar">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <div>
+        <div class="top-title" id="topTitle">Dashboard</div>
+        <div class="top-sub" id="topSub">Visão geral do dia</div>
+      </div>
+      <div class="text-muted" style="font-size:12px;letter-spacing:0.5px" id="dateBadge"></div>
+    </div>
+  </div>
+
+  <!-- ====================== DASHBOARD ====================== -->
+  <div class="tab-content active" id="tab-dashboard">
+    <div class="main full">
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Compras pendentes</div><div class="stat-val orange" id="d-cp-pend">—</div><div class="stat-sub">aguardando sua aprovação</div></div>
+        <div class="stat-card"><div class="stat-label">Compras aprovadas hoje</div><div class="stat-val green" id="d-cp-apr">—</div></div>
+        <div class="stat-card"><div class="stat-label">Requisições pendentes</div><div class="stat-val" id="d-rq-pend">—</div><div class="stat-sub">na fila do estoque</div></div>
+        <div class="stat-card"><div class="stat-label">Itens livres</div><div class="stat-val gold" id="d-pend-itens">—</div><div class="stat-sub">aguardando revisão</div></div>
+      </div>
+
+      <div class="section-title">Solicitações do Dia (todas)</div>
+      <div id="dashCompras"><div class="loading-text">Carregando...</div></div>
+
+      <div class="section-title mt-4" style="margin-top:32px">Requisições Internas do Dia</div>
+      <div id="dashReqs"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== FILA DE APROVAÇÃO ====================== -->
+  <div class="tab-content" id="tab-aprovacao">
+    <div class="main full">
+      <div class="section-title">
+        <span>Solicitações Aguardando Aprovação</span>
+        <span id="aprovacaoCount" class="text-muted" style="font-size:12px"></span>
+      </div>
+      <div id="aprovacaoContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== LISTA DO DIA ====================== -->
+  <div class="tab-content" id="tab-lista">
+    <div class="main full">
+      <div class="filters-bar mb-3" style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+        <span class="text-muted" style="font-size:12px">Data:</span>
+        <input class="input" type="date" id="lista-data" style="max-width:160px" onchange="carregarLista()">
+        <button class="btn btn-sm btn-outline" onclick="carregarLista()">Atualizar</button>
+        <button class="btn btn-sm btn-outline" onclick="exportarLista()" style="margin-left:auto">⤓ Exportar Excel</button>
+      </div>
+      <div class="aviso aviso-info">
+        Itens das solicitações <strong>aprovadas</strong> consolidados por categoria. Edite "Qtd Final" para ajustar antes de passar ao comprador. Você pode adicionar itens avulsos (compra por antecipação, item que nenhum PDV pediu) ou remover linhas da lista final.
+      </div>
+
+      <div class="add-panel-wrap">
+        <div class="add-panel-head" onclick="toggleAddPanel()">
+          <span class="add-panel-title">+ Adicionar itens avulsos ao pedido do dia</span>
+          <span id="lista-manual-count" class="text-muted" style="font-size:11px"></span>
+          <span class="add-panel-chev" id="addPanelChev">▾</span>
+        </div>
+        <div class="add-panel-body" id="addPanelBody">
+          <div class="cat-tabs" id="add-cat-tabs">
+            <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCatAdd('proteina')">Proteína</button>
+            <button class="cat-btn" data-cat="laticinios" onclick="setCatAdd('laticinios')">Laticínios</button>
+            <button class="cat-btn" data-cat="hortifruti" onclick="setCatAdd('hortifruti')">Hortifruti</button>
+            <button class="cat-btn" data-cat="diversos" onclick="setCatAdd('diversos')">Diversos</button>
+          </div>
+          <div class="search-wrap">
+            <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input class="input search-input" id="add-search" placeholder="Buscar item no catálogo..." oninput="renderAddItens()">
+          </div>
+          <div id="lista-add-items"><div class="loading-text">Carregando catálogo...</div></div>
+        </div>
+      </div>
+
+      <div id="listaContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== HISTÓRICO COMPRAS ====================== -->
+  <div class="tab-content" id="tab-compras">
+    <div class="main full">
+      <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+        <span class="text-muted" style="font-size:12px">De</span>
+        <input class="input" type="date" id="cp-de" style="max-width:160px">
+        <span class="text-muted" style="font-size:12px">até</span>
+        <input class="input" type="date" id="cp-ate" style="max-width:160px">
+        <select class="select" id="cp-pdv" style="max-width:200px"><option value="">Todos os PDVs</option></select>
+        <select class="select" id="cp-status" style="max-width:200px">
+          <option value="">Todos os status</option>
+          <option value="rascunho">Rascunho</option>
+          <option value="enviada">Aguardando aprovação</option>
+          <option value="aprovada">Aprovada</option>
+          <option value="rejeitada">Rejeitada</option>
+          <option value="entregue">Entregue</option>
+        </select>
+        <button class="btn btn-sm btn-outline" onclick="carregarHistoricoCompras()">Buscar</button>
+        <button class="btn btn-sm btn-outline" onclick="exportarHistoricoCompras()" style="margin-left:auto">⤓ Excel</button>
+      </div>
+      <div id="comprasContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== HISTÓRICO REQUISIÇÕES ====================== -->
+  <div class="tab-content" id="tab-requisicoes">
+    <div class="main full">
+      <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+        <span class="text-muted" style="font-size:12px">De</span>
+        <input class="input" type="date" id="rq-de" style="max-width:160px">
+        <span class="text-muted" style="font-size:12px">até</span>
+        <input class="input" type="date" id="rq-ate" style="max-width:160px">
+        <select class="select" id="rq-pdv" style="max-width:200px"><option value="">Todos os PDVs</option></select>
+        <select class="select" id="rq-status" style="max-width:180px">
+          <option value="">Todos os status</option>
+          <option value="enviado">Aguardando</option>
+          <option value="separacao">Em Separação</option>
+          <option value="entregue">Entregue</option>
+          <option value="cancelada">Cancelada</option>
+        </select>
+        <button class="btn btn-sm btn-outline" onclick="carregarHistoricoReqs()">Buscar</button>
+        <button class="btn btn-sm btn-outline" onclick="exportarHistoricoReqs()" style="margin-left:auto">⤓ Excel</button>
+      </div>
+      <div id="reqsContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== SOLICITAR REQUISIÇÃO ====================== -->
+  <div class="tab-content" id="tab-reqCreate">
+    <div class="main full">
+      <div class="aviso aviso-info">
+        Como gerente, você pode criar uma requisição de estoque em nome de qualquer PDV. Sem corte de horário.
+      </div>
+      <div class="form-row col2">
+        <div class="field">
+          <label class="field-label">PDV de Destino *</label>
+          <select class="select" id="rc-pdv">
+            <option value="">Selecione o PDV...</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Observação (opcional)</label>
+          <input class="input" id="rc-obs" placeholder="Ex.: reposição semanal">
+        </div>
+      </div>
+      <div class="lista-add-panel" style="border-left:3px solid var(--gold);padding:0 0 0 0;">
+        <div class="cat-tabs" id="rc-cat-tabs" style="padding:16px 16px 0">
+          <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCatReqCreate('proteina')">Proteína</button>
+          <button class="cat-btn" data-cat="laticinios" onclick="setCatReqCreate('laticinios')">Laticínios</button>
+          <button class="cat-btn" data-cat="hortifruti" onclick="setCatReqCreate('hortifruti')">Hortifruti</button>
+          <button class="cat-btn" data-cat="diversos" onclick="setCatReqCreate('diversos')">Diversos</button>
+        </div>
+        <div style="padding:0 16px 12px">
+          <input class="input" id="rc-search" placeholder="Buscar item no catálogo..." oninput="renderItensReqCreate()">
+        </div>
+        <div id="rc-items" style="padding:0 16px 16px"><div class="loading-text">Carregando catálogo...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cart-bar" id="rcCartBar">
+    <div class="cart-info">
+      <span class="cart-count" id="rcCartCount">0</span>
+      <span>iten(s) selecionado(s)</span>
+    </div>
+    <button class="btn btn-outline" onclick="descartarReqCreate()">Descartar</button>
+    <button class="btn btn-primary" onclick="enviarReqCreate()">Enviar Requisição</button>
+  </div>
+
+  <!-- ====================== NÍVEIS DE ESTOQUE (só leitura) ====================== -->
+  <div class="tab-content" id="tab-niveis">
+    <div class="main full">
+      <div class="aviso aviso-info">
+        Saldo teórico atual dos itens de câmara. Atualização em tempo real conforme entregas de requisições e recebimentos de compras.
+      </div>
+      <div class="chk-filters">
+        <div class="chk-filter-item">
+          <label>Categorias</label>
+          <select class="select" id="nv-cat" onchange="renderNiveisGer()">
+            <option value="camara" selected>Proteínas + Laticínios</option>
+            <option value="proteina">Só Proteína</option>
+            <option value="laticinios">Só Laticínios</option>
+            <option value="">Todas</option>
+          </select>
+        </div>
+        <div class="chk-filter-item">
+          <label>Status</label>
+          <select class="select" id="nv-status" onchange="renderNiveisGer()">
+            <option value="">Todos</option>
+            <option value="vermelho">Só vermelho</option>
+            <option value="amarelo">Só amarelo</option>
+            <option value="verde">Só verde</option>
+            <option value="pend">Só sem contagem</option>
+          </select>
+        </div>
+        <div class="chk-filter-item chk-filter-search">
+          <label>Buscar</label>
+          <input class="input" type="text" id="nv-search" placeholder="Nome do item..." oninput="renderNiveisGer()">
+        </div>
+        <div class="chk-filter-item" style="align-self:end">
+          <button class="btn btn-sm btn-outline" onclick="carregarNiveisGer()">↻ Recarregar</button>
+        </div>
+      </div>
+      <div class="chk-summary" id="nvSummaryGer">
+        <div class="card verde"><div class="lbl">Verde (OK)</div><div class="val verde" id="nvVerde">—</div></div>
+        <div class="card amarelo"><div class="lbl">Amarelo (Repor)</div><div class="val amarelo" id="nvAmarelo">—</div></div>
+        <div class="card vermelho"><div class="lbl">Vermelho (Crítico)</div><div class="val vermelho" id="nvVermelho">—</div></div>
+        <div class="card pend"><div class="lbl">Sem contagem</div><div class="val pend" id="nvPend">—</div></div>
+      </div>
+      <div class="section-title">
+        <span>Estoque atual</span>
+        <span id="nvCount" class="text-muted" style="font-size:12px"></span>
+      </div>
+      <div id="nvContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== DIVERGÊNCIAS DE ESTOQUE ====================== -->
+  <div class="tab-content" id="tab-divergencias">
+    <div class="main full">
+      <div class="aviso aviso-info">
+        Itens em que a contagem física divergiu do saldo teórico em <strong>10% ou mais</strong>.
+        A Comissaria (ou você) escolhe: recontagem, registrar perda ou aceitar.
+      </div>
+      <div class="chk-filters">
+        <div class="chk-filter-item">
+          <label>Status</label>
+          <select class="select" id="dv-status" onchange="renderDivergencias()">
+            <option value="pendente" selected>Pendentes</option>
+            <option value="recontagem">Aguardando recontagem</option>
+            <option value="perda_registrada">Perda registrada</option>
+            <option value="ajuste_ok">Ajuste OK</option>
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="chk-filter-item">
+          <label>Categoria</label>
+          <select class="select" id="dv-cat" onchange="renderDivergencias()">
+            <option value="camara" selected>Proteínas + Laticínios</option>
+            <option value="proteina">Só Proteína</option>
+            <option value="laticinios">Só Laticínios</option>
+            <option value="">Todas</option>
+          </select>
+        </div>
+        <div class="chk-filter-item chk-filter-search">
+          <label>Buscar</label>
+          <input class="input" type="text" id="dv-search" placeholder="Nome do item..." oninput="renderDivergencias()">
+        </div>
+        <div class="chk-filter-item" style="align-self:end">
+          <button class="btn btn-sm btn-outline" onclick="carregarDivergencias()">↻ Recarregar</button>
+        </div>
+      </div>
+      <div class="section-title">
+        <span>Divergências</span>
+        <span id="dvCount" class="text-muted" style="font-size:12px"></span>
+      </div>
+      <div id="dvContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== RELATÓRIOS ====================== -->
+  <div class="tab-content" id="tab-relatorios">
+    <div class="main full">
+      <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <span class="text-muted" style="font-size:12px">De</span>
+        <input class="input" type="date" id="rel-de" style="max-width:160px">
+        <span class="text-muted" style="font-size:12px">até</span>
+        <input class="input" type="date" id="rel-ate" style="max-width:160px">
+        <select class="select" id="rel-fonte" style="max-width:180px">
+          <option value="ambos">Ambas as fontes</option>
+          <option value="compra">Só Compras</option>
+          <option value="req">Só Requisições</option>
+        </select>
+        <select class="select" id="rel-cat" style="max-width:160px">
+          <option value="">Todas as categorias</option>
+          <option value="proteina">Proteína</option>
+          <option value="laticinios">Laticínios</option>
+          <option value="hortifruti">Hortifruti</option>
+          <option value="diversos">Diversos</option>
+        </select>
+        <select class="select" id="rel-granul" style="max-width:140px">
+          <option value="dia">Por dia</option>
+          <option value="semana">Por semana</option>
+          <option value="mes" selected>Por mês</option>
+        </select>
+        <button class="btn btn-outline" onclick="gerarRelatorio()">Gerar</button>
+        <button class="btn btn-outline" onclick="exportarRelatorio()" style="margin-left:auto">⤓ Exportar Excel</button>
+      </div>
+      <div id="rel-pdv-wrap" style="display:flex;gap:6px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+        <span class="text-muted" style="font-size:11px;letter-spacing:1px;text-transform:uppercase">PDVs:</span>
+        <span class="loading-text" style="font-size:12px">Carregando PDVs...</span>
+      </div>
+      <div id="rel-kpis" class="stats-grid" style="display:none"></div>
+      <div id="relContainer"><div class="empty-text">Selecione o período e clique em Gerar.</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== CATÁLOGO ====================== -->
+  <div class="tab-content" id="tab-catalogo">
+    <div class="main full">
+      <div class="section-title">
+        <span>Itens do Catálogo (<span id="catCount">0</span>)</span>
+        <button class="btn btn-sm btn-gold" onclick="toggleForm('formCatalogo')">+ Novo Item</button>
+      </div>
+      <div class="form-panel" id="formCatalogo">
+        <div class="form-row col4">
+          <div><label class="field-label">Nome</label><input class="input" id="c-nome" placeholder="Nome do item"></div>
+          <div><label class="field-label">Categoria</label>
+            <select class="select" id="c-cat">
+              <option value="proteina">Proteína</option>
+              <option value="laticinios">Laticínios</option>
+              <option value="hortifruti">Hortifruti</option>
+              <option value="diversos">Diversos</option>
+            </select>
+          </div>
+          <div><label class="field-label">Unidade</label>
+            <select class="select" id="c-unid">
+              <option value="kg">KG</option><option value="un">UND</option>
+              <option value="cx">Caixa</option><option value="bdj">Bandeja</option>
+              <option value="l">L</option><option value="pct">PCT</option>
+            </select>
+          </div>
+          <div><label class="field-label">Inventário?</label>
+            <select class="select" id="c-inv">
+              <option value="true">Sim</option>
+              <option value="false">Não</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row col2">
+          <div><label class="field-label">Fornecedor principal (opcional)</label><input class="input" id="c-forn"></div>
+          <div><label class="field-label">Média diária histórica</label><input class="input" id="c-media" type="number" step="0.01" min="0" value="0"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="salvarItem()">Salvar Item</button>
+          <button class="btn btn-secondary" onclick="toggleForm('formCatalogo')">Cancelar</button>
+        </div>
+      </div>
+      <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <input class="input" id="cat-busca" placeholder="Buscar item..." oninput="renderCatalogoTable()">
+        <select class="select" id="cat-cat-filtro" onchange="renderCatalogoTable()" style="max-width:180px">
+          <option value="">Todas as categorias</option>
+          <option value="proteina">Proteína</option>
+          <option value="laticinios">Laticínios</option>
+          <option value="hortifruti">Hortifruti</option>
+          <option value="diversos">Diversos</option>
+        </select>
+      </div>
+      <div id="catalogoContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== PREÇOS ====================== -->
+  <div class="tab-content" id="tab-precos">
+    <div class="main full">
+      <div class="aviso aviso-info">
+        Atualize preços conforme nota fiscal recebida do comprador. O sistema mantém histórico — apenas o preço com flag "vigente" é usado para cálculo de food cost.
+      </div>
+      <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <input class="input" id="precos-busca" placeholder="Buscar item..." oninput="renderPrecos()">
+        <select class="select" id="precos-cat-filtro" onchange="renderPrecos()" style="max-width:180px">
+          <option value="">Todas as categorias</option>
+          <option value="proteina">Proteína</option>
+          <option value="laticinios">Laticínios</option>
+          <option value="hortifruti">Hortifruti</option>
+          <option value="diversos">Diversos</option>
+        </select>
+        <span class="text-muted" id="precos-stats" style="font-size:12px;margin-left:auto"></span>
+      </div>
+      <div id="precosContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ====================== ITENS PENDENTES ====================== -->
+  <div class="tab-content" id="tab-pendentes">
+    <div class="main full">
+      <div class="section-title">
+        <span>Itens digitados pelos PDVs não encontrados no catálogo</span>
+        <span id="pendCount" class="text-muted" style="font-size:12px"></span>
+      </div>
+      <div id="pendentesContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal aprovar/rejeitar -->
+<div class="modal-overlay" id="rejeitarModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>Rejeitar Solicitação</span>
+      <button class="modal-close" onclick="fecharModal('rejeitarModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="field-label">Motivo da rejeição</label>
+      <textarea class="textarea" id="motivoRej" placeholder="Descreva o motivo..."></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('rejeitarModal')">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmarRejeicao()">Confirmar Rejeição</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Item Pendente — escolher categoria/unidade -->
+<div class="modal-overlay" id="pendModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>Adicionar ao Catálogo</span>
+      <button class="modal-close" onclick="fecharModal('pendModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label class="field-label">Nome do item</label><input class="input" id="pm-nome"></div>
+      <div class="form-row col2">
+        <div><label class="field-label">Categoria</label>
+          <select class="select" id="pm-cat">
+            <option value="proteina">Proteína</option>
+            <option value="laticinios">Laticínios</option>
+            <option value="hortifruti">Hortifruti</option>
+            <option value="diversos">Diversos</option>
+          </select>
+        </div>
+        <div><label class="field-label">Unidade</label>
+          <select class="select" id="pm-unid">
+            <option value="kg">KG</option><option value="un">UND</option>
+            <option value="cx">Caixa</option><option value="bdj">Bandeja</option>
+            <option value="l">L</option><option value="pct">PCT</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row col2">
+        <div><label class="field-label">Inventário?</label>
+          <select class="select" id="pm-inv"><option value="false">Não</option><option value="true">Sim</option></select>
+        </div>
+        <div><label class="field-label">Preço inicial (opcional)</label>
+          <input class="input" id="pm-preco" type="number" step="0.01" min="0">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('pendModal')">Cancelar</button>
+      <button class="btn btn-primary" id="pmConfirm" onclick="confirmarAdicaoCatalogo()">Adicionar ao Catálogo</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const tabTitles = {
+  dashboard:    ['Dashboard', 'Visão geral do dia'],
+  aprovacao:    ['Fila de Aprovação', 'Solicitações de compra aguardando você'],
+  lista:        ['Lista do Dia', 'Compras aprovadas consolidadas — pronto para passar ao comprador'],
+  reqCreate:    ['Solicitar Requisição', 'Criar requisição de estoque em nome de qualquer PDV'],
+  compras:      ['Solicitações de Compra', 'Histórico completo de solicitações'],
+  requisicoes:  ['Requisições Internas', 'Histórico de transferências da Comissaria para PDVs'],
+  niveis:       ['Consultar Estoque', 'Saldo teórico atual dos itens de câmara'],
+  divergencias: ['Divergências de Estoque', 'Diferenças entre contagem física e saldo teórico'],
+  relatorios:   ['Relatórios', 'Visibilidade quantitativa por PDV/período/categoria'],
+  catalogo:     ['Catálogo', 'Itens disponíveis para solicitação'],
+  precos:       ['Preços', 'Atualização de preços vigentes'],
+  pendentes:    ['Itens Pendentes', 'Itens livres aguardando decisão'],
+};
+
+function toggleNavGroup(headEl) {
+  const grp = headEl.closest('.nav-group');
+  if (grp) grp.classList.toggle('open');
+}
+function openParentGroup(itemEl) {
+  const grp = itemEl?.closest?.('.nav-group');
+  if (grp) grp.classList.add('open');
+}
+
+const state = {
+  user: null, perfil: null,
+  pdvs: [], pdvsMap: {},
+  catalogo: [],
+  // dashboard
+  dashCompras: [], dashReqs: [],
+  // aprovacao
+  aprovacao: [],
+  rejeitarId: null,
+  // pendentes
+  pendentes: [],
+  pendModalRow: null,
+  // catalogo (lista)
+  catalogoLista: [],
+  // preços
+  precosMap: {},     // item_id -> preco vigente row
+};
+
+window.addEventListener('load', async () => {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { window.location.href = 'index.html'; return; }
+  const { data: perfil } = await sb.from('usuarios').select('id, perfil, nome').eq('auth_uid', user.id).single();
+  if (!perfil || perfil.perfil !== 'gerente_compras') { window.location.href = 'index.html'; return; }
+  state.user = user; state.perfil = perfil;
+  document.getElementById('userName').textContent = perfil.nome || '';
+
+  document.getElementById('dateBadge').textContent = new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+
+  await Promise.all([carregarPDVs(), carregarCatalogoEPrecos()]);
+
+  // Datas padrão filtros
+  const hoje = new Date();
+  const primMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  ['lista-data','cp-ate','rq-ate','rel-ate'].forEach(id => { const el = document.getElementById(id); if (el) el.value = isoDate(hoje); });
+  ['cp-de','rq-de','rel-de'].forEach(id => { const el = document.getElementById(id); if (el) el.value = isoDate(primMes); });
+
+  await Promise.all([
+    carregarDashboard(),
+    atualizarBadges(),
+  ]);
+});
+
+function isoDate(d) { return d.toISOString().split('T')[0]; }
+function ptDate(d) {
+  const date = new Date(typeof d === 'string' && d.length === 10 ? d + 'T12:00:00' : d);
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+function escapeHtml(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function carregarPDVs() {
+  const { data } = await sb.from('pdvs').select('*').eq('ativo', true).order('ordem');
+  state.pdvs = data || [];
+  state.pdvsMap = Object.fromEntries(state.pdvs.map(p => [p.id, p]));
+  ['cp-pdv','rq-pdv'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    state.pdvs.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; sel.appendChild(o); });
+  });
+  montarChipsPdvRel();
+}
+
+// Multi-select de PDVs no Relatório
+state.relPdvsSel = new Set();
+
+function montarChipsPdvRel() {
+  const wrap = document.getElementById('rel-pdv-wrap');
+  if (!wrap) return;
+  const html = ['<span class="text-muted" style="font-size:11px;letter-spacing:1px;text-transform:uppercase">PDVs:</span>',
+                '<button class="filter-chip active" data-pdv-all="1" onclick="togglePdvChipRel(this,\'\')">Todos</button>'];
+  state.pdvs.forEach(p => html.push(
+    `<button class="filter-chip" data-pdv-id="${p.id}" onclick="togglePdvChipRel(this,'${p.id}')">${escapeHtml(p.nome)}</button>`
+  ));
+  wrap.innerHTML = html.join('');
+}
+
+function togglePdvChipRel(btn, pdvId) {
+  if (!pdvId) {
+    state.relPdvsSel.clear();
+    document.querySelectorAll('#rel-pdv-wrap .filter-chip').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    return;
+  }
+  if (state.relPdvsSel.has(pdvId)) {
+    state.relPdvsSel.delete(pdvId);
+    btn.classList.remove('active');
+  } else {
+    state.relPdvsSel.add(pdvId);
+    btn.classList.add('active');
+  }
+  const allBtn = document.querySelector('#rel-pdv-wrap [data-pdv-all]');
+  if (allBtn) allBtn.classList.toggle('active', state.relPdvsSel.size === 0);
+}
+
+async function carregarCatalogoEPrecos() {
+  const [{ data: itens }, { data: precos }] = await Promise.all([
+    sb.from('itens').select('*').order('nome'),
+    sb.from('precos').select('*').eq('vigente', true),
+  ]);
+  state.catalogo = itens || [];
+  state.precosMap = {};
+  (precos || []).forEach(p => { state.precosMap[p.item_id] = p; });
+  document.getElementById('catCount').textContent = state.catalogo.length;
+}
+
+function goTab(tab, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (el) el.classList.add('active');
+  const [t, s] = tabTitles[tab] || [tab, ''];
+  document.getElementById('topTitle').textContent = t;
+  document.getElementById('topSub').textContent = s;
+  // Carregamentos sob demanda
+  if (tab === 'dashboard')   carregarDashboard();
+  if (tab === 'aprovacao')   carregarAprovacao();
+  if (tab === 'lista')       carregarLista();
+  if (tab === 'compras')     carregarHistoricoCompras();
+  if (tab === 'requisicoes') carregarHistoricoReqs();
+  if (tab === 'catalogo')    renderCatalogoTable();
+  if (tab === 'precos')      renderPrecos();
+  if (tab === 'pendentes')   carregarPendentes();
+  if (tab === 'niveis')      carregarNiveisGer();
+  if (tab === 'divergencias') carregarDivergencias();
+  if (tab === 'reqCreate')   initReqCreate();
+  // Auto-abre grupo pai se sub-item ativo
+  openParentGroup(el);
+}
+
+async function atualizarBadges() {
+  const [{ count: cAprov }, { count: cPend }, { count: cDivg }] = await Promise.all([
+    sb.from('solicitacoes_compra').select('id', { count: 'exact', head: true }).eq('status', 'enviada'),
+    sb.from('itens_pendentes').select('id', { count: 'exact', head: true }).eq('status', 'pendente'),
+    sb.from('divergencias_estoque').select('id', { count: 'exact', head: true }).eq('status', 'pendente'),
+  ]);
+  setBadge('badgeAprovacao', cAprov || 0);
+  setBadge('badgePendentes', cPend || 0);
+  const bd = document.getElementById('badgeDivergencias');
+  if (bd) {
+    if (cDivg > 0) {
+      bd.textContent = cDivg;
+      bd.style.display = 'inline-block';
+      bd.style.background = 'rgba(224,82,82,0.7)';
+      bd.style.color = '#fff';
+    } else bd.style.display = 'none';
+  }
+}
+function setBadge(id, n) {
+  const b = document.getElementById(id);
+  if (n > 0) { b.textContent = n; b.style.display = 'inline-block'; }
+  else b.style.display = 'none';
+}
+
+// =====================================================================
+// DASHBOARD
+// =====================================================================
+async function carregarDashboard() {
+  const hoje = isoDate(new Date());
+  const [comprasResp, reqsResp, pendResp] = await Promise.all([
+    sb.from('solicitacoes_compra').select('*, pdvs(nome), solicitacao_compra_itens(*)').eq('data_competencia', hoje).order('created_at', { ascending:false }),
+    sb.from('requisicoes').select('*, pdvs(nome), requisicao_itens(*)').eq('data_competencia', hoje).order('created_at', { ascending:false }),
+    sb.from('itens_pendentes').select('id', { count:'exact', head:true }).eq('status','pendente'),
+  ]);
+  const compras = comprasResp.data || [];
+  const reqs    = reqsResp.data || [];
+  state.dashCompras = compras; state.dashReqs = reqs;
+
+  document.getElementById('d-cp-pend').textContent  = compras.filter(c => c.status === 'enviada').length;
+  document.getElementById('d-cp-apr').textContent   = compras.filter(c => c.status === 'aprovada' || c.status === 'entregue').length;
+  document.getElementById('d-rq-pend').textContent  = reqs.filter(r => r.status === 'enviado' || r.status === 'separacao').length;
+  document.getElementById('d-pend-itens').textContent = pendResp.count || 0;
+
+  document.getElementById('dashCompras').innerHTML = compras.length === 0
+    ? '<div class="empty-text">Nenhuma solicitação de compra hoje.</div>'
+    : tabelaSolicitacoes(compras);
+  document.getElementById('dashReqs').innerHTML = reqs.length === 0
+    ? '<div class="empty-text">Nenhuma requisição interna hoje.</div>'
+    : tabelaRequisicoes(reqs);
+}
+
+function tabelaSolicitacoes(list) {
+  const statusLabel = { rascunho:'Rascunho', enviada:'Aguardando aprov.', aprovada:'Aprovada', rejeitada:'Rejeitada', entregue:'Entregue' };
+  return `<table class="data-table"><thead><tr>
+    <th>#</th><th>PDV</th><th>Hora</th><th class="center">Itens</th><th>Entrega desejada</th><th>Status</th>
+  </tr></thead><tbody>${list.map(s => {
+    const itens = s.solicitacao_compra_itens || [];
+    const hora = new Date(s.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    return `<tr>
+      <td class="text-muted">#${String(s.id).slice(0,8)}</td>
+      <td>${escapeHtml(s.pdvs?.nome||'—')}</td>
+      <td class="text-muted">${hora}</td>
+      <td class="center">${itens.length}</td>
+      <td class="text-muted">${s.data_entrega_desejada ? ptDate(s.data_entrega_desejada) : '—'}</td>
+      <td><span class="badge status-${s.status}">${statusLabel[s.status]||s.status}</span></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function tabelaRequisicoes(list) {
+  const statusLabel = { enviado:'Aguardando', separacao:'Em Separação', entregue:'Entregue', cancelada:'Cancelada' };
+  return `<table class="data-table"><thead><tr>
+    <th>#</th><th>PDV</th><th>Hora</th><th class="center">Itens</th><th class="center">Diverg.</th><th>Status</th>
+  </tr></thead><tbody>${list.map(r => {
+    const itens = r.requisicao_itens || [];
+    const divs = itens.filter(i => i.divergencia).length;
+    const hora = new Date(r.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    const manualTag = r.criada_pelo_estoque ? ' <span class="badge badge-gold" style="font-size:9px">MANUAL</span>' : '';
+    return `<tr>
+      <td class="text-muted">#${String(r.id).slice(0,8)}</td>
+      <td>${escapeHtml(r.pdvs?.nome||'—')}${manualTag}</td>
+      <td class="text-muted">${hora}</td>
+      <td class="center">${itens.length}</td>
+      <td class="center ${divs>0?'text-error':'text-muted'}">${divs > 0 ? divs : '—'}</td>
+      <td><span class="badge status-${r.status}">${statusLabel[r.status]||r.status}</span></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+// =====================================================================
+// APROVAÇÃO DE COMPRAS
+// =====================================================================
+async function carregarAprovacao() {
+  const { data } = await sb.from('solicitacoes_compra')
+    .select('*, pdvs(nome), solicitacao_compra_itens(*)')
+    .eq('status', 'enviada')
+    .order('created_at', { ascending: true });
+  state.aprovacao = data || [];
+  document.getElementById('aprovacaoCount').textContent = `${state.aprovacao.length} pendente(s)`;
+
+  const cont = document.getElementById('aprovacaoContainer');
+  if (state.aprovacao.length === 0) { cont.innerHTML = '<div class="empty-text">Nada na fila — tudo em dia!</div>'; return; }
+
+  cont.innerHTML = state.aprovacao.map(s => {
+    const itens = s.solicitacao_compra_itens || [];
+    const hora = new Date(s.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const linhasItens = itens.map(it => {
+      const catCls = it.item_livre ? 'cat-livre' : `cat-${it.item_categoria}`;
+      const catTxt = it.item_livre ? '⚠ Livre' : it.item_categoria;
+      const itemMaster = state.catalogo.find(c => c.id === it.item_id);
+      const media = itemMaster?.media_diaria || 0;
+      const alerta = media > 0 && parseFloat(it.quantidade_solicitada) > media * 3
+        ? `<span class="text-orange" style="font-size:11px"> ⚠ ${(parseFloat(it.quantidade_solicitada)/media).toFixed(1)}× média</span>` : '';
+      return `<tr>
+        <td><span class="cat-pill ${catCls}">${catTxt}</span></td>
+        <td>${escapeHtml(it.item_nome)}${it.comentario ? `<br><em style="color:var(--muted);font-size:11px">${escapeHtml(it.comentario)}</em>` : ''}${alerta}</td>
+        <td class="num">${it.quantidade_solicitada} ${it.item_unidade || ''}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="pend-card">
+      <div class="pend-head" onclick="toggleAprovDet('${s.id}')">
+        <span class="text-muted" style="font-size:12px">#${String(s.id).slice(0,8)}</span>
+        <span style="font-size:14px;font-weight:500">${escapeHtml(s.pdvs?.nome||'—')}</span>
+        <span class="text-muted" style="font-size:12px">${hora}</span>
+        <span class="text-muted" style="font-size:12px">${itens.length} item(ns)</span>
+        <span class="text-muted" style="font-size:12px">Entrega: ${s.data_entrega_desejada ? ptDate(s.data_entrega_desejada) : '—'}</span>
+        <span class="chevron" id="chev-ap-${s.id}">▼</span>
+      </div>
+      <div class="pend-detail" id="det-ap-${s.id}">
+        ${s.observacao ? `<div class="obs-box" style="margin-bottom:12px;padding:10px 14px;background:rgba(255,255,255,0.03);border-left:2px solid var(--border);font-size:13px;color:var(--muted)">💬 ${escapeHtml(s.observacao)}</div>` : ''}
+        <table class="data-table"><thead><tr><th>Categoria</th><th>Item</th><th>Quantidade</th></tr></thead>
+          <tbody>${linhasItens}</tbody></table>
+        <div class="form-actions mt-3" style="margin-top:16px">
+          <button class="btn btn-green" onclick="aprovar('${s.id}')">Aprovar</button>
+          <button class="btn btn-danger" onclick="abrirRejeicao('${s.id}')">Rejeitar</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleAprovDet(id) {
+  document.getElementById('det-ap-' + id).classList.toggle('open');
+  document.getElementById('chev-ap-' + id).classList.toggle('open');
+}
+
+async function aprovar(id) {
+  const { error } = await sb.from('solicitacoes_compra').update({
+    status: 'aprovada',
+    aprovado_por: state.perfil.id,
+  }).eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  showToast('Solicitação aprovada.', 'success');
+  await Promise.all([carregarAprovacao(), atualizarBadges()]);
+}
+
+function abrirRejeicao(id) {
+  state.rejeitarId = id;
+  document.getElementById('motivoRej').value = '';
+  abrirModal('rejeitarModal');
+}
+async function confirmarRejeicao() {
+  const motivo = document.getElementById('motivoRej').value.trim();
+  if (!motivo) { showToast('Informe o motivo da rejeição.', 'error'); return; }
+  const { error } = await sb.from('solicitacoes_compra').update({
+    status: 'rejeitada',
+    motivo_rejeicao: motivo,
+  }).eq('id', state.rejeitarId);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  fecharModal('rejeitarModal');
+  showToast('Solicitação rejeitada.', 'info');
+  await Promise.all([carregarAprovacao(), atualizarBadges()]);
+}
+
+// =====================================================================
+// LISTA DO DIA — consolidação por categoria (auto + manual)
+// =====================================================================
+let listaConsolidada = null;
+// Persistem por sessão (limpam ao trocar de data ou recarregar página).
+let listaManualItens = {}; // { 'YYYY-MM-DD': [ {cat,key,item_id,nome,unidade,qtd_final} ] }
+let listaRemovidos = {};   // { 'YYYY-MM-DD': Set<'cat:key'> }
+
+// Painel adicionar itens avulsos — catálogo navegável
+let addCat = 'proteina';
+let addPanelOpen = false;
+
+function toggleAddPanel() {
+  addPanelOpen = !addPanelOpen;
+  document.getElementById('addPanelBody').classList.toggle('open', addPanelOpen);
+  document.getElementById('addPanelChev').classList.toggle('open', addPanelOpen);
+  if (addPanelOpen) renderAddItens();
+}
+
+function setCatAdd(cat) {
+  addCat = cat;
+  document.querySelectorAll('#add-cat-tabs .cat-btn').forEach(btn => {
+    btn.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
+    if (btn.dataset.cat === cat) btn.classList.add('on-' + cat);
+  });
+  document.getElementById('add-search').value = '';
+  renderAddItens();
+}
+
+function renderAddItens() {
+  const cont = document.getElementById('lista-add-items');
+  if (!cont) return;
+  if (!state.catalogo || state.catalogo.length === 0) {
+    cont.innerHTML = '<div class="loading-text">Carregando catálogo...</div>';
+    return;
+  }
+  const q = (document.getElementById('add-search').value || '').toLowerCase();
+  const itens = state.catalogo.filter(i =>
+    i.ativo && i.categoria === addCat &&
+    (!q || i.nome.toLowerCase().includes(q) ||
+     (i.fornecedor_principal || '').toLowerCase().includes(q))
+  );
+  if (itens.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item nesta categoria.</div>';
+    return;
+  }
+  itens.sort((a,b) => a.nome.localeCompare(b.nome));
+
+  // Marcar itens que já estão na lista final (auto ou manual) com check
+  const data = document.getElementById('lista-data').value || isoDate(new Date());
+  const jaNaLista = new Set();
+  if (listaConsolidada) {
+    for (const cat of ['proteina','laticinios','hortifruti','diversos']) {
+      Object.values(listaConsolidada[cat] || {}).forEach(it => {
+        if (it.item_id) jaNaLista.add(it.item_id);
+      });
+    }
+  }
+
+  cont.innerHTML = itens.map(item => {
+    const inLista = jaNaLista.has(item.id);
+    return `
+      <div class="add-item-row" id="addrow-${item.id}">
+        <div class="add-item-check">${inLista ? '✓' : ''}</div>
+        <div class="add-item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+        <div class="add-item-unit">${item.unidade || '—'}</div>
+        <div class="add-item-qty-wrap">
+          <button class="add-qty-btn" onclick="changeQtyAdd('${item.id}',-1)">−</button>
+          <input class="add-qty-input" type="number" min="0.1" step="0.1" value="1" onclick="this.select()">
+          <button class="add-qty-btn" onclick="changeQtyAdd('${item.id}',1)">+</button>
+          <button class="add-item-btn" onclick="adicionarItemManual('${item.id}')">+ Adicionar</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function changeQtyAdd(itemId, delta) {
+  const input = document.querySelector(`#addrow-${itemId} .add-qty-input`);
+  if (!input) return;
+  const cur = parseFloat(input.value) || 1;
+  const novo = Math.max(0.1, Math.round((cur + delta) * 10) / 10);
+  input.value = novo;
+}
+
+async function carregarLista() {
+  const data = document.getElementById('lista-data').value || isoDate(new Date());
+
+  if (!listaRemovidos[data]) listaRemovidos[data] = new Set();
+  if (!listaManualItens[data]) listaManualItens[data] = [];
+
+  const { data: solcs } = await sb.from('solicitacoes_compra')
+    .select('*, pdvs(nome), solicitacao_compra_itens(*)')
+    .eq('data_competencia', data)
+    .eq('status', 'aprovada');
+
+  const cont = document.getElementById('listaContainer');
+
+  // Consolidar por (categoria, nome)
+  const grupos = { proteina: {}, laticinios: {}, hortifruti: {}, diversos: {} };
+  for (const s of (solcs || [])) {
+    for (const it of (s.solicitacao_compra_itens || [])) {
+      const cat = it.item_categoria || 'diversos';
+      const key = `${it.item_nome}__${it.item_unidade||''}`;
+      if (listaRemovidos[data].has(`${cat}:${key}`)) continue;
+      if (!grupos[cat][key]) {
+        grupos[cat][key] = {
+          item_id: it.item_id, nome: it.item_nome, unidade: it.item_unidade,
+          total: 0, qtd_final: 0, pdvs: [], origem: 'auto', key,
+        };
+      }
+      grupos[cat][key].total += parseFloat(it.quantidade_solicitada);
+      grupos[cat][key].qtd_final = grupos[cat][key].total;
+      grupos[cat][key].pdvs.push({ pdv: s.pdvs?.nome || '—', qtd: parseFloat(it.quantidade_solicitada) });
+    }
+  }
+
+  // Adicionar itens manuais
+  for (const m of listaManualItens[data]) {
+    if (!grupos[m.cat]) continue;
+    if (!grupos[m.cat][m.key]) {
+      grupos[m.cat][m.key] = {
+        item_id: m.item_id, nome: m.nome, unidade: m.unidade,
+        total: 0, qtd_final: parseFloat(m.qtd_final) || 0,
+        pdvs: [], origem: 'manual', key: m.key,
+      };
+    } else {
+      grupos[m.cat][m.key].qtd_final = (grupos[m.cat][m.key].qtd_final || 0) + (parseFloat(m.qtd_final) || 0);
+    }
+  }
+
+  listaConsolidada = grupos;
+
+  const totalItens = Object.values(grupos).reduce((s,g)=>s+Object.keys(g).length,0);
+  document.getElementById('lista-manual-count').textContent =
+    `${listaManualItens[data].length} avulso(s) · ${listaRemovidos[data].size} removido(s)`;
+
+  if (totalItens === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item na lista final. Aguarde solicitações serem aprovadas ou adicione itens avulsos acima.</div>';
+    return;
+  }
+
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  let html = '';
+  for (const cat of ['proteina','laticinios','hortifruti','diversos']) {
+    const itens = Object.values(grupos[cat]);
+    if (itens.length === 0) continue;
+    itens.sort((a,b) => (b.qtd_final||b.total) - (a.qtd_final||a.total));
+    const totalCat = itens.reduce((s,i)=>s+(i.qtd_final||0),0);
+    html += `<div class="lista-categoria">
+      <div class="lista-cat-title">
+        <span><span class="cat-pill cat-${cat}">${catLabels[cat]}</span> &nbsp; ${itens.length} item(ns)</span>
+        <span class="total">Total final: ${totalCat.toFixed(1)}</span>
+      </div>
+      <div class="lista-item-row" style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;border-bottom:1px solid var(--border-subtle);padding-bottom:6px">
+        <div>Item</div><div>Total PDVs</div><div>Unid.</div><div>Detalhe por PDV</div><div class="text-right">Qtd Final</div>
+      </div>
+      ${itens.map((it) => {
+        const kEsc = it.key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        return `<div class="lista-item-row">
+
+          <div>${escapeHtml(it.nome)}${it.origem === 'manual' ? '<span class="badge-manual">avulso</span>' : ''}</div>
+          <div class="num">${it.origem === 'manual' ? '—' : it.total.toFixed(1)}</div>
+          <div class="text-muted">${it.unidade||'—'}</div>
+          <div class="lista-pdv-list">${it.pdvs.length ? it.pdvs.map(p => `${escapeHtml(p.pdv)}: ${p.qtd.toFixed(1)}`).join(' · ') : '<span class="text-muted">—</span>'}</div>
+          <div class="lista-qtd-cell">
+            <input class="lista-final-input" type="number" step="0.1" min="0"
+              value="${(it.qtd_final||0).toFixed(1)}"
+              onchange="setQtdFinal('${cat}','${kEsc}',this.value)">
+            <button class="btn-remove-lista" onclick="removerItemLista('${cat}','${kEsc}','${it.origem}')" title="Remover da lista">✕</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+  cont.innerHTML = html;
+  if (addPanelOpen) renderAddItens();
+}
+
+function setQtdFinal(cat, key, val) {
+  if (!listaConsolidada) return;
+  const v = parseFloat(val);
+  if (isNaN(v) || v < 0) return;
+  if (listaConsolidada[cat] && listaConsolidada[cat][key]) {
+    listaConsolidada[cat][key].qtd_final = v;
+  }
+  // Se é item manual, atualiza também a lista persistente
+  const data = document.getElementById('lista-data').value || isoDate(new Date());
+  const m = (listaManualItens[data] || []).find(x => x.cat === cat && x.key === key);
+  if (m) m.qtd_final = v;
+}
+
+function adicionarItemManual(itemId) {
+  if (!itemId) return;
+  const input = document.querySelector(`#addrow-${itemId} .add-qty-input`);
+  const qty = input ? parseFloat(input.value) : NaN;
+  if (!qty || qty <= 0) { showToast('Quantidade inválida.', 'error'); return; }
+  const item = state.catalogo.find(i => i.id === itemId);
+  if (!item) { showToast('Item não encontrado.', 'error'); return; }
+  const data = document.getElementById('lista-data').value || isoDate(new Date());
+  if (!listaManualItens[data]) listaManualItens[data] = [];
+  const cat = item.categoria || 'diversos';
+  const key = `${item.nome}__${item.unidade||''}`;
+
+  // Se já está na lista (auto ou manual), soma na Qtd Final da linha existente.
+  const jaAuto = listaConsolidada && listaConsolidada[cat] && listaConsolidada[cat][key] && listaConsolidada[cat][key].origem === 'auto';
+  if (jaAuto) {
+    listaConsolidada[cat][key].qtd_final = (listaConsolidada[cat][key].qtd_final || 0) + qty;
+    // Persiste o incremento como manual pra não zerar ao recarregar carregarLista.
+    listaManualItens[data].push({
+      cat, key, item_id: item.id, nome: item.nome,
+      unidade: item.unidade, qtd_final: qty,
+    });
+  } else {
+    const existente = listaManualItens[data].find(m => m.cat === cat && m.key === key);
+    if (existente) {
+      existente.qtd_final = (parseFloat(existente.qtd_final)||0) + qty;
+    } else {
+      listaManualItens[data].push({
+        cat, key, item_id: item.id, nome: item.nome,
+        unidade: item.unidade, qtd_final: qty,
+      });
+    }
+  }
+  if (listaRemovidos[data]) listaRemovidos[data].delete(`${cat}:${key}`);
+  carregarLista();
+  if (input) input.value = '1';
+  showToast(`${item.nome.slice(0,40)} adicionado (${qty} ${item.unidade}).`, 'success');
+}
+
+function removerItemLista(cat, key, origem) {
+  if (!confirm('Remover este item da lista final?')) return;
+  const data = document.getElementById('lista-data').value || isoDate(new Date());
+  if (origem === 'manual') {
+    listaManualItens[data] = (listaManualItens[data]||[]).filter(m => !(m.cat === cat && m.key === key));
+  } else {
+    if (!listaRemovidos[data]) listaRemovidos[data] = new Set();
+    listaRemovidos[data].add(`${cat}:${key}`);
+  }
+  carregarLista();
+}
+
+function exportarLista() {
+  if (!listaConsolidada) { showToast('Gere a lista primeiro.', 'error'); return; }
+  const data = document.getElementById('lista-data').value;
+  const linhas = [['Categoria','Item','Unidade','Total Solicitado','Qtd Final','Origem','PDVs']];
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  let totalLinhas = 0;
+  for (const cat of ['proteina','laticinios','hortifruti','diversos']) {
+    Object.values(listaConsolidada[cat]).forEach(it => {
+      linhas.push([
+        catLabels[cat], it.nome, it.unidade || '',
+        it.origem === 'manual' ? '' : it.total.toFixed(2),
+        (it.qtd_final||0).toFixed(2),
+        it.origem === 'manual' ? 'Avulso' : 'PDVs',
+        it.pdvs.map(p => `${p.pdv}: ${p.qtd}`).join(' | '),
+      ]);
+      totalLinhas++;
+    });
+  }
+  if (totalLinhas === 0) { showToast('Lista vazia — nada para exportar.', 'error'); return; }
+  baixarCSV(`lista_compras_${data}.csv`, linhas);
+}
+
+// =====================================================================
+// HISTÓRICO COMPRAS
+// =====================================================================
+async function carregarHistoricoCompras() {
+  const de = document.getElementById('cp-de').value;
+  const ate = document.getElementById('cp-ate').value;
+  const pdv = document.getElementById('cp-pdv').value;
+  const status = document.getElementById('cp-status').value;
+  let q = sb.from('solicitacoes_compra')
+    .select('*, pdvs(nome), solicitacao_compra_itens(*)')
+    .gte('data_competencia', de).lte('data_competencia', ate)
+    .order('created_at', { ascending: false });
+  if (pdv) q = q.eq('pdv_id', pdv);
+  if (status) q = q.eq('status', status);
+  const { data } = await q;
+  const cont = document.getElementById('comprasContainer');
+  if (!data || data.length === 0) { cont.innerHTML = '<div class="empty-text">Nada encontrado.</div>'; return; }
+  state.historicoCompras = data;
+  cont.innerHTML = tabelaSolicitacoes(data);
+}
+
+function exportarHistoricoCompras() {
+  if (!state.historicoCompras) return;
+  const linhas = [['#','Data','PDV','Status','Item','Categoria','Qtd','Unid','Comentário','Obs solicitação','Motivo rejeição']];
+  for (const s of state.historicoCompras) {
+    const itens = s.solicitacao_compra_itens || [];
+    if (itens.length === 0) {
+      linhas.push([s.id.slice(0,8), s.data_competencia, s.pdvs?.nome||'', s.status,'','','','','',s.observacao||'',s.motivo_rejeicao||'']);
+    } else {
+      itens.forEach(it => linhas.push([s.id.slice(0,8), s.data_competencia, s.pdvs?.nome||'', s.status, it.item_nome, it.item_categoria, it.quantidade_solicitada, it.item_unidade||'', it.comentario||'', s.observacao||'', s.motivo_rejeicao||'']));
+    }
+  }
+  baixarCSV(`solicitacoes_compra.csv`, linhas);
+}
+
+// =====================================================================
+// HISTÓRICO REQUISIÇÕES
+// =====================================================================
+async function carregarHistoricoReqs() {
+  const de = document.getElementById('rq-de').value;
+  const ate = document.getElementById('rq-ate').value;
+  const pdv = document.getElementById('rq-pdv').value;
+  const status = document.getElementById('rq-status').value;
+  let q = sb.from('requisicoes')
+    .select('*, pdvs(nome), requisicao_itens(*)')
+    .gte('data_competencia', de).lte('data_competencia', ate)
+    .order('created_at', { ascending: false });
+  if (pdv) q = q.eq('pdv_id', pdv);
+  if (status) q = q.eq('status', status);
+  const { data } = await q;
+  const cont = document.getElementById('reqsContainer');
+  if (!data || data.length === 0) { cont.innerHTML = '<div class="empty-text">Nada encontrado.</div>'; return; }
+  state.historicoReqs = data;
+  cont.innerHTML = tabelaRequisicoes(data);
+}
+
+function exportarHistoricoReqs() {
+  if (!state.historicoReqs) return;
+  const linhas = [['#','Data','PDV','Status','Manual?','Item','Categoria','Qtd Solicitada','Qtd Entregue','Divergência','Motivo','Obs requisição']];
+  for (const r of state.historicoReqs) {
+    const itens = r.requisicao_itens || [];
+    if (itens.length === 0) {
+      linhas.push([r.id.slice(0,8), r.data_competencia, r.pdvs?.nome||'', r.status, r.criada_pelo_estoque?'Sim':'Não','','','','','','',r.observacao||'']);
+    } else {
+      itens.forEach(it => linhas.push([r.id.slice(0,8), r.data_competencia, r.pdvs?.nome||'', r.status, r.criada_pelo_estoque?'Sim':'Não', it.item_nome, it.item_categoria, it.quantidade_solicitada, it.quantidade_entregue||'', it.divergencia?'Sim':'Não', it.motivo_divergencia||'', r.observacao||'']));
+    }
+  }
+  baixarCSV(`requisicoes.csv`, linhas);
+}
+
+// =====================================================================
+// RELATÓRIOS
+// =====================================================================
+let relatorioDados = null;
+
+function fmtQtyRel(n) { if (n == null || isNaN(n)) return '—'; return Number(n).toFixed(2).replace(/\.?0+$/, ''); }
+function fmtBRL(n) { return (Number(n) || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }
+const CAT_LABEL_REL = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+
+async function gerarRelatorio() {
+  const de = document.getElementById('rel-de').value;
+  const ate = document.getElementById('rel-ate').value;
+  const cat = document.getElementById('rel-cat').value;
+  const fonte = document.getElementById('rel-fonte').value;
+  const granul = document.getElementById('rel-granul').value;
+  const pdvIds = state.relPdvsSel.size > 0 ? [...state.relPdvsSel] : null; // null = todos
+  if (!de || !ate) { showToast('Preencha o período.', 'error'); return; }
+  if (de > ate) { showToast('Data inicial maior que a final.', 'error'); return; }
+
+  const cont = document.getElementById('relContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+
+  let rows = [];
+
+  if (fonte === 'ambos' || fonte === 'compra') {
+    let q = sb.from('solicitacao_compra_itens')
+      .select('item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, solicitacoes_compra!inner(data_competencia, pdv_id, status, pdvs(nome))')
+      .in('solicitacoes_compra.status', ['aprovada','entregue'])
+      .gte('solicitacoes_compra.data_competencia', de)
+      .lte('solicitacoes_compra.data_competencia', ate);
+    if (pdvIds) q = q.in('solicitacoes_compra.pdv_id', pdvIds);
+    if (cat) q = q.eq('item_categoria', cat);
+    const { data, error } = await q;
+    if (error) { showToast('Erro (compras): ' + error.message, 'error'); cont.innerHTML = ''; return; }
+    (data || []).forEach(it => rows.push({
+      fonte: 'compra',
+      data: it.solicitacoes_compra.data_competencia,
+      pdv: it.solicitacoes_compra.pdvs?.nome || '—',
+      categoria: it.item_categoria,
+      item: it.item_nome,
+      itemId: it.item_id,
+      unidade: it.item_unidade || '',
+      qtd: parseFloat(it.quantidade_solicitada || 0),
+    }));
+  }
+
+  if (fonte === 'ambos' || fonte === 'req') {
+    let q = sb.from('requisicao_itens')
+      .select('item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, requisicoes!inner(data_competencia, pdv_id, status, pdvs(nome), entregue_em)')
+      .eq('requisicoes.status', 'entregue')
+      .gte('requisicoes.data_competencia', de)
+      .lte('requisicoes.data_competencia', ate);
+    if (pdvIds) q = q.in('requisicoes.pdv_id', pdvIds);
+    if (cat) q = q.eq('item_categoria', cat);
+    const { data, error } = await q;
+    if (error) { showToast('Erro (requisições): ' + error.message, 'error'); cont.innerHTML = ''; return; }
+    (data || []).forEach(it => rows.push({
+      fonte: 'req',
+      data: it.requisicoes.data_competencia,
+      pdv: it.requisicoes.pdvs?.nome || '—',
+      categoria: it.item_categoria,
+      item: it.item_nome,
+      itemId: it.item_id,
+      unidade: it.item_unidade || '',
+      qtd: parseFloat(it.quantidade_entregue || it.quantidade_solicitada || 0),
+    }));
+  }
+
+  // Agrupamento por granularidade
+  const bucketKey = (d) => {
+    const date = new Date(d + 'T12:00:00');
+    if (granul === 'dia') return d;
+    if (granul === 'semana') {
+      const dow = (date.getDay() + 6) % 7;
+      const ini = new Date(date); ini.setDate(date.getDate() - dow);
+      return 'sem ' + isoDate(ini);
+    }
+    return date.toISOString().slice(0, 7);
+  };
+
+  // Pivot: linhas = item, colunas = bucket; totais por PDV e categoria
+  const totaisItem = {};
+  const totaisPdv = {};
+  const totaisCat = {};
+  const buckets = new Set();
+  for (const r of rows) {
+    const b = bucketKey(r.data);
+    buckets.add(b);
+    const key = `${r.categoria}__${r.item}__${r.unidade}`;
+    if (!totaisItem[key]) {
+      const preco = r.itemId ? (state.precosMap[r.itemId]?.preco_unitario || 0) : 0;
+      totaisItem[key] = { categoria: r.categoria, item: r.item, itemId: r.itemId, unidade: r.unidade,
+                          preco: parseFloat(preco) || 0, buckets: {}, total: 0 };
+    }
+    totaisItem[key].buckets[b] = (totaisItem[key].buckets[b] || 0) + r.qtd;
+    totaisItem[key].total += r.qtd;
+    totaisPdv[r.pdv] = (totaisPdv[r.pdv] || 0) + r.qtd;
+    totaisCat[r.categoria] = (totaisCat[r.categoria] || 0) + r.qtd;
+  }
+  Object.values(totaisItem).forEach(x => { x.valorTotal = x.preco * x.total; });
+  const bucketsOrd = [...buckets].sort();
+  relatorioDados = { rows, totaisItem, totaisPdv, totaisCat, buckets: bucketsOrd, fonte, granul };
+
+  renderRelatorioKPIs();
+  renderRelatorio();
+}
+
+function renderRelatorioKPIs() {
+  const kpis = document.getElementById('rel-kpis');
+  if (!relatorioDados) { kpis.style.display = 'none'; return; }
+  const itensArr = Object.values(relatorioDados.totaisItem);
+  if (itensArr.length === 0) { kpis.style.display = 'none'; return; }
+  const totalItens = itensArr.length;
+  const totalQty = itensArr.reduce((s,x) => s + x.total, 0);
+  const valorTotal = itensArr.reduce((s,x) => s + x.valorTotal, 0);
+  kpis.style.display = 'grid';
+  kpis.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Itens distintos</div>
+      <div class="stat-val">${totalItens}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Quantidade total</div>
+      <div class="stat-val gold">${fmtQtyRel(totalQty)}</div>
+      <div class="stat-sub">soma bruta (unidades variam)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Valor total estimado</div>
+      <div class="stat-val green">${fmtBRL(valorTotal)}</div>
+      <div class="stat-sub">preço vigente × qtd</div>
+    </div>
+  `;
+}
+
+function renderRelatorio() {
+  if (!relatorioDados) return;
+  const { totaisItem, totaisPdv, totaisCat, buckets, fonte } = relatorioDados;
+  const cont = document.getElementById('relContainer');
+  const itensArr = Object.values(totaisItem).sort((a,b) => b.total - a.total);
+  if (itensArr.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum dado para os filtros selecionados.</div>'; return; }
+
+  const fonteLabel = fonte === 'compra' ? 'Solicitações de Compra'
+                   : fonte === 'req'    ? 'Requisições Entregues'
+                                         : 'Compras + Requisições';
+
+  const pdvsArr = Object.entries(totaisPdv).sort((a,b)=>b[1]-a[1]);
+  let html = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+    <div class="card">
+      <div class="uppercase-label mb-3">Total por PDV — ${fonteLabel}</div>
+      ${pdvsArr.map(([p,t]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
+        <span>${escapeHtml(p)}</span><span class="text-gold" style="font-weight:500">${fmtQtyRel(t)}</span>
+      </div>`).join('')}
+    </div>
+    <div class="card">
+      <div class="uppercase-label mb-3">Total por Categoria</div>
+      ${Object.entries(totaisCat).sort((a,b)=>b[1]-a[1]).map(([c,t]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
+        <span><span class="cat-pill cat-${c}">${CAT_LABEL_REL[c]||c}</span></span><span class="text-gold" style="font-weight:500">${fmtQtyRel(t)}</span>
+      </div>`).join('')}
+    </div>
+  </div>`;
+
+  // Tabela pivot por item + preço + valor
+  html += `<div class="card">
+    <div class="uppercase-label mb-3">Detalhamento por Item</div>
+    <div style="overflow-x:auto">
+    <table class="data-table">
+      <thead><tr>
+        <th>Categoria</th><th>Item</th><th>Unid.</th>
+        ${buckets.map(b => `<th class="center">${escapeHtml(b)}</th>`).join('')}
+        <th class="center">Total</th>
+        <th class="num">Preço un.</th>
+        <th class="num">Valor total</th>
+      </tr></thead>
+      <tbody>
+      ${itensArr.map(it => `<tr>
+        <td><span class="cat-pill cat-${it.categoria}">${CAT_LABEL_REL[it.categoria]||it.categoria}</span></td>
+        <td>${escapeHtml(it.item)}</td>
+        <td class="text-muted">${it.unidade}</td>
+        ${buckets.map(b => `<td class="center num">${fmtQtyRel(it.buckets[b]||0)}</td>`).join('')}
+        <td class="center num text-gold" style="font-weight:500">${fmtQtyRel(it.total)}</td>
+        <td class="num text-muted">${it.preco > 0 ? fmtBRL(it.preco) : '—'}</td>
+        <td class="num" style="font-weight:500">${it.preco > 0 ? fmtBRL(it.valorTotal) : '—'}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+  </div>`;
+
+  cont.innerHTML = html;
+}
+
+function exportarRelatorio() {
+  if (!relatorioDados) { showToast('Gere o relatório primeiro.', 'error'); return; }
+  const { totaisItem, buckets, fonte } = relatorioDados;
+  const linhas = [['Categoria','Item','Unidade', ...buckets, 'Total', 'Preço unit.', 'Valor total']];
+  Object.values(totaisItem).sort((a,b)=>b.total-a.total).forEach(it => {
+    linhas.push([
+      CAT_LABEL_REL[it.categoria] || it.categoria,
+      it.item,
+      it.unidade,
+      ...buckets.map(b => (it.buckets[b]||0).toFixed(2)),
+      it.total.toFixed(2),
+      it.preco ? it.preco.toFixed(2) : '',
+      it.preco ? it.valorTotal.toFixed(2) : '',
+    ]);
+  });
+  baixarCSV(`relatorio_${fonte}.csv`, linhas);
+}
+
+// =====================================================================
+// CATÁLOGO CRUD
+// =====================================================================
+function renderCatalogoTable() {
+  const q = (document.getElementById('cat-busca').value || '').toLowerCase();
+  const cf = document.getElementById('cat-cat-filtro').value;
+  let lista = state.catalogo;
+  if (cf) lista = lista.filter(i => i.categoria === cf);
+  if (q) lista = lista.filter(i => i.nome.toLowerCase().includes(q) || (i.fornecedor_principal||'').toLowerCase().includes(q));
+  state.catalogoLista = lista;
+  const cont = document.getElementById('catalogoContainer');
+  if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr><th>Nome</th><th>Categoria</th><th>Unid.</th><th>Fornecedor</th><th class="center">Inventário</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
+    <tbody>${lista.map(it => `<tr>
+      <td>${escapeHtml(it.nome)}</td>
+      <td><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
+      <td>${it.unidade}</td>
+      <td class="text-muted">${escapeHtml(it.fornecedor_principal||'—')}</td>
+      <td class="center">${it.inventario ? '<span class="text-green">Sim</span>' : '<span class="text-muted">—</span>'}</td>
+      <td class="center num">${it.media_diaria ? parseFloat(it.media_diaria).toFixed(1) : '—'}</td>
+      <td><span class="badge ${it.ativo?'badge-green':'badge-muted'}">${it.ativo?'Ativo':'Inativo'}</span></td>
+      <td class="center"><button class="btn btn-sm ${it.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoItem('${it.id}',${it.ativo})">${it.ativo?'Desativar':'Ativar'}</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+async function salvarItem() {
+  const nome = document.getElementById('c-nome').value.trim();
+  if (!nome) { showToast('Informe o nome.', 'error'); return; }
+  const obj = {
+    nome, categoria: document.getElementById('c-cat').value,
+    unidade: document.getElementById('c-unid').value,
+    fornecedor_principal: document.getElementById('c-forn').value.trim() || null,
+    media_diaria: parseFloat(document.getElementById('c-media').value) || 0,
+    inventario: document.getElementById('c-inv').value === 'true',
+    ativo: true,
+  };
+  const { error } = await sb.from('itens').insert(obj);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  ['c-nome','c-forn'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('c-media').value = '0';
+  toggleForm('formCatalogo');
+  showToast('Item criado.', 'success');
+  await carregarCatalogoEPrecos();
+  renderCatalogoTable();
+}
+
+async function toggleAtivoItem(id, ativo) {
+  await sb.from('itens').update({ ativo: !ativo }).eq('id', id);
+  await carregarCatalogoEPrecos();
+  renderCatalogoTable();
+}
+
+// =====================================================================
+// PREÇOS
+// =====================================================================
+function renderPrecos() {
+  const q = (document.getElementById('precos-busca').value || '').toLowerCase();
+  const cf = document.getElementById('precos-cat-filtro').value;
+  let lista = state.catalogo.filter(i => i.ativo);
+  if (cf) lista = lista.filter(i => i.categoria === cf);
+  if (q) lista = lista.filter(i => i.nome.toLowerCase().includes(q));
+
+  const comPreco = lista.filter(i => state.precosMap[i.id]).length;
+  document.getElementById('precos-stats').textContent = `${comPreco} de ${lista.length} com preço`;
+
+  const cont = document.getElementById('precosContainer');
+  if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr><th>Item</th><th>Categoria</th><th>Unid.</th><th>Fornecedor</th><th>Preço atual</th><th>Atualizado em</th><th>Ações</th></tr></thead>
+    <tbody>${lista.map(it => {
+      const p = state.precosMap[it.id];
+      return `<tr>
+        <td>${escapeHtml(it.nome)}</td>
+        <td><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
+        <td>${it.unidade}</td>
+        <td class="text-muted">${escapeHtml(p?.fornecedor || it.fornecedor_principal || '—')}</td>
+        <td>${p ? `R$ ${parseFloat(p.preco_unitario).toFixed(2).replace('.',',')}` : '<span class="text-muted">sem preço</span>'}</td>
+        <td class="text-muted">${p ? new Date(p.atualizado_em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '—'}</td>
+        <td><button class="btn btn-sm btn-outline" onclick="editarPreco('${it.id}')">${p ? 'Atualizar' : '+ Definir'}</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+async function editarPreco(itemId) {
+  const item = state.catalogo.find(i => i.id === itemId);
+  const atual = state.precosMap[itemId];
+  const valor = prompt(`Preço unitário de "${item.nome}" (${item.unidade})`, atual ? atual.preco_unitario : '');
+  if (valor === null) return;
+  const num = parseFloat(String(valor).replace(',', '.'));
+  if (isNaN(num) || num < 0) { showToast('Valor inválido.', 'error'); return; }
+  const fornecedor = prompt('Fornecedor (opcional):', atual?.fornecedor || item.fornecedor_principal || '');
+
+  const { error } = await sb.from('precos').insert({
+    item_id: itemId, preco_unitario: num,
+    fornecedor: fornecedor || null,
+    vigente: true, atualizado_por: state.perfil.id,
+  });
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  showToast('Preço atualizado.', 'success');
+  await carregarCatalogoEPrecos();
+  renderPrecos();
+}
+
+// =====================================================================
+// ITENS PENDENTES
+// =====================================================================
+async function carregarPendentes() {
+  const { data } = await sb.from('itens_pendentes')
+    .select('*, pdvs(nome)')
+    .eq('status', 'pendente')
+    .order('created_at', { ascending: false });
+  state.pendentes = data || [];
+  document.getElementById('pendCount').textContent = `${state.pendentes.length} pendente(s)`;
+  const cont = document.getElementById('pendentesContainer');
+  if (state.pendentes.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item pendente.</div>'; return; }
+  cont.innerHTML = state.pendentes.map(p => `
+    <div class="pend-item-card">
+      <div class="text-muted" style="font-size:11px">${p.origem === 'compra' ? 'Compra' : 'Requisição'} · ${escapeHtml(p.pdvs?.nome||'—')}</div>
+      <div class="pend-item-name">${escapeHtml(p.nome_digitado)}</div>
+      <div class="text-muted" style="font-size:11px">sugerido: ${p.categoria_sugerida||'—'} ${p.unidade_sugerida||''}</div>
+      <div class="form-actions">
+        <button class="btn btn-sm btn-green" onclick='abrirModalPend(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Adicionar ao Catálogo</button>
+        <button class="btn btn-sm btn-secondary" onclick="rejeitarPend('${p.id}')">Manter só no histórico</button>
+      </div>
+    </div>`).join('');
+}
+
+function abrirModalPend(p) {
+  state.pendModalRow = p;
+  document.getElementById('pm-nome').value = p.nome_digitado;
+  document.getElementById('pm-cat').value = p.categoria_sugerida || 'proteina';
+  document.getElementById('pm-unid').value = p.unidade_sugerida || 'kg';
+  document.getElementById('pm-inv').value = 'false';
+  document.getElementById('pm-preco').value = '';
+  abrirModal('pendModal');
+}
+
+async function confirmarAdicaoCatalogo() {
+  const p = state.pendModalRow; if (!p) return;
+  const nome = document.getElementById('pm-nome').value.trim();
+  const cat = document.getElementById('pm-cat').value;
+  const unid = document.getElementById('pm-unid').value;
+  const inv = document.getElementById('pm-inv').value === 'true';
+  const preco = parseFloat(document.getElementById('pm-preco').value);
+
+  const btn = document.getElementById('pmConfirm'); btn.disabled = true; btn.textContent = 'Salvando...';
+  try {
+    const { data: novo, error } = await sb.from('itens').insert({
+      nome, categoria: cat, unidade: unid, inventario: inv, ativo: true,
+    }).select().single();
+    if (error) throw error;
+    if (!isNaN(preco) && preco > 0) {
+      await sb.from('precos').insert({
+        item_id: novo.id, preco_unitario: preco, vigente: true, atualizado_por: state.perfil.id,
+      });
+    }
+    await sb.from('itens_pendentes').update({
+      status: 'aprovado', decidido_por: state.perfil.id, decidido_em: new Date().toISOString(),
+    }).eq('id', p.id);
+    showToast('Item adicionado ao catálogo.', 'success');
+    fecharModal('pendModal');
+    await carregarCatalogoEPrecos();
+    await Promise.all([carregarPendentes(), atualizarBadges()]);
+  } catch (err) {
+    showToast('Erro: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Adicionar ao Catálogo';
+  }
+}
+
+async function rejeitarPend(id) {
+  if (!confirm('Manter este item apenas no histórico (sem cadastrar)?')) return;
+  await sb.from('itens_pendentes').update({
+    status: 'rejeitado', decidido_por: state.perfil.id, decidido_em: new Date().toISOString(),
+  }).eq('id', id);
+  showToast('Decidido.', 'info');
+  await Promise.all([carregarPendentes(), atualizarBadges()]);
+}
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+function toggleForm(id) { document.getElementById(id).classList.toggle('open'); }
+function abrirModal(id) { document.getElementById(id).classList.add('open'); }
+function fecharModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function showToast(msg, tipo='info') {
+  const stack = document.getElementById('toasts');
+  const t = document.createElement('div'); t.className = 'toast ' + tipo; t.textContent = msg;
+  stack.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+function baixarCSV(filename, linhas) {
+  const csv = linhas.map(l => l.map(c => {
+    const s = String(c ?? '');
+    return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(';')).join('\n');
+  // BOM para Excel reconhecer UTF-8
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// =====================================================================
+// SOLICITAR REQUISIÇÃO (nova capacidade — gerente cria em nome de PDV)
+// =====================================================================
+state.reqNew = { pdvId: '', cat: 'proteina', selecionados: {} };
+
+function initReqCreate() {
+  // Popula PDVs (só destinos, não comissaria)
+  const sel = document.getElementById('rc-pdv');
+  if (sel && !sel.dataset.populated) {
+    state.pdvs.filter(p => p.tipo !== 'comissaria').forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id; o.textContent = p.nome;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', () => { state.reqNew.pdvId = sel.value; });
+    sel.dataset.populated = '1';
+  }
+  setCatReqCreate(state.reqNew.cat);
+}
+
+function setCatReqCreate(cat) {
+  state.reqNew.cat = cat;
+  document.querySelectorAll('#rc-cat-tabs .cat-btn').forEach(btn => {
+    btn.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
+    if (btn.dataset.cat === cat) btn.classList.add('on-' + cat);
+  });
+  document.getElementById('rc-search').value = '';
+  renderItensReqCreate();
+}
+
+function renderItensReqCreate() {
+  const cont = document.getElementById('rc-items');
+  if (!cont) return;
+  if (!state.catalogo || state.catalogo.length === 0) {
+    cont.innerHTML = '<div class="loading-text">Carregando catálogo...</div>'; return;
+  }
+  const q = (document.getElementById('rc-search').value || '').toLowerCase();
+  const itens = state.catalogo.filter(i =>
+    i.ativo && i.categoria === state.reqNew.cat &&
+    (!q || i.nome.toLowerCase().includes(q) || (i.fornecedor_principal||'').toLowerCase().includes(q))
+  );
+  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item nesta categoria.</div>'; return; }
+  itens.sort((a,b) => a.nome.localeCompare(b.nome));
+  cont.innerHTML = itens.map(item => {
+    const sel = state.reqNew.selecionados[item.id];
+    const qty = sel ? sel.qty : 1;
+    return `
+      <div class="add-item-row" id="rcrow-${item.id}" style="${sel ? 'border-color:var(--gold);background:rgba(184,150,62,0.06)' : ''}">
+        <div class="add-item-check">${sel ? '✓' : ''}</div>
+        <div class="add-item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+        <div class="add-item-unit">${item.unidade || '—'}</div>
+        <div class="add-item-qty-wrap">
+          <button class="add-qty-btn" onclick="changeQtyRC('${item.id}',-1)">−</button>
+          <input class="add-qty-input" type="number" min="0.1" step="0.1" value="${qty}" onclick="this.select()" oninput="setQtyRC('${item.id}',this.value)">
+          <button class="add-qty-btn" onclick="changeQtyRC('${item.id}',1)">+</button>
+          ${sel
+            ? `<button class="add-item-btn" style="background:transparent;border-color:var(--border-subtle);color:var(--muted)" onclick="removerItemRC('${item.id}')">Remover</button>`
+            : `<button class="add-item-btn" onclick="adicionarItemRC('${item.id}')">+ Adicionar</button>`}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function changeQtyRC(itemId, delta) {
+  const input = document.querySelector(`#rcrow-${itemId} .add-qty-input`);
+  if (!input) return;
+  const cur = parseFloat(input.value) || 1;
+  const novo = Math.max(0.1, Math.round((cur + delta) * 10) / 10);
+  input.value = novo;
+  const s = state.reqNew.selecionados[itemId];
+  if (s) { s.qty = novo; atualizarCartBarRC(); }
+}
+function setQtyRC(itemId, val) {
+  const s = state.reqNew.selecionados[itemId];
+  const v = parseFloat(val);
+  if (s && !isNaN(v) && v > 0) { s.qty = v; atualizarCartBarRC(); }
+}
+function adicionarItemRC(itemId) {
+  const input = document.querySelector(`#rcrow-${itemId} .add-qty-input`);
+  const qty = input ? (parseFloat(input.value) || 1) : 1;
+  if (qty <= 0) { showToast('Quantidade inválida.', 'error'); return; }
+  const item = state.catalogo.find(i => i.id === itemId);
+  if (!item) return;
+  state.reqNew.selecionados[itemId] = { item, qty };
+  renderItensReqCreate();
+  atualizarCartBarRC();
+}
+function removerItemRC(itemId) {
+  delete state.reqNew.selecionados[itemId];
+  renderItensReqCreate();
+  atualizarCartBarRC();
+}
+function atualizarCartBarRC() {
+  const n = Object.keys(state.reqNew.selecionados).length;
+  document.getElementById('rcCartCount').textContent = n;
+  document.getElementById('rcCartBar').classList.toggle('visible', n > 0);
+}
+function descartarReqCreate() {
+  if (Object.keys(state.reqNew.selecionados).length === 0) return;
+  if (!confirm('Descartar todos os itens selecionados?')) return;
+  state.reqNew.selecionados = {};
+  document.getElementById('rc-obs').value = '';
+  renderItensReqCreate();
+  atualizarCartBarRC();
+}
+async function enviarReqCreate() {
+  if (!state.reqNew.pdvId) { showToast('Selecione o PDV de destino.', 'error'); return; }
+  const sel = Object.values(state.reqNew.selecionados);
+  if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
+  const obs = document.getElementById('rc-obs').value.trim();
+  const { data: req, error } = await sb.from('requisicoes').insert({
+    pdv_id: state.reqNew.pdvId,
+    usuario_id: state.perfil.id,
+    criada_pelo_estoque: false,
+    status: 'enviado',
+    data_competencia: new Date().toISOString().slice(0,10),
+    observacao: obs || null,
+  }).select('id').single();
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  const itensPayload = sel.map(s => ({
+    requisicao_id: req.id,
+    item_id: s.item.id,
+    item_nome: s.item.nome,
+    item_categoria: s.item.categoria,
+    item_unidade: s.item.unidade,
+    quantidade_solicitada: s.qty,
+  }));
+  const { error: ei } = await sb.from('requisicao_itens').insert(itensPayload);
+  if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
+  const pdvNome = state.pdvs.find(p => p.id === state.reqNew.pdvId)?.nome || 'PDV';
+  showToast(`Requisição enviada para a Comissaria (destino: ${pdvNome}).`, 'success');
+  state.reqNew.selecionados = {};
+  document.getElementById('rc-obs').value = '';
+  renderItensReqCreate();
+  atualizarCartBarRC();
+}
+
+// =====================================================================
+// NÍVEIS DE ESTOQUE (só leitura) e DIVERGÊNCIAS
+// =====================================================================
+state.est = { itens: [], saldo: {}, consumo: {}, divergencias: [] };
+
+function classificarSemaforo(qtdAtual, mediaDiaria) {
+  if (qtdAtual === null || qtdAtual === undefined || isNaN(qtdAtual)) return 'pend';
+  if (!mediaDiaria || mediaDiaria <= 0) return qtdAtual > 0 ? 'verde' : 'vermelho';
+  const dias = qtdAtual / mediaDiaria;
+  if (dias >= 3) return 'verde';
+  if (dias >= 1) return 'amarelo';
+  return 'vermelho';
+}
+
+function consumoDiarioItemGer(item) {
+  const c = state.est.consumo?.[item.id];
+  if (c) {
+    const total = parseFloat(c.saidas_30d) || 0;
+    if (total > 0) return total / 30;
+  }
+  return parseFloat(item.media_diaria) || 0;
+}
+
+async function carregarNiveisGer() {
+  const cont = document.getElementById('nvContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const [itensR, saldoR, consumoR] = await Promise.all([
+    sb.from('itens')
+      .select('id, nome, categoria, unidade, media_diaria, fornecedor_principal')
+      .eq('ativo', true).eq('inventario', true)
+      .order('categoria').order('nome'),
+    sb.from('v_estoque_saldo').select('*'),
+    sb.from('v_estoque_consumo').select('*'),
+  ]);
+  state.est.itens = itensR.data || [];
+  state.est.saldo = {}; (saldoR.data || []).forEach(s => { state.est.saldo[s.item_id] = s; });
+  state.est.consumo = {}; (consumoR.data || []).forEach(c => { state.est.consumo[c.item_id] = c; });
+  renderNiveisGer();
+}
+
+function renderNiveisGer() {
+  const cont = document.getElementById('nvContainer');
+  const catFilt = document.getElementById('nv-cat').value;
+  const stFilt  = document.getElementById('nv-status').value;
+  const q       = (document.getElementById('nv-search').value || '').toLowerCase();
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+
+  const dados = state.est.itens.map(it => {
+    const saldo = state.est.saldo?.[it.id];
+    const qtd = saldo && !saldo.sem_baseline && saldo.saldo_teorico !== null ? parseFloat(saldo.saldo_teorico) : null;
+    const md = consumoDiarioItemGer(it);
+    const dias = md > 0 && qtd !== null ? qtd / md : null;
+    const semaforo = classificarSemaforo(qtd, md);
+    return { it, qtd, md, dias, semaforo, saldo };
+  });
+
+  const cnt = { verde:0, amarelo:0, vermelho:0, pend:0 };
+  dados.forEach(d => cnt[d.semaforo]++);
+  document.getElementById('nvVerde').textContent    = cnt.verde;
+  document.getElementById('nvAmarelo').textContent  = cnt.amarelo;
+  document.getElementById('nvVermelho').textContent = cnt.vermelho;
+  document.getElementById('nvPend').textContent     = cnt.pend;
+
+  let filtrados = dados;
+  if (catFilt === 'camara')  filtrados = filtrados.filter(d => d.it.categoria === 'proteina' || d.it.categoria === 'laticinios');
+  else if (catFilt)          filtrados = filtrados.filter(d => d.it.categoria === catFilt);
+  if (stFilt) filtrados = filtrados.filter(d => d.semaforo === stFilt);
+  if (q) filtrados = filtrados.filter(d => d.it.nome.toLowerCase().includes(q));
+  document.getElementById('nvCount').textContent = `${filtrados.length} item(ns)`;
+
+  if (filtrados.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item nesses filtros.</div>';
+    return;
+  }
+  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3 };
+  filtrados.sort((a,b) => (ordem[a.semaforo] - ordem[b.semaforo]) || a.it.nome.localeCompare(b.it.nome));
+  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—' };
+  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○' };
+
+  cont.innerHTML = filtrados.map(d => {
+    const it = d.it;
+    const qtdTxt = d.qtd !== null ? `${d.qtd.toFixed(1)}<small>${it.unidade||''}</small>` : '<span class="text-muted">— sem baseline</span>';
+    const cobTxt = d.md > 0 ? (d.dias !== null ? `<strong>${d.dias.toFixed(1)}</strong> dia(s)` : '—') : '<span class="text-muted">s/ consumo</span>';
+    let breakdown = '';
+    if (d.saldo && !d.saldo.sem_baseline) {
+      const base = parseFloat(d.saldo.baseline_contagem) || 0;
+      const ent = parseFloat(d.saldo.entradas_desde_contagem) || 0;
+      const sai = parseFloat(d.saldo.saidas_desde_contagem) || 0;
+      const dataUlt = d.saldo.ultima_contagem_data ? d.saldo.ultima_contagem_data.split('-').reverse().join('/') : '—';
+      breakdown = `Base ${base.toFixed(1)} (${dataUlt}) &nbsp;+ ent ${ent.toFixed(1)} − sai ${sai.toFixed(1)}`;
+    } else {
+      breakdown = '<em>sem contagem ainda</em>';
+    }
+    return `
+      <div class="nv-row ${d.semaforo}">
+        <div class="chk-semaforo ${d.semaforo}">
+          <span class="dot">${semDot[d.semaforo]}</span>
+          <span class="txt">${semLabel[d.semaforo]}</span>
+        </div>
+        <div class="nv-nome">
+          ${escapeHtml(it.nome)}
+          <span class="cat-pill cat-${it.categoria}" style="font-size:10px;margin-left:6px">${catLabels[it.categoria]||''}</span>
+          ${it.fornecedor_principal ? `<div class="text-muted" style="font-size:11px;margin-top:2px">${escapeHtml(it.fornecedor_principal)}</div>` : ''}
+        </div>
+        <div class="nv-qty">${qtdTxt}</div>
+        <div class="nv-cob">${cobTxt}</div>
+        <div class="nv-ultima">${breakdown}</div>
+      </div>`;
+  }).join('');
+}
+
+async function carregarDivergencias() {
+  const cont = document.getElementById('dvContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const { data, error } = await sb.from('divergencias_estoque')
+    .select('*, itens(nome, categoria, unidade, fornecedor_principal)')
+    .order('data_contagem', { ascending: false })
+    .order('diff_pct', { ascending: false });
+  if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + error.message + '</div>'; return; }
+  state.est.divergencias = data || [];
+  renderDivergencias();
+}
+
+function renderDivergencias() {
+  const cont = document.getElementById('dvContainer');
+  const st = document.getElementById('dv-status').value;
+  const catFilt = document.getElementById('dv-cat').value;
+  const q = (document.getElementById('dv-search').value || '').toLowerCase();
+  let lista = state.est.divergencias || [];
+  if (st) lista = lista.filter(d => d.status === st);
+  if (catFilt === 'camara') lista = lista.filter(d => d.itens && (d.itens.categoria === 'proteina' || d.itens.categoria === 'laticinios'));
+  else if (catFilt)         lista = lista.filter(d => d.itens && d.itens.categoria === catFilt);
+  if (q) lista = lista.filter(d => (d.itens?.nome||'').toLowerCase().includes(q));
+
+  document.getElementById('dvCount').textContent = `${lista.length} divergência(s)`;
+  if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma divergência com esses filtros.</div>'; return; }
+
+  const stLabel = { pendente:'Pendente', recontagem:'Recontagem', perda_registrada:'Perda', ajuste_ok:'Ajuste OK' };
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+
+  cont.innerHTML = lista.map(d => {
+    const it = d.itens || {};
+    const teo = parseFloat(d.qtd_teorica);
+    const con = parseFloat(d.qtd_contada);
+    const diff = parseFloat(d.diff);
+    const pct = parseFloat(d.diff_pct).toFixed(1);
+    const sobra = diff < 0;
+    const diffTxt = sobra
+      ? `<span class="dv-diff sobra">+${Math.abs(diff).toFixed(1)} ${it.unidade||''} <small>(${pct}% a mais)</small></span>`
+      : `<span class="dv-diff">−${diff.toFixed(1)} ${it.unidade||''} <small>(${pct}% a menos)</small></span>`;
+    const acoes = d.status === 'pendente' ? `
+      <button class="dv-action-btn recontagem" onclick="resolverDivergencia('${d.id}','recontagem')">↻ Recontagem</button>
+      <button class="dv-action-btn perda" onclick="resolverDivergencia('${d.id}','perda_registrada')">− Perda</button>
+      <button class="dv-action-btn ok" onclick="resolverDivergencia('${d.id}','ajuste_ok')">✓ Ajuste OK</button>
+    ` : `<span class="dv-status-tag ${d.status}">${stLabel[d.status]||d.status}</span>`;
+    return `
+      <div class="dv-row ${d.status}">
+        <div class="dv-nome">
+          ${escapeHtml(it.nome||'—')}
+          <span class="cat-pill cat-${it.categoria||'diversos'}" style="font-size:10px;margin-left:6px">${catLabels[it.categoria]||''}</span>
+          <small>Contagem: ${d.data_contagem ? d.data_contagem.split('-').reverse().join('/') : '—'}${d.motivo ? ' · Motivo: ' + escapeHtml(d.motivo) : ''}</small>
+        </div>
+        <div class="dv-teo-cell"><div class="dv-num teorico">${teo.toFixed(1)}<small>teórico</small></div></div>
+        <div class="dv-con-cell"><div class="dv-num contado">${con.toFixed(1)}<small>contado</small></div></div>
+        ${diffTxt}
+        <div class="dv-actions">${acoes}</div>
+      </div>`;
+  }).join('');
+}
+
+async function resolverDivergencia(id, novoStatus) {
+  let motivo = null;
+  if (novoStatus === 'perda_registrada') motivo = prompt('Motivo/observação da perda (opcional):') || '';
+  const patch = { status: novoStatus, resolvido_por: state.perfil.id, resolvido_em: new Date().toISOString() };
+  if (motivo !== null) patch.motivo = motivo;
+  const { error } = await sb.from('divergencias_estoque').update(patch).eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  showToast('Divergência atualizada.', 'success');
+  await carregarDivergencias();
+  atualizarBadges();
+}
+
+async function logout() { await sb.auth.signOut(); window.location.href = 'index.html'; }
+</script>
+</body>
+</html>

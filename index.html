@@ -5,131 +5,105 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rosewood São Paulo — A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <style>
-  :root {
-    --gold: #B8963E;
-    --gold-light: #D4AF6A;
-    --dark: #0F1117;
-    --surface: #161B27;
-    --border: rgba(184,150,62,0.2);
-    --text: #E8E4DC;
-    --muted: #7A8094;
-    --error: #E05252;
-  }
-  * { margin:0; padding:0; box-sizing:border-box; }
   body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--dark);
-    min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
   }
-  .bg {
+  .login-bg {
     position: fixed; inset: 0;
     background: radial-gradient(ellipse at 30% 50%, rgba(184,150,62,0.06) 0%, transparent 60%),
                 radial-gradient(ellipse at 70% 20%, rgba(184,150,62,0.04) 0%, transparent 50%);
   }
-  .grain {
-    position: fixed; inset: 0; opacity: 0.03;
+  .login-grain {
+    position: fixed; inset: 0; opacity: 0.03; pointer-events: none;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   }
-  .card {
-    position: relative; z-index: 1;
+  .login-card {
+    position: relative;
+    z-index: 1;
     width: 420px;
     background: var(--surface);
     border: 1px solid var(--border);
     padding: 56px 48px 48px;
     animation: fadeUp 0.6s ease both;
   }
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(24px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .logo-area { text-align: center; margin-bottom: 40px; }
-  .logo-line {
-    width: 48px; height: 1px;
-    background: var(--gold);
-    margin: 0 auto 20px;
-  }
-  .hotel-name {
+  .login-logo { text-align: center; margin-bottom: 40px; }
+  .login-logo .line { width: 48px; height: 1px; background: var(--gold); margin: 0 auto 20px; }
+  .login-logo .hotel {
     font-family: 'Cormorant Garamond', serif;
     font-size: 22px; font-weight: 300; letter-spacing: 4px;
     color: var(--text); text-transform: uppercase;
     margin-bottom: 4px;
   }
-  .dept {
+  .login-logo .dept {
     font-size: 11px; letter-spacing: 3px; color: var(--gold);
     text-transform: uppercase; font-weight: 500;
   }
-  label {
-    display: block; font-size: 11px; letter-spacing: 2px;
-    color: var(--muted); text-transform: uppercase; margin-bottom: 8px;
-  }
-  input {
-    width: 100%; background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.1);
-    color: var(--text); font-family: 'DM Sans', sans-serif;
-    font-size: 15px; padding: 14px 16px;
-    transition: border-color 0.2s;
-    outline: none;
-  }
-  input:focus { border-color: var(--gold); }
-  .field { margin-bottom: 20px; }
-  .btn {
-    width: 100%; margin-top: 8px;
-    background: var(--gold); color: #0F1117;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px; font-weight: 500; letter-spacing: 2px;
-    text-transform: uppercase; border: none;
-    padding: 16px; cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
-  }
-  .btn:hover { background: var(--gold-light); }
-  .btn:active { transform: scale(0.99); }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .error-msg {
-    margin-top: 14px; padding: 12px 16px;
-    background: rgba(224,82,82,0.1); border: 1px solid rgba(224,82,82,0.3);
-    color: var(--error); font-size: 13px; display: none;
-  }
-  .version {
+  .login-version {
     text-align: center; margin-top: 32px;
     font-size: 11px; color: rgba(122,128,148,0.5); letter-spacing: 1px;
   }
+  .login-card .field { margin-bottom: 20px; }
+  .login-card .input { padding: 14px 16px; font-size: 15px; }
 </style>
 </head>
 <body>
-<div class="bg"></div>
-<div class="grain"></div>
-<div class="card">
-  <div class="logo-area">
-    <div class="logo-line"></div>
-    <div class="hotel-name">Rosewood São Paulo</div>
+<div class="login-bg"></div>
+<div class="login-grain"></div>
+
+<div class="login-card">
+  <div class="login-logo">
+    <div class="line"></div>
+    <div class="hotel">Rosewood São Paulo</div>
     <div class="dept">Alimentos &amp; Bebidas</div>
   </div>
+
   <div class="field">
-    <label>E-mail</label>
-    <input type="email" id="email" placeholder="seu@email.com" autocomplete="username">
+    <label class="field-label">E-mail</label>
+    <input class="input" type="email" id="email" placeholder="seu@email.com" autocomplete="username">
   </div>
+
   <div class="field">
-    <label>Senha</label>
-    <input type="password" id="senha" placeholder="••••••••" autocomplete="current-password">
+    <label class="field-label">Senha</label>
+    <input class="input" type="password" id="senha" placeholder="••••••••" autocomplete="current-password">
   </div>
-  <button class="btn" id="btnLogin" onclick="login()">Entrar</button>
-  <div class="error-msg" id="errMsg"></div>
-  <div class="version">Sistema de Requisições · v2.0</div>
+
+  <button class="btn btn-primary btn-lg" style="width:100%; margin-top:8px;" id="btnLogin" onclick="login()">Entrar</button>
+
+  <div class="aviso aviso-error mt-3" id="errMsg" style="display:none"></div>
+
+  <div class="login-version">Sistema de Gestão de Cozinha · <span id="ver"></span></div>
 </div>
 
 <script>
-const SUPABASE_URL = 'https://nyijprhukndlyijqljbm.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55aWpwcmh1a25kbHlpanFsamJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MjUwMDgsImV4cCI6MjA5MjIwMTAwOH0.Vzljd9xesi1ZJ-l7du00v-elUSDQObRCUz2jPyqL5p8';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+document.getElementById('ver').textContent = SISTEMA_VERSAO;
 
 document.getElementById('senha').addEventListener('keydown', e => {
   if (e.key === 'Enter') login();
+});
+document.getElementById('email').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('senha').focus();
+});
+
+// Se já estiver logado, redireciona direto
+window.addEventListener('load', async () => {
+  const { data: { user } } = await sb.auth.getUser();
+  if (user) {
+    const { data: perfil } = await sb.from('usuarios')
+      .select('perfil, ativo')
+      .eq('auth_uid', user.id)
+      .single();
+    if (perfil && perfil.ativo && REDIRECT_POR_PERFIL[perfil.perfil]) {
+      window.location.href = REDIRECT_POR_PERFIL[perfil.perfil];
+    }
+  }
 });
 
 async function login() {
@@ -141,7 +115,7 @@ async function login() {
   if (!email || !senha) { showErr('Preencha e-mail e senha.'); return; }
 
   btn.disabled = true;
-  btn.textContent = 'Aguarde...';
+  btn.textContent = 'Entrando...';
   err.style.display = 'none';
 
   const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
@@ -152,15 +126,35 @@ async function login() {
     return;
   }
 
-  // Busca perfil do usuário
-  const { data: perfil } = await sb.from('usuarios').select('perfil, pdv_id').eq('auth_uid', data.user.id).single();
+  // Buscar perfil do usuário
+  const { data: perfil, error: pErr } = await sb.from('usuarios')
+    .select('perfil, pdv_id, ativo, nome')
+    .eq('auth_uid', data.user.id)
+    .single();
 
-  if (!perfil) { showErr('Usuário sem perfil configurado. Contate o administrador.'); btn.disabled = false; btn.textContent = 'Entrar'; return; }
+  if (pErr || !perfil) {
+    showErr('Usuário sem perfil configurado. Contate o administrador.');
+    await sb.auth.signOut();
+    btn.disabled = false; btn.textContent = 'Entrar';
+    return;
+  }
 
-  if (perfil.perfil === 'master') window.location.href = 'master.html';
-  else if (perfil.perfil === 'estoque') window.location.href = 'estoque.html';
-  else if (perfil.perfil === 'pdv') window.location.href = 'requisicao.html';
-  else { showErr('Perfil desconhecido.'); btn.disabled = false; btn.textContent = 'Entrar'; }
+  if (!perfil.ativo) {
+    showErr('Usuário desativado. Contate o administrador.');
+    await sb.auth.signOut();
+    btn.disabled = false; btn.textContent = 'Entrar';
+    return;
+  }
+
+  const destino = REDIRECT_POR_PERFIL[perfil.perfil];
+  if (!destino) {
+    showErr('Perfil "' + perfil.perfil + '" desconhecido. Contate o administrador.');
+    await sb.auth.signOut();
+    btn.disabled = false; btn.textContent = 'Entrar';
+    return;
+  }
+
+  window.location.href = destino;
 }
 
 function showErr(msg) {

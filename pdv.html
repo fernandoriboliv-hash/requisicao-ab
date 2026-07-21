@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDV — Rosewood A&B</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+  /* Estilos específicos da PDV */
+  .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .cat-btn {
+    padding: 10px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .cat-btn:hover { color: var(--text); }
+  .cat-btn.on-proteina    { background: rgba(192,57,43,0.15);  border-color: var(--c-proteina);   color: var(--c-proteina); }
+  .cat-btn.on-laticinios  { background: rgba(37,99,168,0.15);  border-color: var(--c-laticinios); color: var(--c-laticinios); }
+  .cat-btn.on-hortifruti  { background: rgba(74,124,89,0.15);  border-color: var(--c-hortifruti); color: var(--c-hortifruti); }
+  .cat-btn.on-diversos    { background: rgba(184,150,62,0.15); border-color: var(--c-diversos);   color: var(--c-diversos); }
+
+  .search-wrap { position: relative; margin-bottom: 14px; }
+  .search-wrap .icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted2); }
+  .search-input { padding-left: 42px; }
+
+  .item-row {
+    display: grid;
+    grid-template-columns: 22px 1fr auto auto;
+    align-items: center;
+    gap: 12px;
+    background: var(--panel);
+    padding: 10px 14px;
+    margin-bottom: 2px;
+    border: 1px solid transparent;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .item-actions-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: flex-end;
+  }
+  .item-row:hover { border-color: var(--border-subtle); }
+  .item-row.selected { border-color: var(--gold); background: rgba(184,150,62,0.06); }
+  .item-check {
+    width: 18px; height: 18px; border: 1px solid var(--muted2);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .item-row.selected .item-check { background: var(--gold); border-color: var(--gold); color: #0F1117; }
+  .item-name { font-size: 14px; }
+  .item-name .forn { font-size: 11px; color: var(--muted); margin-left: 8px; }
+  .item-unit { font-size: 12px; color: var(--muted); width: 50px; text-align: center; }
+  /* Qty sempre visível — usuário define a quantidade ANTES de clicar Adicionar */
+  .item-qty-wrap { display: flex; align-items: center; gap: 6px; }
+
+  /* Botões de ação por item: Adicionar (dourado) e Remover (transparente) */
+  .item-action {
+    background: rgba(184,150,62,0.15);
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+  .item-action:hover { background: rgba(184,150,62,0.25); }
+  .item-action.remove {
+    background: transparent;
+    border-color: var(--border-subtle);
+    color: var(--muted);
+  }
+  .item-action.remove:hover { color: var(--error); border-color: var(--error); }
+  .item-row.selected .item-action.add { display: none; }
+  .item-row:not(.selected) .item-action.remove { display: none; }
+  .qty-btn {
+    width: 26px; height: 26px;
+    background: rgba(255,255,255,0.08);
+    border: none; color: var(--text);
+    font-size: 16px; cursor: pointer;
+  }
+  .qty-input {
+    width: 60px; text-align: center;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border-subtle);
+    color: var(--text); font-family: inherit; font-size: 14px;
+    padding: 4px; outline: none;
+  }
+  .qty-alert { color: var(--orange); font-size: 11px; margin-left: 8px; }
+  .est-badge {
+    display: inline-block; font-size: 10px; padding: 1px 6px;
+    margin-left: 8px; letter-spacing: 0.5px; text-transform: uppercase;
+    vertical-align: middle; border: 1px solid;
+  }
+  .est-red    { background: rgba(224,82,82,0.12); color: var(--error);  border-color: rgba(224,82,82,0.4); }
+  .est-yellow { background: rgba(224,140,62,0.12); color: var(--orange); border-color: rgba(224,140,62,0.4); }
+  .item-coment {
+    grid-column: 1 / -1;
+    margin-top: 6px;
+    display: none;
+  }
+  .item-row.selected .item-coment { display: block; }
+  .item-coment input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-subtle);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 10px;
+    outline: none;
+  }
+
+  /* Item livre */
+  .livre-section {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--panel);
+    border: 1px dashed var(--border-subtle);
+  }
+  .livre-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .livre-row .input { flex: 1; min-width: 140px; }
+  .livre-row .qtd { width: 80px; flex: none; }
+  .livre-row .unid { width: 90px; flex: none; }
+  .livre-list { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .livre-chip {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(224,140,62,0.1); border: 1px solid rgba(224,140,62,0.3);
+    padding: 8px 12px; font-size: 13px; color: var(--orange);
+  }
+  .livre-chip .remove { cursor: pointer; opacity: 0.6; margin-left: auto; }
+
+  /* Carrinho fixo */
+  .cart-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 14px 24px; display: none;
+    justify-content: space-between; align-items: center;
+    z-index: 200;
+  }
+  .cart-bar.visible { display: flex; }
+  .cart-info { font-size: 13px; color: var(--muted); }
+  .cart-count { font-size: 22px; font-weight: 500; color: var(--text); margin-right: 8px; }
+  .cart-actions { display: flex; gap: 8px; }
+
+  /* histórico */
+  .hist-card {
+    background: var(--panel);
+    border: 1px solid var(--border-subtle);
+    padding: 14px 16px;
+    margin-bottom: 8px;
+  }
+  .hist-card .head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 6px;
+  }
+  .hist-card .meta { font-size: 12px; color: var(--muted); }
+  .hist-card .resumo { font-size: 13px; color: var(--muted); }
+  .hist-card .resumo span { color: var(--text); }
+  .hist-card .obs {
+    font-size: 12px; color: var(--muted);
+    margin-top: 6px; padding-top: 6px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .hist-card .motivo {
+    margin-top: 6px;
+    padding: 6px 10px;
+    background: rgba(224,82,82,0.1);
+    border-left: 2px solid var(--error);
+    font-size: 12px; color: #E08888;
+  }
+  .hist-card.is-rascunho { border-color: rgba(184,150,62,0.3); }
+  .hist-actions { display: flex; gap: 6px; margin-top: 8px; }
+  body { padding-bottom: 80px; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="name">Rosewood</div>
+    <div class="sub">A&amp;B · <span id="pdvChip">PDV</span></div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-item active" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
+    <div class="nav-item" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição Comissaria</div>
+    <div class="nav-item" onclick="goTab('rascunhos',this)">
+      <span class="nav-icon">✎</span> Rascunhos
+      <span class="nav-badge" id="badgeRascunhos"></span>
+    </div>
+    <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
+  </div>
+  <div class="sidebar-foot">
+    <div class="name" id="userName">—</div>
+    <button class="logout-btn" onclick="logout()">Sair do sistema</button>
+  </div>
+</nav>
+
+<div class="main-with-sidebar">
+  <div class="top-bar">
+    <div>
+      <div class="top-title" id="topTitle">Solicitar Compra</div>
+      <div class="top-sub" id="topSub">Pedido para compra externa (aprovação do Gerente)</div>
+    </div>
+  </div>
+
+  <div class="main">
+
+  <!-- ========================================================== -->
+  <!-- ABA COMPRA — Processo 1                                    -->
+  <!-- ========================================================== -->
+  <div class="tab-content active" id="tab-compra">
+
+    <div class="aviso aviso-info" id="avisoCorte">
+      <span id="avisoCorteTxt">Carregando regra de corte...</span>
+    </div>
+
+    <div class="form-row col2">
+      <div class="field">
+        <label class="field-label">Data de Entrega Desejada</label>
+        <input class="input" type="date" id="compra-data-entrega">
+      </div>
+      <div class="field">
+        <label class="field-label">Observação Geral (opcional)</label>
+        <input class="input" id="compra-obs" placeholder="Algum detalhe sobre este pedido...">
+      </div>
+    </div>
+
+    <!-- Categorias -->
+    <div class="cat-tabs" id="compra-cat-tabs">
+      <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCat('compra','proteina')">Proteína</button>
+      <button class="cat-btn" data-cat="laticinios" onclick="setCat('compra','laticinios')">Laticínios</button>
+      <button class="cat-btn" data-cat="hortifruti" onclick="setCat('compra','hortifruti')">Hortifruti</button>
+      <button class="cat-btn" data-cat="diversos" onclick="setCat('compra','diversos')">Diversos</button>
+    </div>
+
+    <div class="search-wrap">
+      <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input class="input search-input" id="compra-search" placeholder="Buscar item no catálogo..." oninput="renderItens('compra')">
+    </div>
+
+    <div id="compra-items"><div class="loading-text">Carregando catálogo...</div></div>
+
+    <!-- Item livre -->
+    <div class="livre-section">
+      <div class="uppercase-label mb-2">⚠ Item não encontrado no catálogo</div>
+      <div class="livre-row">
+        <input class="input" id="compra-livre-nome" placeholder="Nome do item">
+        <input class="input qtd" id="compra-livre-qtd" type="number" min="0.1" step="0.1" placeholder="Qtd">
+        <select class="select unid" id="compra-livre-unid">
+          <option value="kg">KG</option>
+          <option value="un">UND</option>
+          <option value="cx">Caixa</option>
+          <option value="bdj">Bandeja</option>
+          <option value="l">L</option>
+          <option value="pct">PCT</option>
+        </select>
+        <button class="btn btn-outline" onclick="addLivre('compra')">+ Adicionar</button>
+      </div>
+      <div class="livre-list" id="compra-livre-list"></div>
+    </div>
+
+    <!-- Histórico de compras -->
+    <div class="section-title mt-4" style="margin-top:32px">
+      <span>Histórico de Solicitações de Compra</span>
+      <span id="compra-hist-count" class="text-muted" style="font-size:12px"></span>
+    </div>
+    <div id="compra-historico"><div class="loading-text">Carregando histórico...</div></div>
+
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- ABA REQUISIÇÃO — Processo 2                                -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-req">
+
+    <div class="aviso aviso-info">
+      <span>Requisição da Comissaria — sem corte de horário. Cada cozinha solicita conforme sua necessidade.</span>
+    </div>
+
+    <div class="form-row col2">
+      <div class="field">
+        <label class="field-label">Data de Entrega Desejada</label>
+        <input class="input" type="date" id="req-data-entrega">
+      </div>
+      <div class="field">
+        <label class="field-label">Observação Geral (opcional)</label>
+        <input class="input" id="req-obs" placeholder="Algum detalhe...">
+      </div>
+    </div>
+
+    <div class="cat-tabs" id="req-cat-tabs">
+      <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCat('req','proteina')">Proteína</button>
+      <button class="cat-btn" data-cat="laticinios" onclick="setCat('req','laticinios')">Laticínios</button>
+      <button class="cat-btn" data-cat="hortifruti" onclick="setCat('req','hortifruti')">Hortifruti</button>
+      <button class="cat-btn" data-cat="diversos" onclick="setCat('req','diversos')">Diversos</button>
+    </div>
+
+    <div class="search-wrap">
+      <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input class="input search-input" id="req-search" placeholder="Buscar item no catálogo..." oninput="renderItens('req')">
+    </div>
+
+    <div id="req-items"><div class="loading-text">Carregando catálogo...</div></div>
+
+    <div class="livre-section">
+      <div class="uppercase-label mb-2">⚠ Item não encontrado no catálogo</div>
+      <div class="livre-row">
+        <input class="input" id="req-livre-nome" placeholder="Nome do item">
+        <input class="input qtd" id="req-livre-qtd" type="number" min="0.1" step="0.1" placeholder="Qtd">
+        <select class="select unid" id="req-livre-unid">
+          <option value="kg">KG</option>
+          <option value="un">UND</option>
+          <option value="cx">Caixa</option>
+          <option value="bdj">Bandeja</option>
+          <option value="l">L</option>
+          <option value="pct">PCT</option>
+        </select>
+        <button class="btn btn-outline" onclick="addLivre('req')">+ Adicionar</button>
+      </div>
+      <div class="livre-list" id="req-livre-list"></div>
+    </div>
+
+    <div class="section-title mt-4" style="margin-top:32px">
+      <span>Histórico de Requisições</span>
+      <span id="req-hist-count" class="text-muted" style="font-size:12px"></span>
+    </div>
+    <div id="req-historico"><div class="loading-text">Carregando histórico...</div></div>
+
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- ABA RASCUNHOS                                              -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-rascunhos">
+    <div class="aviso aviso-info">
+      Solicitações de compra que você salvou pra continuar depois. Clique em <strong>Editar</strong> pra
+      voltar ao carrinho, ou <strong>Apagar</strong> pra descartar.
+    </div>
+    <div class="section-title" style="margin-top:16px">
+      <span>Rascunhos salvos</span>
+      <span id="rascunhos-count" class="text-muted" style="font-size:12px"></span>
+    </div>
+    <div id="rascunhos-lista"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- ABA RELATÓRIOS                                             -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-relatorios">
+
+    <div class="aviso aviso-info">
+      Relatório de aquisições finalizadas do seu PDV. Use pra alimentar o inventário mensal.
+      Considera <strong>compras aprovadas/entregues</strong> e <strong>requisições entregues</strong>.
+    </div>
+
+    <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <span class="text-muted" style="font-size:12px">De</span>
+      <input class="input" type="date" id="rel-de" style="max-width:160px">
+      <span class="text-muted" style="font-size:12px">até</span>
+      <input class="input" type="date" id="rel-ate" style="max-width:160px">
+      <select class="select" id="rel-fonte" style="max-width:180px">
+        <option value="ambos">Ambas as fontes</option>
+        <option value="compra">Só Compras</option>
+        <option value="req">Só Requisições</option>
+      </select>
+      <select class="select" id="rel-cat" style="max-width:160px">
+        <option value="">Todas as categorias</option>
+        <option value="proteina">Proteína</option>
+        <option value="laticinios">Laticínios</option>
+        <option value="hortifruti">Hortifruti</option>
+        <option value="diversos">Diversos</option>
+      </select>
+      <button class="btn btn-outline" onclick="gerarRelatorio()">Gerar</button>
+      <button class="btn btn-outline" id="btnExportarRel" onclick="exportarRelatorio()" style="margin-left:auto;display:none">⤓ Exportar Excel</button>
+    </div>
+
+    <div id="rel-kpis" class="stats-grid" style="display:none"></div>
+
+    <div id="rel-tabela"><div class="empty-text">Selecione o período e clique em Gerar.</div></div>
+
+  </div>
+
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- BARRA DO CARRINHO FIXA                          -->
+<!-- ============================================== -->
+<div class="cart-bar" id="cartBar">
+  <div class="cart-info">
+    <span class="cart-count" id="cartCount">0</span>
+    <span id="cartLabel">iten(s) selecionado(s)</span>
+  </div>
+  <div class="cart-actions">
+    <button class="btn btn-secondary" id="btn-rascunho" onclick="salvarRascunho()" style="display:none">Salvar Rascunho</button>
+    <button class="btn btn-primary" onclick="abrirRevisao()">Revisar e Enviar</button>
+  </div>
+</div>
+
+<!-- Modal de revisão -->
+<div class="modal-overlay" id="revisaoModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="revisaoTitle">Revisar Pedido</span>
+      <button class="modal-close" onclick="fecharModal('revisaoModal')">×</button>
+    </div>
+    <div class="modal-body" id="revisaoBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('revisaoModal')">Voltar</button>
+      <button class="btn btn-primary" id="btn-confirmar" onclick="confirmarEnvio()">Confirmar Envio</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de sucesso -->
+<div class="modal-overlay" id="sucessoModal">
+  <div class="modal" style="width:420px; text-align:center">
+    <div class="modal-body" style="padding:40px">
+      <div style="font-size:48px; color:var(--green); margin-bottom:12px">✓</div>
+      <div class="serif" style="font-size:24px; color:var(--gold); letter-spacing:1px">Enviado com sucesso</div>
+      <div class="text-muted mt-2" id="sucessoNum"></div>
+      <div class="text-muted mt-1" id="sucessoSub" style="font-size:12px"></div>
+      <button class="btn btn-outline mt-4" onclick="novoPedido()">Novo Pedido</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Estado da aplicação
+const state = {
+  user: null,
+  perfil: null,
+  pdvId: null,
+  pdvNome: '',
+  catalogo: [],          // todos os itens ativos
+  abaAtual: 'compra',    // 'compra' | 'req'
+  catAtual: { compra: 'proteina', req: 'proteina' },
+  selecionados: { compra: {}, req: {} }, // { itemId: { item, qty, comentario } }
+  livres: { compra: [], req: [] },        // [{ nome, qtd, unidade, comentario }]
+  rascunhoIdCompra: null,                  // id da solicitacao se editando rascunho
+  historico: { compra: [], req: [] },
+  estoqueCritico: new Set(),               // itemIds com nível vermelho na Comissaria
+  estoqueAmarelo: new Set(),               // itemIds com nível amarelo (só aviso leve)
+};
+
+// =====================================================================
+// INIT
+// =====================================================================
+window.addEventListener('load', async () => {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { window.location.href = 'index.html'; return; }
+  state.user = user;
+
+  const { data: perfil } = await sb.from('usuarios')
+    .select('id, perfil, nome, pdv_id')
+    .eq('auth_uid', user.id).single();
+
+  if (!perfil || perfil.perfil !== 'pdv') {
+    window.location.href = 'index.html'; return;
+  }
+  state.perfil = perfil;
+
+  if (!perfil.pdv_id) {
+    showToast('Seu usuário PDV não tem PDV vinculado. Contate o administrador.', 'error');
+    return;
+  }
+
+  const { data: pdv } = await sb.from('pdvs').select('nome').eq('id', perfil.pdv_id).single();
+  state.pdvId = perfil.pdv_id;
+  state.pdvNome = pdv?.nome || '—';
+
+  document.getElementById('pdvChip').textContent = state.pdvNome;
+  document.getElementById('userName').textContent = perfil.nome || perfil.email;
+
+  // Datas padrão
+  const hoje = new Date();
+  const amanha = new Date(hoje); amanha.setDate(amanha.getDate() + 1);
+  document.getElementById('req-data-entrega').value = isoDate(hoje);
+  document.getElementById('compra-data-entrega').value = isoDate(amanha);
+
+  await Promise.all([carregarCatalogo(), carregarHistorico('compra'), carregarHistorico('req'), carregarRascunhos()]);
+  await carregarNiveisEstoque();
+
+  atualizarAvisoCorte();
+  setInterval(atualizarAvisoCorte, 60_000);
+
+  setCat('compra', 'proteina');
+  setCat('req', 'proteina');
+});
+
+function isoDate(d) { return d.toISOString().split('T')[0]; }
+
+// =====================================================================
+// CATÁLOGO
+// =====================================================================
+async function carregarCatalogo() {
+  const { data, error } = await sb.from('itens').select('*').eq('ativo', true).order('nome');
+  if (error) { console.error(error); showToast('Erro ao carregar catálogo: ' + error.message, 'error'); return; }
+  state.catalogo = data || [];
+}
+
+// Carrega níveis de estoque atuais (saldo teórico da view) para exibir alertas
+// na aba requisição. Semáforo por dias de cobertura: verde≥3, amarelo 1-3, vermelho<1.
+async function carregarNiveisEstoque() {
+  state.estoqueCritico.clear();
+  state.estoqueAmarelo.clear();
+  const [saldoR, consumoR] = await Promise.all([
+    sb.from('v_estoque_saldo').select('item_id, saldo_teorico, sem_baseline'),
+    sb.from('v_estoque_consumo').select('item_id, saidas_30d'),
+  ]);
+  const mapConsumo30 = {};
+  (consumoR.data || []).forEach(c => { mapConsumo30[c.item_id] = parseFloat(c.saidas_30d) || 0; });
+  const mapMediaCat = {};
+  state.catalogo.forEach(it => { mapMediaCat[it.id] = parseFloat(it.media_diaria) || 0; });
+  (saldoR.data || []).forEach(s => {
+    if (s.sem_baseline || s.saldo_teorico === null) return;
+    const qtd = parseFloat(s.saldo_teorico);
+    // Consumo médio: prioriza dinâmico (últimos 30d), fallback pro catálogo
+    const md30 = mapConsumo30[s.item_id] || 0;
+    const md = md30 > 0 ? md30 / 30 : (mapMediaCat[s.item_id] || 0);
+    if (md <= 0) return;
+    const dias = qtd / md;
+    if (dias < 1)      state.estoqueCritico.add(s.item_id);
+    else if (dias < 3) state.estoqueAmarelo.add(s.item_id);
+  });
+}
+
+function renderItens(aba) {
+  const cat = state.catAtual[aba];
+  const q = (document.getElementById(`${aba}-search`).value || '').toLowerCase();
+  const itens = state.catalogo.filter(i =>
+    i.categoria === cat &&
+    (!q || i.nome.toLowerCase().includes(q) ||
+     (i.fornecedor_principal || '').toLowerCase().includes(q))
+  );
+
+  const cont = document.getElementById(`${aba}-items`);
+  if (itens.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item nesta categoria — use "Item não encontrado no catálogo" abaixo.</div>';
+    return;
+  }
+
+  cont.innerHTML = itens.map(item => {
+    const sel = state.selecionados[aba][item.id];
+    const qty = sel ? sel.qty : 1;
+    const com = sel ? (sel.comentario || '') : '';
+    const alerta = sel && item.media_diaria > 0 && qty > item.media_diaria * 3
+      ? `<span class="qty-alert">⚠ ${(qty / item.media_diaria).toFixed(1)}× a média histórica</span>` : '';
+    // Alerta de estoque crítico (só na aba requisição — Comissaria fornece).
+    let estoqueBadge = '';
+    if (aba === 'req') {
+      if (state.estoqueCritico.has(item.id)) {
+        estoqueBadge = ` <span class="est-badge est-red" title="Estoque crítico na Comissaria — considere compra externa">⚠ estoque crítico</span>`;
+      } else if (state.estoqueAmarelo.has(item.id)) {
+        estoqueBadge = ` <span class="est-badge est-yellow" title="Estoque baixo na Comissaria">⚠ estoque baixo</span>`;
+      }
+    }
+    return `
+      <div class="item-row ${sel ? 'selected' : ''}" id="row-${aba}-${item.id}">
+        <div class="item-check">${sel ? '✓' : ''}</div>
+        <div class="item-name">${escapeHtml(item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+        <div class="item-unit">${item.unidade}</div>
+        <div class="item-actions-cell">
+          <div class="item-qty-wrap">
+            <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',-1)">−</button>
+            <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQty('${aba}','${item.id}',this.value)" onclick="this.select()">
+            <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',1)">+</button>
+          </div>
+          ${alerta}
+          <button class="item-action add" onclick="adicionarItem('${aba}','${item.id}')">+ Adicionar</button>
+          <button class="item-action remove" onclick="removerItem('${aba}','${item.id}')">Remover</button>
+        </div>
+        <div class="item-coment">
+          <input placeholder="Comentário sobre este item (opcional)..." value="${escapeHtml(com)}" onchange="setComentario('${aba}','${item.id}',this.value)">
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function setCat(aba, cat) {
+  state.catAtual[aba] = cat;
+  document.querySelectorAll(`#${aba}-cat-tabs .cat-btn`).forEach(btn => {
+    btn.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
+    if (btn.dataset.cat === cat) btn.classList.add('on-' + cat);
+  });
+  document.getElementById(`${aba}-search`).value = '';
+  renderItens(aba);
+}
+
+function adicionarItem(aba, itemId) {
+  const input = document.querySelector(`#row-${aba}-${itemId} .qty-input`);
+  const qty = input ? (parseFloat(input.value) || 1) : 1;
+  if (qty <= 0) { showToast('Quantidade inválida.', 'error'); return; }
+  const item = state.catalogo.find(i => i.id === itemId);
+  if (!item) return;
+  const comentInput = document.querySelector(`#row-${aba}-${itemId} .item-coment input`);
+  const comentario = comentInput ? comentInput.value.trim() : '';
+  state.selecionados[aba][itemId] = { item, qty, comentario };
+  renderItens(aba);
+  atualizarCarrinho();
+  if (aba === 'req' && state.estoqueCritico.has(itemId)) {
+    showToast(`Estoque crítico de "${item.nome.slice(0,40)}" na Comissaria — pode haver ruptura. Confirme com a Comissaria ou solicite compra externa.`, 'warn', 6000);
+  }
+}
+
+function removerItem(aba, itemId) {
+  delete state.selecionados[aba][itemId];
+  renderItens(aba);
+  atualizarCarrinho();
+}
+
+function changeQty(aba, itemId, delta) {
+  // Sempre atualiza o input do DOM (permite ajustar antes de Adicionar).
+  const input = document.querySelector(`#row-${aba}-${itemId} .qty-input`);
+  if (!input) return;
+  const cur = parseFloat(input.value) || 1;
+  const novo = Math.max(0.1, Math.round((cur + delta) * 10) / 10);
+  input.value = novo;
+  // Se já está no carrinho, sincroniza state (sem re-render pra não perder valores digitados em outras linhas).
+  const sel = state.selecionados[aba][itemId];
+  if (sel) { sel.qty = novo; atualizarCarrinho(); }
+}
+
+function setQty(aba, itemId, val) {
+  const v = parseFloat(val);
+  const qty = isNaN(v) || v <= 0 ? 1 : v;
+  // Se não está no carrinho ainda, só o valor do input importa (será lido no Adicionar).
+  const sel = state.selecionados[aba][itemId];
+  if (!sel) return;
+  sel.qty = qty;
+  renderItens(aba);  // re-render pra atualizar alerta de qty alta
+}
+
+function setComentario(aba, itemId, val) {
+  const sel = state.selecionados[aba][itemId];
+  if (!sel) return;
+  sel.comentario = val.trim();
+}
+
+// =====================================================================
+// ITEM LIVRE
+// =====================================================================
+function addLivre(aba) {
+  const nome = document.getElementById(`${aba}-livre-nome`).value.trim();
+  const qtd  = parseFloat(document.getElementById(`${aba}-livre-qtd`).value);
+  const unid = document.getElementById(`${aba}-livre-unid`).value;
+  if (!nome || isNaN(qtd) || qtd <= 0) {
+    showToast('Informe nome e quantidade válida do item livre.', 'error');
+    return;
+  }
+  state.livres[aba].push({ nome, qtd, unidade: unid, comentario: '' });
+  document.getElementById(`${aba}-livre-nome`).value = '';
+  document.getElementById(`${aba}-livre-qtd`).value = '';
+  renderLivres(aba);
+  atualizarCarrinho();
+}
+
+function renderLivres(aba) {
+  const list = document.getElementById(`${aba}-livre-list`);
+  list.innerHTML = state.livres[aba].map((it, i) => `
+    <div class="livre-chip">
+      <span>⚠ ${escapeHtml(it.nome)} — ${it.qtd} ${it.unidade}</span>
+      <span class="remove" onclick="removeLivre('${aba}',${i})">✕</span>
+    </div>`).join('');
+}
+
+function removeLivre(aba, idx) {
+  state.livres[aba].splice(idx, 1);
+  renderLivres(aba);
+  atualizarCarrinho();
+}
+
+// =====================================================================
+// CARRINHO
+// =====================================================================
+function atualizarCarrinho() {
+  const aba = state.abaAtual;
+  if (aba === 'relatorios') {
+    document.getElementById('cartBar').className = 'cart-bar';
+    return;
+  }
+  const total = Object.keys(state.selecionados[aba]).length + state.livres[aba].length;
+  document.getElementById('cartCount').textContent = total;
+  document.getElementById('cartBar').className = total > 0 ? 'cart-bar visible' : 'cart-bar';
+  document.getElementById('btn-rascunho').style.display = aba === 'compra' ? 'inline-block' : 'none';
+}
+
+const tabTitles = {
+  compra:     ['Solicitar Compra', 'Pedido para compra externa (aprovação do Gerente)'],
+  req:        ['Requisição da Comissaria', 'Pedido de itens do estoque interno — sem aprovação'],
+  rascunhos:  ['Rascunhos', 'Solicitações salvas pra continuar depois'],
+  relatorios: ['Relatórios', 'Aquisições finalizadas do seu PDV'],
+};
+
+function goTab(aba, el) {
+  state.abaAtual = aba;
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + aba).classList.add('active');
+  if (el) el.classList.add('active');
+  const [t, s] = tabTitles[aba] || [aba, ''];
+  document.getElementById('topTitle').textContent = t;
+  document.getElementById('topSub').textContent = s;
+  atualizarCarrinho();
+  if (aba === 'relatorios') setupRelatorio();
+  if (aba === 'rascunhos') carregarRascunhos();
+}
+// Compat: manter switchAba como alias pra chamadas internas (ex: novoPedido, load inicial)
+const switchAba = (aba) => {
+  const map = { compra: 0, req: 1, rascunhos: 2, relatorios: 3 };
+  const nav = document.querySelectorAll('.nav-item')[map[aba] ?? 0];
+  goTab(aba, nav);
+};
+
+// =====================================================================
+// REGRA DE CORTE 10h (somente Compra)
+// =====================================================================
+function getCompetenciaCompra() {
+  const agora = new Date();
+  const corte = new Date(); corte.setHours(10, 0, 0, 0);
+  const data = new Date();
+  if (agora >= corte) data.setDate(data.getDate() + 1);
+  return data;
+}
+
+function atualizarAvisoCorte() {
+  const agora = new Date();
+  const corte = new Date(); corte.setHours(10, 0, 0, 0);
+  const aviso = document.getElementById('avisoCorte');
+  const txt = document.getElementById('avisoCorteTxt');
+  if (agora < corte) {
+    aviso.className = 'aviso aviso-success';
+    const ms = corte - agora;
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    txt.textContent = `Pedido será incluído na lista de COMPRAS de hoje. Corte em ${h}h${String(m).padStart(2,'0')}.`;
+  } else {
+    aviso.className = 'aviso aviso-warn';
+    txt.textContent = 'Após as 10h00 — este pedido entra na lista de COMPRAS de amanhã.';
+  }
+}
+
+// =====================================================================
+// REVISÃO E ENVIO
+// =====================================================================
+function abrirRevisao() {
+  const aba = state.abaAtual;
+  const sel = Object.values(state.selecionados[aba]);
+  const livres = state.livres[aba];
+  if (sel.length === 0 && livres.length === 0) {
+    showToast('Selecione ao menos um item antes de enviar.', 'error');
+    return;
+  }
+
+  const obs = document.getElementById(`${aba}-obs`).value.trim();
+  const dataEntrega = document.getElementById(`${aba}-data-entrega`).value;
+  const competencia = aba === 'compra' ? isoDate(getCompetenciaCompra()) : isoDate(new Date());
+
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  const porCat = { proteina: [], laticinios: [], hortifruti: [], diversos: [] };
+  sel.forEach(s => porCat[s.item.categoria]?.push(s));
+
+  let html = '';
+  for (const cat of Object.keys(porCat)) {
+    if (porCat[cat].length === 0) continue;
+    html += `<div class="mb-3">
+      <div class="uppercase-label mb-2">${catLabels[cat]}</div>
+      ${porCat[cat].map(s => `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
+          <span>${escapeHtml(s.item.nome)}${s.comentario ? ` <em style="color:var(--muted);font-size:11px">— ${escapeHtml(s.comentario)}</em>` : ''}</span>
+          <span style="color:var(--gold);font-weight:500">${s.qty} ${s.item.unidade}</span>
+        </div>`).join('')}
+    </div>`;
+  }
+  if (livres.length > 0) {
+    html += `<div class="mb-3">
+      <div class="uppercase-label mb-2">Itens não encontrados no catálogo</div>
+      ${livres.map(l => `<div style="padding:6px 0;font-size:13px;color:var(--orange)">⚠ ${escapeHtml(l.nome)} — ${l.qtd} ${l.unidade}</div>`).join('')}
+    </div>`;
+  }
+  if (obs) {
+    html += `<div class="mb-3"><div class="uppercase-label mb-2">Observação</div><div style="font-size:13px;color:var(--muted)">${escapeHtml(obs)}</div></div>`;
+  }
+  html += `<div style="font-size:12px;color:var(--muted);margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle)">
+    <strong style="color:var(--text)">PDV:</strong> ${escapeHtml(state.pdvNome)} ·
+    <strong style="color:var(--text)">Tipo:</strong> ${aba === 'compra' ? 'Solicitação de COMPRA' : 'Requisição de ESTOQUE'} ·
+    <strong style="color:var(--text)">Competência:</strong> ${ptDate(competencia)}
+    ${dataEntrega ? `· <strong style="color:var(--text)">Entrega desejada:</strong> ${ptDate(dataEntrega)}` : ''}
+  </div>`;
+
+  document.getElementById('revisaoTitle').textContent = aba === 'compra' ? 'Revisar Solicitação de Compra' : 'Revisar Requisição';
+  document.getElementById('revisaoBody').innerHTML = html;
+  abrirModal('revisaoModal');
+}
+
+async function confirmarEnvio() {
+  const aba = state.abaAtual;
+  const btn = document.getElementById('btn-confirmar');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  try {
+    if (aba === 'compra') await enviarCompra();
+    else                  await enviarRequisicao();
+  } catch (err) {
+    // Diagnóstico ampliado — mostra estado local + erro completo no console
+    console.error('[Envio falhou]', {
+      aba,
+      pdvId: state.pdvId,
+      perfilId: state.perfil?.id,
+      perfil: state.perfil?.perfil,
+      authUid: state.user?.id,
+      err,
+    });
+    showToast('Erro ao enviar: ' + err.message, 'error');
+    btn.disabled = false; btn.textContent = 'Confirmar Envio';
+    return;
+  }
+  fecharModal('revisaoModal');
+  btn.disabled = false; btn.textContent = 'Confirmar Envio';
+}
+
+async function enviarCompra() {
+  const obs = document.getElementById('compra-obs').value.trim();
+  const dataEntrega = document.getElementById('compra-data-entrega').value || null;
+  const competencia = isoDate(getCompetenciaCompra());
+
+  let solcId = state.rascunhoIdCompra;
+  if (solcId) {
+    // Atualizar rascunho existente para 'enviada'
+    const { error } = await sb.from('solicitacoes_compra').update({
+      status: 'enviada',
+      data_competencia: competencia,
+      data_entrega_desejada: dataEntrega,
+      observacao: obs || null,
+    }).eq('id', solcId);
+    if (error) throw error;
+    // Apagar itens antigos para sobrescrever
+    await sb.from('solicitacao_compra_itens').delete().eq('solicitacao_id', solcId);
+  } else {
+    const { data, error } = await sb.from('solicitacoes_compra').insert({
+      pdv_id: state.pdvId,
+      usuario_id: state.perfil.id,
+      status: 'enviada',
+      data_competencia: competencia,
+      data_entrega_desejada: dataEntrega,
+      observacao: obs || null,
+    }).select().single();
+    if (error) throw error;
+    solcId = data.id;
+  }
+
+  await inserirItensSolicitacao(solcId, 'compra');
+
+  state.rascunhoIdCompra = null;
+  mostrarSucesso(solcId, 'compra', competencia);
+}
+
+async function enviarRequisicao() {
+  const obs = document.getElementById('req-obs').value.trim();
+  const dataEntrega = document.getElementById('req-data-entrega').value || null;
+
+  const { data, error } = await sb.from('requisicoes').insert({
+    pdv_id: state.pdvId,
+    usuario_id: state.perfil.id,
+    status: 'enviado',
+    data_competencia: isoDate(new Date()),
+    data_entrega_desejada: dataEntrega,
+    observacao: obs || null,
+  }).select().single();
+  if (error) throw error;
+
+  await inserirItensRequisicao(data.id);
+
+  mostrarSucesso(data.id, 'req', data.data_competencia);
+}
+
+async function inserirItensSolicitacao(solcId, aba) {
+  const sel = Object.values(state.selecionados[aba]);
+  const livres = state.livres[aba];
+  const itensCat = sel.map(s => ({
+    solicitacao_id: solcId,
+    item_id: s.item.id,
+    item_nome: s.item.nome,
+    item_categoria: s.item.categoria,
+    item_unidade: s.item.unidade,
+    quantidade_solicitada: s.qty,
+    comentario: s.comentario || null,
+    item_livre: false,
+  }));
+  const itensLivres = livres.map(l => ({
+    solicitacao_id: solcId,
+    item_id: null,
+    item_nome: l.nome,
+    item_categoria: state.catAtual[aba],
+    item_unidade: l.unidade,
+    quantidade_solicitada: l.qtd,
+    comentario: l.comentario || null,
+    item_livre: true,
+  }));
+  const todos = [...itensCat, ...itensLivres];
+  if (todos.length > 0) {
+    const { error } = await sb.from('solicitacao_compra_itens').insert(todos);
+    if (error) throw error;
+  }
+  // Itens livres → fila para gerente_compras revisar
+  if (livres.length > 0) {
+    await sb.from('itens_pendentes').insert(livres.map(l => ({
+      origem: 'compra',
+      solicitacao_id: solcId,
+      pdv_id: state.pdvId,
+      nome_digitado: l.nome,
+      categoria_sugerida: state.catAtual[aba],
+      unidade_sugerida: l.unidade,
+      status: 'pendente',
+    })));
+  }
+}
+
+async function inserirItensRequisicao(reqId) {
+  const sel = Object.values(state.selecionados.req);
+  const livres = state.livres.req;
+  const itensCat = sel.map(s => ({
+    requisicao_id: reqId,
+    item_id: s.item.id,
+    item_nome: s.item.nome,
+    item_categoria: s.item.categoria,
+    item_unidade: s.item.unidade,
+    quantidade_solicitada: s.qty,
+    comentario: s.comentario || null,
+    item_livre: false,
+  }));
+  const itensLivres = livres.map(l => ({
+    requisicao_id: reqId,
+    item_id: null,
+    item_nome: l.nome,
+    item_categoria: state.catAtual.req,
+    item_unidade: l.unidade,
+    quantidade_solicitada: l.qtd,
+    comentario: l.comentario || null,
+    item_livre: true,
+  }));
+  const todos = [...itensCat, ...itensLivres];
+  if (todos.length > 0) {
+    const { error } = await sb.from('requisicao_itens').insert(todos);
+    if (error) throw error;
+  }
+  if (livres.length > 0) {
+    await sb.from('itens_pendentes').insert(livres.map(l => ({
+      origem: 'requisicao',
+      requisicao_id: reqId,
+      pdv_id: state.pdvId,
+      nome_digitado: l.nome,
+      categoria_sugerida: state.catAtual.req,
+      unidade_sugerida: l.unidade,
+      status: 'pendente',
+    })));
+  }
+}
+
+function mostrarSucesso(id, aba, competencia) {
+  const numStr = '#' + String(id).slice(0, 8);
+  document.getElementById('sucessoNum').textContent = numStr;
+  document.getElementById('sucessoSub').textContent = aba === 'compra'
+    ? `Solicitação de compra entra na lista de ${ptDate(competencia)}.`
+    : `Requisição enviada para a Comissaria.`;
+  abrirModal('sucessoModal');
+}
+
+function novoPedido() {
+  state.selecionados[state.abaAtual] = {};
+  state.livres[state.abaAtual] = [];
+  document.getElementById(state.abaAtual + '-obs').value = '';
+  fecharModal('sucessoModal');
+  renderItens(state.abaAtual);
+  renderLivres(state.abaAtual);
+  atualizarCarrinho();
+  carregarHistorico(state.abaAtual);
+}
+
+// =====================================================================
+// RASCUNHO (somente Compra)
+// =====================================================================
+async function salvarRascunho() {
+  const sel = Object.values(state.selecionados.compra);
+  const livres = state.livres.compra;
+  if (sel.length === 0 && livres.length === 0) {
+    showToast('Adicione itens antes de salvar.', 'error'); return;
+  }
+  const obs = document.getElementById('compra-obs').value.trim();
+  const dataEntrega = document.getElementById('compra-data-entrega').value || null;
+
+  let solcId = state.rascunhoIdCompra;
+  if (solcId) {
+    await sb.from('solicitacoes_compra').update({
+      status: 'rascunho',
+      data_entrega_desejada: dataEntrega,
+      observacao: obs || null,
+    }).eq('id', solcId);
+    await sb.from('solicitacao_compra_itens').delete().eq('solicitacao_id', solcId);
+  } else {
+    const { data, error } = await sb.from('solicitacoes_compra').insert({
+      pdv_id: state.pdvId,
+      usuario_id: state.perfil.id,
+      status: 'rascunho',
+      data_entrega_desejada: dataEntrega,
+      observacao: obs || null,
+    }).select().single();
+    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    state.rascunhoIdCompra = data.id;
+    solcId = data.id;
+  }
+
+  try {
+    await inserirItensSolicitacao(solcId, 'compra');
+  } catch (err) {
+    showToast('Erro ao salvar itens: ' + err.message, 'error'); return;
+  }
+
+  // Zerar carrinho após salvar — usuário pode começar nova lista.
+  // O rascunho fica salvo e pode ser retomado pela aba "Rascunhos".
+  state.selecionados.compra = {};
+  state.livres.compra = [];
+  state.rascunhoIdCompra = null;
+  document.getElementById('compra-obs').value = '';
+  renderItens('compra');
+  renderLivres('compra');
+  atualizarCarrinho();
+
+  showToast('Rascunho salvo. Carrinho zerado — encontre em "Rascunhos" pra continuar.', 'success');
+  await Promise.all([carregarHistorico('compra'), carregarRascunhos()]);
+}
+
+async function carregarRascunho(id) {
+  const { data: solc } = await sb.from('solicitacoes_compra').select('*').eq('id', id).single();
+  if (!solc) { showToast('Rascunho não encontrado.', 'error'); return; }
+  const { data: itens } = await sb.from('solicitacao_compra_itens').select('*').eq('solicitacao_id', id);
+
+  state.rascunhoIdCompra = id;
+  state.selecionados.compra = {};
+  state.livres.compra = [];
+  for (const it of itens || []) {
+    if (it.item_livre) {
+      state.livres.compra.push({ nome: it.item_nome, qtd: parseFloat(it.quantidade_solicitada), unidade: it.item_unidade, comentario: it.comentario || '' });
+    } else if (it.item_id) {
+      const item = state.catalogo.find(c => c.id === it.item_id);
+      if (item) state.selecionados.compra[item.id] = { item, qty: parseFloat(it.quantidade_solicitada), comentario: it.comentario || '' };
+    }
+  }
+  document.getElementById('compra-obs').value = solc.observacao || '';
+  if (solc.data_entrega_desejada) document.getElementById('compra-data-entrega').value = solc.data_entrega_desejada;
+
+  switchAba('compra');
+  renderItens('compra');
+  renderLivres('compra');
+  atualizarCarrinho();
+  showToast('Rascunho carregado para edição.', 'info');
+}
+
+async function descartarRascunho(id) {
+  if (!confirm('Tem certeza que deseja apagar este rascunho? A ação não pode ser desfeita.')) return;
+  await sb.from('solicitacao_compra_itens').delete().eq('solicitacao_id', id);
+  await sb.from('solicitacoes_compra').delete().eq('id', id);
+  if (state.rascunhoIdCompra === id) {
+    state.rascunhoIdCompra = null;
+    // Se o rascunho apagado estava sendo editado, zera o carrinho
+    state.selecionados.compra = {};
+    state.livres.compra = [];
+    document.getElementById('compra-obs').value = '';
+    renderItens('compra');
+    renderLivres('compra');
+    atualizarCarrinho();
+  }
+  showToast('Rascunho apagado.', 'info');
+  await Promise.all([carregarHistorico('compra'), carregarRascunhos()]);
+}
+
+// ==================== ABA RASCUNHOS ====================
+async function carregarRascunhos() {
+  const { data } = await sb.from('solicitacoes_compra')
+    .select('*, solicitacao_compra_itens(*)')
+    .eq('pdv_id', state.pdvId)
+    .eq('status', 'rascunho')
+    .order('created_at', { ascending: false });
+  const lista = data || [];
+  const cont = document.getElementById('rascunhos-lista');
+  const badge = document.getElementById('badgeRascunhos');
+  const countEl = document.getElementById('rascunhos-count');
+  if (badge) badge.textContent = lista.length > 0 ? String(lista.length) : '';
+  if (countEl) countEl.textContent = lista.length === 0 ? 'nenhum' : `${lista.length} rascunho(s)`;
+  if (!cont) return;
+  if (lista.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum rascunho salvo. Salve um pedido em andamento na aba "Solicitar Compra" pra continuar depois.</div>';
+    return;
+  }
+  cont.innerHTML = lista.map(s => {
+    const itens = s.solicitacao_compra_itens || [];
+    const resumo = itens.slice(0, 5).map(i => `<span>${escapeHtml(i.item_nome)} (${i.quantidade_solicitada}${i.item_unidade ? ' '+i.item_unidade : ''})</span>`).join(', ');
+    const mais = itens.length > 5 ? ` +${itens.length - 5}` : '';
+    return `<div class="hist-card is-rascunho">
+      <div class="head">
+        <span class="meta">#${String(s.id).slice(0,8)} · salvo em ${ptDate(s.created_at)}${s.data_entrega_desejada ? ` · entrega desejada ${ptDate(s.data_entrega_desejada)}` : ''}</span>
+        <span class="badge status-rascunho">Rascunho</span>
+      </div>
+      <div class="resumo">${resumo}${mais ? `<span class="text-muted">${mais}</span>` : ''}</div>
+      ${s.observacao ? `<div class="obs">💬 ${escapeHtml(s.observacao)}</div>` : ''}
+      <div class="hist-actions">
+        <button class="btn btn-sm btn-outline" onclick="carregarRascunho('${s.id}')">Editar / Continuar</button>
+        <button class="btn btn-sm btn-secondary" onclick="descartarRascunho('${s.id}')">Apagar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// =====================================================================
+// HISTÓRICO
+// =====================================================================
+async function carregarHistorico(aba) {
+  const cont = document.getElementById(`${aba}-historico`);
+  if (aba === 'compra') {
+    const { data } = await sb.from('solicitacoes_compra')
+      .select('*, solicitacao_compra_itens(*)')
+      .eq('pdv_id', state.pdvId)
+      .neq('status', 'rascunho')  // Rascunhos aparecem em aba própria
+      .order('created_at', { ascending: false })
+      .limit(30);
+    state.historico.compra = data || [];
+    document.getElementById('compra-hist-count').textContent = `${state.historico.compra.length} solicitação(ões)`;
+    cont.innerHTML = renderHistoricoCompra();
+  } else {
+    const { data } = await sb.from('requisicoes')
+      .select('*, requisicao_itens(*)')
+      .eq('pdv_id', state.pdvId)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    state.historico.req = data || [];
+    document.getElementById('req-hist-count').textContent = `${state.historico.req.length} requisição(ões)`;
+    cont.innerHTML = renderHistoricoReq();
+  }
+}
+
+function renderHistoricoCompra() {
+  if (state.historico.compra.length === 0) return '<div class="empty-text">Nenhuma solicitação ainda.</div>';
+  const statusLabel = { rascunho:'Rascunho', enviada:'Aguardando aprovação', aprovada:'Aprovada', rejeitada:'Rejeitada', entregue:'Entregue' };
+  return state.historico.compra.map(s => {
+    const itens = s.solicitacao_compra_itens || [];
+    const resumo = itens.slice(0, 3).map(i => `<span>${escapeHtml(i.item_nome)} (${i.quantidade_solicitada}${i.item_unidade ? ' '+i.item_unidade : ''})</span>`).join(', ');
+    const mais = itens.length > 3 ? ` +${itens.length - 3}` : '';
+    const data = ptDate(s.created_at);
+    return `<div class="hist-card">
+      <div class="head">
+        <span class="meta">#${String(s.id).slice(0,8)} · ${data}${s.data_entrega_desejada ? ` · entrega ${ptDate(s.data_entrega_desejada)}` : ''}</span>
+        <span class="badge status-${s.status}">${statusLabel[s.status] || s.status}</span>
+      </div>
+      <div class="resumo">${resumo}${mais ? `<span class="text-muted">${mais}</span>` : ''}</div>
+      ${s.observacao ? `<div class="obs">💬 ${escapeHtml(s.observacao)}</div>` : ''}
+      ${s.motivo_rejeicao ? `<div class="motivo">Motivo da rejeição: ${escapeHtml(s.motivo_rejeicao)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderHistoricoReq() {
+  if (state.historico.req.length === 0) return '<div class="empty-text">Nenhuma requisição ainda.</div>';
+  const statusLabel = { enviado:'Aguardando', separacao:'Em Separação', entregue:'Entregue', cancelada:'Cancelada' };
+  return state.historico.req.map(r => {
+    const itens = r.requisicao_itens || [];
+    const resumo = itens.slice(0, 3).map(i => `<span>${escapeHtml(i.item_nome)} (${i.quantidade_solicitada}${i.item_unidade ? ' '+i.item_unidade : ''})</span>`).join(', ');
+    const mais = itens.length > 3 ? ` +${itens.length - 3}` : '';
+    const data = ptDate(r.created_at);
+    const divs = itens.filter(i => i.divergencia).length;
+    return `<div class="hist-card">
+      <div class="head">
+        <span class="meta">#${String(r.id).slice(0,8)} · ${data}</span>
+        <span class="badge status-${r.status}">${statusLabel[r.status] || r.status}</span>
+      </div>
+      <div class="resumo">${resumo}${mais ? `<span class="text-muted">${mais}</span>` : ''}</div>
+      ${r.observacao ? `<div class="obs">💬 ${escapeHtml(r.observacao)}</div>` : ''}
+      ${divs > 0 ? `<div class="motivo">${divs} item(s) com divergência na entrega</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+function ptDate(d) {
+  const date = new Date(typeof d === 'string' && d.length === 10 ? d + 'T12:00:00' : d);
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function escapeHtml(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function abrirModal(id) { document.getElementById(id).classList.add('open'); }
+function fecharModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function showToast(msg, tipo='info', duration=4000) {
+  const stack = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast ' + tipo;
+  t.textContent = msg;
+  stack.appendChild(t);
+  setTimeout(() => t.remove(), duration);
+}
+
+// =====================================================================
+// RELATÓRIOS
+// =====================================================================
+const CAT_LABEL = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+let relCache = null;
+
+function setupRelatorio() {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+  const de = document.getElementById('rel-de');
+  const ate = document.getElementById('rel-ate');
+  if (!de.value) de.value = isoDate(firstDay);
+  if (!ate.value) ate.value = isoDate(now);
+}
+
+function fmtQty(n) {
+  if (n == null || isNaN(n)) return '—';
+  return Number(n).toFixed(2).replace(/\.?0+$/, '');
+}
+
+async function gerarRelatorio() {
+  const de = document.getElementById('rel-de').value;
+  const ate = document.getElementById('rel-ate').value;
+  const fonte = document.getElementById('rel-fonte').value;
+  const cat = document.getElementById('rel-cat').value;
+  if (!de || !ate) { showToast('Preencha o período.', 'error'); return; }
+  if (de > ate) { showToast('Data inicial maior que a final.', 'error'); return; }
+
+  const tabela = document.getElementById('rel-tabela');
+  tabela.innerHTML = '<div class="loading-text">Carregando...</div>';
+  document.getElementById('btnExportarRel').style.display = 'none';
+
+  // RLS filtra automaticamente por PDV (pdv só vê o dele).
+  const rows = [];
+
+  if (fonte === 'ambos' || fonte === 'compra') {
+    const { data, error } = await sb.from('solicitacoes_compra')
+      .select('id, data_competencia, status, solicitacao_compra_itens(item_nome, item_categoria, item_unidade, quantidade_solicitada, itens(fornecedor_principal))')
+      .in('status', ['aprovada','entregue'])
+      .gte('data_competencia', de)
+      .lte('data_competencia', ate);
+    if (error) { showToast('Erro (compras): ' + error.message, 'error'); tabela.innerHTML = ''; return; }
+    (data || []).forEach(s => (s.solicitacao_compra_itens || []).forEach(it => {
+      if (cat && it.item_categoria !== cat) return;
+      rows.push({ fonte:'compra', nome:it.item_nome, cat:it.item_categoria, unid:it.item_unidade,
+                  qty: parseFloat(it.quantidade_solicitada) || 0,
+                  forn: it.itens?.fornecedor_principal || '—' });
+    }));
+  }
+
+  if (fonte === 'ambos' || fonte === 'req') {
+    const { data, error } = await sb.from('requisicoes')
+      .select('id, data_competencia, status, requisicao_itens(item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, itens(fornecedor_principal))')
+      .eq('status', 'entregue')
+      .gte('data_competencia', de)
+      .lte('data_competencia', ate);
+    if (error) { showToast('Erro (requisições): ' + error.message, 'error'); tabela.innerHTML = ''; return; }
+    (data || []).forEach(r => (r.requisicao_itens || []).forEach(it => {
+      if (cat && it.item_categoria !== cat) return;
+      const q = it.quantidade_entregue != null ? it.quantidade_entregue : it.quantidade_solicitada;
+      rows.push({ fonte:'req', nome:it.item_nome, cat:it.item_categoria, unid:it.item_unidade,
+                  qty: parseFloat(q) || 0,
+                  forn: it.itens?.fornecedor_principal || '—' });
+    }));
+  }
+
+  // Agregar por (nome, categoria, unidade)
+  const acc = {};
+  rows.forEach(r => {
+    const k = `${r.nome}||${r.cat}||${r.unid || ''}`;
+    if (!acc[k]) acc[k] = { nome:r.nome, cat:r.cat, unid:r.unid, forn:r.forn, qtyCompra:0, qtyReq:0, qtyTotal:0 };
+    if (r.fonte === 'compra') acc[k].qtyCompra += r.qty;
+    else acc[k].qtyReq += r.qty;
+    acc[k].qtyTotal += r.qty;
+  });
+  const itens = Object.values(acc).sort((a,b) => b.qtyTotal - a.qtyTotal);
+
+  relCache = { itens, de, ate, fonte, cat };
+  renderRelatorioKPIs(itens);
+  renderRelatorioTabela(itens, fonte);
+  document.getElementById('btnExportarRel').style.display = itens.length ? 'inline-block' : 'none';
+}
+
+function renderRelatorioKPIs(itens) {
+  const kpis = document.getElementById('rel-kpis');
+  if (itens.length === 0) { kpis.style.display = 'none'; return; }
+  const totalItens = itens.length;
+  const totalQty = itens.reduce((s,x) => s + x.qtyTotal, 0);
+  kpis.style.display = 'grid';
+  kpis.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Itens distintos</div>
+      <div class="stat-val">${totalItens}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Quantidade total</div>
+      <div class="stat-val gold">${fmtQty(totalQty)}</div>
+      <div class="stat-sub">soma bruta (unidades variam)</div>
+    </div>
+  `;
+}
+
+function renderRelatorioTabela(itens, fonte) {
+  const cont = document.getElementById('rel-tabela');
+  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma aquisição finalizada no período.</div>'; return; }
+  const grupos = {};
+  itens.forEach(x => { (grupos[x.cat] = grupos[x.cat] || []).push(x); });
+  const ordemCat = ['proteina','laticinios','hortifruti','diversos'];
+  const showC = fonte === 'ambos' || fonte === 'compra';
+  const showR = fonte === 'ambos' || fonte === 'req';
+  cont.innerHTML = ordemCat.filter(c => grupos[c]).map(c => {
+    const lista = grupos[c];
+    const subtotal = lista.reduce((s,x) => s + x.qtyTotal, 0);
+    return `
+      <div class="section-title" style="margin-top:20px">
+        <span>${CAT_LABEL[c]} <span class="text-muted" style="font-size:12px">· ${lista.length} itens · total ${fmtQty(subtotal)}</span></span>
+      </div>
+      <table class="data-table">
+        <thead><tr>
+          <th>Item</th><th>Fornecedor</th><th class="center">Un</th>
+          ${showC ? '<th class="num">Comprada</th>' : ''}
+          ${showR ? '<th class="num">Requisitada</th>' : ''}
+          <th class="num">Total</th>
+        </tr></thead>
+        <tbody>${lista.map(x => `<tr>
+          <td>${escapeHtml(x.nome)}</td>
+          <td class="text-muted">${escapeHtml(x.forn)}</td>
+          <td class="center text-muted">${escapeHtml(x.unid || '')}</td>
+          ${showC ? `<td class="num">${x.qtyCompra > 0 ? fmtQty(x.qtyCompra) : '—'}</td>` : ''}
+          ${showR ? `<td class="num">${x.qtyReq > 0 ? fmtQty(x.qtyReq) : '—'}</td>` : ''}
+          <td class="num" style="font-weight:500">${fmtQty(x.qtyTotal)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    `;
+  }).join('');
+}
+
+function exportarRelatorio() {
+  if (!relCache || relCache.itens.length === 0) { showToast('Gere o relatório primeiro.', 'error'); return; }
+  const { fonte } = relCache;
+  const showC = fonte === 'ambos' || fonte === 'compra';
+  const showR = fonte === 'ambos' || fonte === 'req';
+  const header = ['Categoria','Item','Fornecedor','Unidade'];
+  if (showC) header.push('Qtd Comprada');
+  if (showR) header.push('Qtd Requisitada');
+  header.push('Qtd Total');
+  const linhas = [header];
+  relCache.itens.forEach(x => {
+    const row = [CAT_LABEL[x.cat] || x.cat, x.nome, x.forn, x.unid || ''];
+    if (showC) row.push(x.qtyCompra || 0);
+    if (showR) row.push(x.qtyReq || 0);
+    row.push(x.qtyTotal);
+    linhas.push(row);
+  });
+  const csv = linhas.map(r => r.map(c => {
+    const v = String(c ?? '');
+    return /[";,\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
+  }).join(';')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `relatorio_pdv_${relCache.de}_${relCache.ate}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+async function logout() {
+  await sb.auth.signOut();
+  window.location.href = 'index.html';
+}
+</script>
+</body>
+</html>

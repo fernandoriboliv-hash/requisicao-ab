@@ -3,182 +3,1054 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Executivo - Rosewood SP</title>
+<title>Executivo — Rosewood A&B</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',sans-serif;background:#0f0f0f;color:#e0e0e0;display:flex;min-height:100vh}
-.sidebar{width:220px;background:#141414;border-right:1px solid #222;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100}
-.sidebar-logo{padding:20px 16px;border-bottom:1px solid #222}
-.sidebar-logo h2{color:#c9a96e;font-size:15px;font-weight:600}
-.sidebar-logo p{color:#555;font-size:11px;margin-top:2px}
-.nav-item{display:flex;align-items:center;gap:10px;padding:12px 16px;color:#888;font-size:13px;cursor:pointer;border-left:3px solid transparent;transition:all .15s}
-.nav-item:hover{background:#1e1e1e;color:#ccc}
-.nav-item.active{background:#1e1e1e;color:#c9a96e;border-left-color:#c9a96e}
-.nav-icon{font-size:15px;width:22px;text-align:center}
-.sidebar-bottom{margin-top:auto;padding:16px;border-top:1px solid #222}
-.user-info{font-size:12px;color:#666}
-.user-info strong{color:#aaa;display:block;margin-bottom:2px}
-.btn-logout{margin-top:8px;background:none;border:1px solid #333;color:#666;font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;width:100%}
-.main{margin-left:220px;flex:1;padding:28px}
-.page{display:none}.page.active{display:block}
-.page-header{margin-bottom:24px}
-.page-header h1{font-size:22px;color:#fff;font-weight:600}
-.page-header p{color:#666;font-size:13px;margin-top:4px}
-.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
-.stat-card{background:#1a1a1a;border:1px solid #252525;border-radius:10px;padding:20px}
-.stat-card .label{color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
-.stat-card .value{color:#fff;font-size:28px;font-weight:700;margin-top:8px}
-.stat-card .sub{color:#555;font-size:11px;margin-top:4px}
-.section{background:#1a1a1a;border:1px solid #252525;border-radius:10px;margin-bottom:20px;overflow:hidden}
-.section-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #222}
-.section-header h3{font-size:15px;color:#ddd;font-weight:600}
-table{width:100%;border-collapse:collapse}
-th{background:#161616;color:#666;font-size:11px;text-transform:uppercase;padding:10px 16px;text-align:left}
-td{padding:12px 16px;border-top:1px solid #1e1e1e;font-size:13px;color:#ccc}
-tr:hover td{background:#1e1e1e}
-.status{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
-.status.rascunho{background:#2a2a2a;color:#888}.status.aberta{background:#1a2a4a;color:#5b9cf6}
-.status.aprovada{background:#1a3a2a;color:#2ecc71}.status.rejeitada{background:#3a1a1a;color:#e74c3c}
-.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
-.btn-primary{background:#c9a96e;color:#000}.btn-primary:hover{background:#e0c080}
-.btn-ghost{background:none;border:1px solid #333;color:#888}.btn-ghost:hover{background:#1e1e1e;color:#ccc}
-.btn-sm{padding:5px 10px;font-size:12px}
-.form-group{margin-bottom:14px;position:relative}
-.form-group label{display:block;color:#777;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
-.form-group input,.form-group select{width:100%;background:#111;border:1px solid #2a2a2a;border-radius:7px;color:#fff;font-size:14px;padding:10px 12px;outline:none}
-.form-group input:focus,.form-group select:focus{border-color:#c9a96e}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.ac-list{position:absolute;top:100%;left:0;right:0;background:#1e1e1e;border:1px solid #333;border-radius:7px;z-index:200;max-height:200px;overflow-y:auto;margin-top:2px}
-.ac-item{padding:10px 14px;font-size:13px;cursor:pointer;color:#ccc;border-bottom:1px solid #252525}
-.ac-item:hover{background:#2a2a2a;color:#fff}
-.item-row{display:flex;align-items:center;gap:10px;padding:10px;background:#111;border:1px solid #222;border-radius:8px;margin-bottom:8px}
-.nome{flex:2;font-size:13px;color:#ddd}
-.qtd-inp{width:80px;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#fff;font-size:13px;padding:6px 8px;text-align:center;outline:none}
-.un-lbl{font-size:12px;color:#666;width:60px}
-.com-inp{flex:2;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#ccc;font-size:12px;padding:6px 8px;outline:none}
-.rm-btn{background:none;border:none;color:#555;font-size:18px;cursor:pointer;padding:0 4px}.rm-btn:hover{color:#e74c3c}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:500}
-.modal-overlay.open{display:flex}
-.modal{background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:24px;width:100%;max-width:540px;max-height:80vh;overflow-y:auto}
-.modal h3{font-size:16px;color:#fff;margin-bottom:16px}
-.modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
-.card{background:#1a1a1a;border:1px solid #252525;border-radius:10px;padding:20px;margin-bottom:16px}
-.card h3{font-size:14px;color:#ddd;font-weight:600;margin-bottom:16px}
-.btn-actions{display:flex;gap:10px;margin-top:16px}
-.empty{text-align:center;padding:40px;color:#555}
-.text-muted{color:#666}
+  .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .cat-btn {
+    padding: 10px 18px; background: var(--surface);
+    border: 1px solid var(--border-subtle); color: var(--muted);
+    font-family: inherit; font-size: 12px; letter-spacing: 1.5px;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .cat-btn:hover { color: var(--text); }
+  .cat-btn.on-proteina    { background: rgba(192,57,43,0.15);  border-color: var(--c-proteina);   color: var(--c-proteina); }
+  .cat-btn.on-laticinios  { background: rgba(37,99,168,0.15);  border-color: var(--c-laticinios); color: var(--c-laticinios); }
+  .cat-btn.on-hortifruti  { background: rgba(74,124,89,0.15);  border-color: var(--c-hortifruti); color: var(--c-hortifruti); }
+  .cat-btn.on-diversos    { background: rgba(184,150,62,0.15); border-color: var(--c-diversos);   color: var(--c-diversos); }
+
+  .item-row {
+    display: grid;
+    grid-template-columns: 22px 1fr auto auto;
+    align-items: center; gap: 12px;
+    background: var(--panel); padding: 10px 14px; margin-bottom: 2px;
+    border: 1px solid transparent; cursor: pointer;
+  }
+  .item-row.selected { border-color: var(--gold); background: rgba(184,150,62,0.06); }
+  .item-check {
+    width: 18px; height: 18px; border: 1px solid var(--muted2);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .item-row.selected .item-check { background: var(--gold); border-color: var(--gold); color: #0F1117; }
+  .item-name { font-size: 14px; }
+  .item-unit { font-size: 12px; color: var(--muted); width: 50px; text-align: center; }
+  .item-qty-wrap { display: none; align-items: center; gap: 6px; }
+  .item-row.selected .item-qty-wrap { display: flex; }
+  .qty-btn { width: 26px; height: 26px; background: rgba(255,255,255,0.08); border: none; color: var(--text); font-size: 16px; cursor: pointer; }
+  .qty-input { width: 60px; text-align: center; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: var(--text); font-family: inherit; font-size: 14px; padding: 4px; outline: none; }
+  body { padding-bottom: 80px; }
+
+  .pdv-selector-bar {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .pdv-selector-bar .label {
+    font-size: 11px; letter-spacing: 2px; color: var(--gold);
+    text-transform: uppercase; font-weight: 500;
+  }
 </style>
 </head>
 <body>
-<div class="sidebar">
-  <div class="sidebar-logo"><h2>🍽 ROSEWOOD SP</h2><p>Painel Executivo</p></div>
-  <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">📊</span>Dashboard</div>
-  <div class="nav-item" onclick="showPage('requisicao',this)"><span class="nav-icon">📋</span>Nova Requisicao</div>
-  <div class="nav-item" onclick="showPage('historico',this)"><span class="nav-icon">📜</span>Historico Geral</div>
-  <div class="nav-item" onclick="showPage('consumo',this)"><span class="nav-icon">📈</span>Consumo por PDV</div>
-  <div class="sidebar-bottom">
-    <div class="user-info"><strong id="user-nome">-</strong><span>Executivo</span></div>
-    <button class="btn-logout" onclick="logout()">Sair</button>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="name">Rosewood</div>
+    <div class="sub">A&amp;B · Executivo</div>
   </div>
-</div>
-<div class="main">
-  <div class="page active" id="page-dashboard">
-    <div class="page-header"><h1>Dashboard Executivo</h1><p>Visao geral de todos os PDVs</p></div>
-    <div style="margin-bottom:16px;display:flex;gap:12px;align-items:center">
-      <select id="filtro-pdv" onchange="carregarDashboard()" style="background:#1a1a1a;border:1px solid #333;border-radius:7px;color:#ccc;font-size:13px;padding:8px 12px;outline:none">
-        <option value="">Todos os PDVs</option>
-        <option>Le Jardin</option><option>Taraz</option><option>Blaise</option>
-        <option>Bela Vista</option><option>Rabo di Galo</option><option>Emerald Pool</option>
-        <option>IRD</option><option>Banquetes</option><option>Cozinha Central</option>
-        <option>Padaria</option><option>Confeitaria</option><option>Commissary</option>
+  <div class="sidebar-nav">
+    <div class="nav-item active" onclick="goTab('criar',this)"><span class="nav-icon">＋</span> Solicitar / Requisitar</div>
+
+    <div class="nav-group" id="grp-estoque">
+      <div class="nav-group-head" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">◐</span> Estoque
+        <span class="chev">▸</span>
+      </div>
+      <div class="nav-group-items">
+        <div class="nav-item" onclick="goTab('niveis',this)"><span class="nav-icon">◐</span> Consultar Estoque</div>
+        <div class="nav-item" onclick="goTab('divergencias',this)">
+          <span class="nav-icon">△</span> Divergências
+          <span class="nav-badge" id="badgeDivergencias"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-group" id="grp-consultas">
+      <div class="nav-group-head" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">▣</span> Consultas
+        <span class="chev">▸</span>
+      </div>
+      <div class="nav-group-items">
+        <div class="nav-item" onclick="goTab('compras',this)"><span class="nav-icon">$</span> Compras (todos PDVs)</div>
+        <div class="nav-item" onclick="goTab('reqs',this)"><span class="nav-icon">↔</span> Requisições (todos PDVs)</div>
+        <div class="nav-item" onclick="goTab('rel',this)"><span class="nav-icon">▣</span> Relatório por PDV</div>
+      </div>
+    </div>
+  </div>
+  <div class="sidebar-foot">
+    <div class="name" id="userName">—</div>
+    <button class="logout-btn" onclick="logout()">Sair do sistema</button>
+  </div>
+</nav>
+
+<div class="main-with-sidebar">
+  <div class="top-bar">
+    <div>
+      <div class="top-title" id="topTitle">Solicitar / Requisitar</div>
+      <div class="top-sub" id="topSub">Criar compra ou requisição em nome de qualquer PDV</div>
+    </div>
+  </div>
+
+  <div class="main full">
+
+  <!-- ========================== ABA CRIAR ========================== -->
+  <div class="tab-content active" id="tab-criar">
+
+    <div class="pdv-selector-bar">
+      <span class="label">Solicitar em nome do PDV:</span>
+      <select class="select" id="pdvSel" style="max-width:280px;flex:1">
+        <option value="">Selecione o PDV...</option>
       </select>
-      <button class="btn btn-ghost btn-sm" onclick="carregarDashboard()">↺ Atualizar</button>
+      <span class="text-muted" style="font-size:12px">Sem aprovação — chefes não aprovam, só geram registro</span>
     </div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="label">Requisicoes Hoje</div><div class="value" id="val-hoje">-</div><div class="sub">enviadas</div></div>
-      <div class="stat-card"><div class="label">Aprovadas</div><div class="value" id="val-aprov" style="color:#2ecc71">-</div><div class="sub">no periodo</div></div>
-      <div class="stat-card"><div class="label">Pendentes</div><div class="value" id="val-pend" style="color:#e74c3c">-</div><div class="sub">aguardando aprovacao</div></div>
+
+    <div class="tabs" style="margin-top:0">
+      <button class="tab active" id="sub-btn-compra" onclick="switchSub('compra')">Solicitar Compra</button>
+      <button class="tab" id="sub-btn-req" onclick="switchSub('req')">Requisição da Comissaria</button>
     </div>
-    <div class="section"><div class="section-header"><h3>Requisicoes Recentes</h3></div><div id="dash-body"><div class="empty">Carregando...</div></div></div>
+
+    <!-- SUB-ABA COMPRA -->
+    <div class="tab-content active" id="sub-compra">
+      <div class="aviso aviso-info" id="avisoCorte">Carregando...</div>
+      <div class="form-row col2">
+        <div class="field"><label class="field-label">Data de Entrega Desejada</label><input class="input" type="date" id="compra-data-entrega"></div>
+        <div class="field"><label class="field-label">Observação</label><input class="input" id="compra-obs" placeholder="Detalhe sobre este pedido..."></div>
+      </div>
+      <div class="cat-tabs" id="compra-cat-tabs">
+        <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCat('compra','proteina')">Proteína</button>
+        <button class="cat-btn" data-cat="laticinios" onclick="setCat('compra','laticinios')">Laticínios</button>
+        <button class="cat-btn" data-cat="hortifruti" onclick="setCat('compra','hortifruti')">Hortifruti</button>
+        <button class="cat-btn" data-cat="diversos" onclick="setCat('compra','diversos')">Diversos</button>
+      </div>
+      <input class="input mb-3" id="compra-search" placeholder="Buscar item..." oninput="renderItens('compra')" style="margin-bottom:14px">
+      <div id="compra-items"><div class="loading-text">Carregando catálogo...</div></div>
+    </div>
+
+    <!-- SUB-ABA REQ -->
+    <div class="tab-content" id="sub-req">
+      <div class="aviso aviso-info">Requisição da Comissaria — sem corte de horário.</div>
+      <div class="form-row col2">
+        <div class="field"><label class="field-label">Data de Entrega Desejada</label><input class="input" type="date" id="req-data-entrega"></div>
+        <div class="field"><label class="field-label">Observação</label><input class="input" id="req-obs" placeholder="Detalhe..."></div>
+      </div>
+      <div class="cat-tabs" id="req-cat-tabs">
+        <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCat('req','proteina')">Proteína</button>
+        <button class="cat-btn" data-cat="laticinios" onclick="setCat('req','laticinios')">Laticínios</button>
+        <button class="cat-btn" data-cat="hortifruti" onclick="setCat('req','hortifruti')">Hortifruti</button>
+        <button class="cat-btn" data-cat="diversos" onclick="setCat('req','diversos')">Diversos</button>
+      </div>
+      <input class="input mb-3" id="req-search" placeholder="Buscar item..." oninput="renderItens('req')" style="margin-bottom:14px">
+      <div id="req-items"><div class="loading-text">Carregando catálogo...</div></div>
+    </div>
+
   </div>
-  <div class="page" id="page-requisicao">
-    <div class="page-header"><h1>Nova Requisicao</h1><p>Selecione o PDV desta requisicao executiva</p></div>
-    <div class="card"><h3>Detalhes do Pedido</h3>
-      <div class="form-row">
-        <div class="form-group"><label>PDV</label>
-          <select id="req-pdv">
-            <option value="">- Selecione o PDV -</option>
-            <option>Le Jardin</option><option>Taraz</option><option>Blaise</option>
-            <option>Bela Vista</option><option>Rabo di Galo</option><option>Emerald Pool</option>
-            <option>IRD</option><option>Banquetes</option><option>Cozinha Central</option>
-            <option>Padaria</option><option>Confeitaria</option><option>Commissary</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Entrega Prevista</label><input type="date" id="req-entrega"></div>
-      </div>
-      <div class="form-group"><label>Observacao</label><input type="text" id="req-obs" placeholder="Opcional"></div>
+
+  <!-- Barra fixa: aparece ao selecionar pelo menos 1 item na aba Solicitar/Requisitar -->
+  <div class="cart-bar" id="execCartBar">
+    <div class="cart-info">
+      <span class="cart-count" id="execCartCount">0</span>
+      <span id="execCartLabel">iten(s) selecionado(s)</span>
     </div>
-    <div class="card"><h3>Adicionar Item</h3>
-      <div class="form-row">
-        <div class="form-group"><label>Ingrediente</label><input type="text" id="req-busca" placeholder="Digite o nome..." oninput="buscarIng(this.value)" autocomplete="off"><div class="ac-list" id="req-ac" style="display:none"></div></div>
-        <div class="form-group"><label>Quantidade</label><input type="number" id="req-qtd" min="0.01" step="0.01" placeholder="0"></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Unidade</label><input type="text" id="req-un" readonly style="background:#111;color:#888"></div>
-        <div class="form-group"><label>Comentario</label><input type="text" id="req-com" placeholder="Opcional"></div>
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="addItem()">+ Adicionar a lista</button>
-    </div>
-    <div class="card">
-      <h3>Itens <span class="text-muted" id="req-cnt">(0)</span></h3>
-      <div id="req-list"><div class="empty">Nenhum item adicionado.</div></div>
-      <div class="btn-actions">
-        <button class="btn btn-primary" onclick="enviarReq()">📤 Enviar Requisicao</button>
-        <button class="btn btn-ghost" onclick="itens=[];renderItens()">🗑 Limpar</button>
-      </div>
-    </div>
-  </div>
-  <div class="page" id="page-historico">
-    <div class="page-header"><h1>Historico Geral</h1><p>Todas as requisicoes de todos os PDVs</p></div>
-    <div class="card">
-      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-        <div class="form-group" style="flex:1;margin:0;min-width:110px"><label>PDV</label>
-          <select id="hist-pdv" style="width:100%;background:#111;border:1px solid #2a2a2a;border-radius:7px;color:#fff;font-size:13px;padding:8px;outline:none">
-            <option value="">Todos</option><option>Le Jardin</option><option>Taraz</option><option>Blaise</option>
-            <option>Bela Vista</option><option>Rabo di Galo</option><option>Emerald Pool</option>
-            <option>IRD</option><option>Banquetes</option><option>Cozinha Central</option>
-          </select>
-        </div>
-        <div class="form-group" style="flex:1;margin:0;min-width:110px"><label>Inicio</label><input type="date" id="hist-ini" style="width:100%;background:#111;border:1px solid #2a2a2a;border-radius:7px;color:#fff;font-size:13px;padding:8px;outline:none"></div>
-        <div class="form-group" style="flex:1;margin:0;min-width:110px"><label>Fim</label><input type="date" id="hist-fim" style="width:100%;background:#111;border:1px solid #2a2a2a;border-radius:7px;color:#fff;font-size:13px;padding:8px;outline:none"></div>
-        <div class="form-group" style="flex:1;margin:0;min-width:100px"><label>Status</label>
-          <select id="hist-st" style="width:100%;background:#111;border:1px solid #2a2a2a;border-radius:7px;color:#fff;font-size:13px;padding:8px;outline:none">
-            <option value="">Todos</option><option value="aberta">Aberta</option><option value="aprovada">Aprovada</option><option value="rejeitada">Rejeitada</option>
-          </select>
-        </div>
-        <div style="display:flex;align-items:flex-end"><button class="btn btn-ghost btn-sm" onclick="carregarHistorico()">Filtrar</button></div>
-      </div>
-      <div id="hist-body"><div class="empty">Carregando...</div></div>
+    <div class="cart-actions">
+      <button class="btn btn-primary" id="execCartBtn" onclick="enviarFromCart()">Enviar</button>
     </div>
   </div>
-  <div class="page" id="page-consumo">
-    <div class="page-header"><h1>Consumo por PDV</h1><p>Itens mais requisitados por ponto de venda</p></div>
-    <div style="display:flex;gap:12px;margin-bottom:20px">
-      <div class="form-group" style="flex:1;margin:0"><label>Inicio</label><input type="date" id="cons-ini" style="width:100%;background:#111;border:1px solid #2a2a2a;border-radius:7px;color:#fff;font-size:14px;padding:10px;outline:none"></div>
-      <div class="form-group" style="flex:1;margin:0"><label>Fim</label><input type="date" id="cons-fim" style="width:100%;background:#111;border:1px solid #2a2a2a;border-radius:7px;color:#fff;font-size:14px;padding:10px;outline:none"></div>
-      <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="carregarConsumo()">Gerar</button></div>
+
+  <!-- ========================== ABA COMPRAS GERAL ========================== -->
+  <div class="tab-content" id="tab-compras">
+    <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <span class="text-muted" style="font-size:12px">De</span>
+      <input class="input" type="date" id="vc-de" style="max-width:160px">
+      <span class="text-muted" style="font-size:12px">até</span>
+      <input class="input" type="date" id="vc-ate" style="max-width:160px">
+      <select class="select" id="vc-pdv" style="max-width:200px"><option value="">Todos os PDVs</option></select>
+      <select class="select" id="vc-status" style="max-width:200px">
+        <option value="">Todos os status</option>
+        <option value="enviada">Aguardando aprov.</option>
+        <option value="aprovada">Aprovada</option>
+        <option value="rejeitada">Rejeitada</option>
+        <option value="entregue">Entregue</option>
+      </select>
+      <button class="btn btn-sm btn-outline" onclick="carregarComprasGeral()">Buscar</button>
     </div>
-    <div id="cons-body"><div class="empty">Selecione o periodo e clique em Gerar.</div></div>
+    <div id="comprasGeralCont"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- ========================== ABA REQUISIÇÕES GERAL ========================== -->
+  <div class="tab-content" id="tab-reqs">
+    <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <span class="text-muted" style="font-size:12px">De</span>
+      <input class="input" type="date" id="vr-de" style="max-width:160px">
+      <span class="text-muted" style="font-size:12px">até</span>
+      <input class="input" type="date" id="vr-ate" style="max-width:160px">
+      <select class="select" id="vr-pdv" style="max-width:200px"><option value="">Todos os PDVs</option></select>
+      <select class="select" id="vr-status" style="max-width:200px">
+        <option value="">Todos os status</option>
+        <option value="enviado">Aguardando</option>
+        <option value="separacao">Em Separação</option>
+        <option value="entregue">Entregue</option>
+        <option value="cancelada">Cancelada</option>
+      </select>
+      <button class="btn btn-sm btn-outline" onclick="carregarReqsGeral()">Buscar</button>
+    </div>
+    <div id="reqsGeralCont"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- ========================== NÍVEIS DE ESTOQUE (só leitura) ========================== -->
+  <div class="tab-content" id="tab-niveis">
+    <div class="aviso aviso-info">
+      Saldo teórico atual dos itens de câmara — atualizado conforme requisições e recebimentos.
+    </div>
+    <div class="chk-filters">
+      <div class="chk-filter-item">
+        <label>Categorias</label>
+        <select class="select" id="nv-cat" onchange="renderNiveisEst()">
+          <option value="camara" selected>Proteínas + Laticínios</option>
+          <option value="proteina">Só Proteína</option>
+          <option value="laticinios">Só Laticínios</option>
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="chk-filter-item">
+        <label>Status</label>
+        <select class="select" id="nv-status" onchange="renderNiveisEst()">
+          <option value="">Todos</option>
+          <option value="vermelho">Só vermelho</option>
+          <option value="amarelo">Só amarelo</option>
+          <option value="verde">Só verde</option>
+          <option value="pend">Só sem contagem</option>
+        </select>
+      </div>
+      <div class="chk-filter-item chk-filter-search">
+        <label>Buscar</label>
+        <input class="input" type="text" id="nv-search" placeholder="Nome do item..." oninput="renderNiveisEst()">
+      </div>
+      <div class="chk-filter-item" style="align-self:end">
+        <button class="btn btn-sm btn-outline" onclick="carregarNiveisEst()">↻ Recarregar</button>
+      </div>
+    </div>
+    <div class="chk-summary">
+      <div class="card verde"><div class="lbl">Verde (OK)</div><div class="val verde" id="nvVerde">—</div></div>
+      <div class="card amarelo"><div class="lbl">Amarelo (Repor)</div><div class="val amarelo" id="nvAmarelo">—</div></div>
+      <div class="card vermelho"><div class="lbl">Vermelho (Crítico)</div><div class="val vermelho" id="nvVermelho">—</div></div>
+      <div class="card pend"><div class="lbl">Sem contagem</div><div class="val pend" id="nvPend">—</div></div>
+    </div>
+    <div class="section-title"><span>Estoque atual</span><span id="nvCount" class="text-muted" style="font-size:12px"></span></div>
+    <div id="nvContainer"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- ========================== DIVERGÊNCIAS DE ESTOQUE ========================== -->
+  <div class="tab-content" id="tab-divergencias">
+    <div class="aviso aviso-info">
+      Itens em que a contagem física divergiu do saldo teórico em <strong>10% ou mais</strong>.
+    </div>
+    <div class="chk-filters">
+      <div class="chk-filter-item">
+        <label>Status</label>
+        <select class="select" id="dv-status" onchange="renderDivergencias()">
+          <option value="pendente" selected>Pendentes</option>
+          <option value="recontagem">Aguardando recontagem</option>
+          <option value="perda_registrada">Perda registrada</option>
+          <option value="ajuste_ok">Ajuste OK</option>
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="chk-filter-item">
+        <label>Categoria</label>
+        <select class="select" id="dv-cat" onchange="renderDivergencias()">
+          <option value="camara" selected>Proteínas + Laticínios</option>
+          <option value="proteina">Só Proteína</option>
+          <option value="laticinios">Só Laticínios</option>
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="chk-filter-item chk-filter-search">
+        <label>Buscar</label>
+        <input class="input" type="text" id="dv-search" placeholder="Nome do item..." oninput="renderDivergencias()">
+      </div>
+      <div class="chk-filter-item" style="align-self:end">
+        <button class="btn btn-sm btn-outline" onclick="carregarDivergencias()">↻ Recarregar</button>
+      </div>
+    </div>
+    <div class="section-title"><span>Divergências</span><span id="dvCount" class="text-muted" style="font-size:12px"></span></div>
+    <div id="dvContainer"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- ========================== ABA RELATÓRIO POR PDV ========================== -->
+  <div class="tab-content" id="tab-rel">
+    <div class="aviso aviso-info">
+      Relatório consolidado de aquisições finalizadas. Considera <strong>compras aprovadas/entregues</strong> e <strong>requisições entregues</strong>.
+      Marque um ou mais PDVs pra filtrar; sem seleção = todos.
+    </div>
+
+    <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <span class="text-muted" style="font-size:12px">De</span>
+      <input class="input" type="date" id="rel-de" style="max-width:160px">
+      <span class="text-muted" style="font-size:12px">até</span>
+      <input class="input" type="date" id="rel-ate" style="max-width:160px">
+      <select class="select" id="rel-fonte" style="max-width:180px">
+        <option value="ambos">Ambas as fontes</option>
+        <option value="compra">Só Compras</option>
+        <option value="req">Só Requisições</option>
+      </select>
+      <select class="select" id="rel-cat" style="max-width:160px">
+        <option value="">Todas as categorias</option>
+        <option value="proteina">Proteína</option>
+        <option value="laticinios">Laticínios</option>
+        <option value="hortifruti">Hortifruti</option>
+        <option value="diversos">Diversos</option>
+      </select>
+      <button class="btn btn-outline" onclick="gerarRel()">Gerar</button>
+      <button class="btn btn-outline" id="btnExportarRel" onclick="exportarRel()" style="margin-left:auto;display:none">⤓ Exportar Excel</button>
+    </div>
+
+    <div id="rel-pdv-wrap" style="display:flex;gap:6px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <span class="text-muted" style="font-size:11px;letter-spacing:1px;text-transform:uppercase">PDVs:</span>
+      <span class="loading-text" id="rel-pdv-loading" style="font-size:12px">Carregando PDVs...</span>
+    </div>
+
+    <div id="rel-kpis" class="stats-grid" style="display:none"></div>
+
+    <div id="relCont"><div class="empty-text">Selecione período e clique em Gerar.</div></div>
+  </div>
+
   </div>
 </div>
-<div class="modal-overlay" id="modal-det">
-  <div class="modal">
-    <h3 id="det-titulo">Requisicao</h3>
-    <div id="det-body" style="max-height:300px;overflow-y:auto"></div>
-    <div class="modal-footer"><button class="btn btn-ghost" onclick="document.getElementById('modal-det').classList.remove('open')">Fechar</button></div>
-  </div>
-</div>
-<script src="executivo.js"></script>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const state = {
+  user: null, perfil: null,
+  pdvs: [], pdvsMap: {},
+  catalogo: [],
+  abaAtual: 'criar',
+  subAtual: 'compra',
+  catAtual: { compra:'proteina', req:'proteina' },
+  selecionados: { compra:{}, req:{} },
+};
+
+window.addEventListener('load', async () => {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { window.location.href = 'index.html'; return; }
+  const { data: perfil } = await sb.from('usuarios').select('id, perfil, nome').eq('auth_uid', user.id).single();
+  if (!perfil || perfil.perfil !== 'executivo') { window.location.href = 'index.html'; return; }
+  state.user = user; state.perfil = perfil;
+  document.getElementById('userName').textContent = perfil.nome || '';
+
+  const { data: pdvs } = await sb.from('pdvs').select('*').eq('ativo', true).order('ordem');
+  state.pdvs = pdvs || [];
+  state.pdvsMap = Object.fromEntries(state.pdvs.map(p => [p.id, p]));
+
+  ['pdvSel','vc-pdv','vr-pdv'].forEach(id => {
+    const sel = document.getElementById(id);
+    state.pdvs.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; sel.appendChild(o); });
+  });
+
+  // Datas padrão
+  const hoje = new Date();
+  const primMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
+  document.getElementById('compra-data-entrega').value = isoDate(amanha);
+  document.getElementById('req-data-entrega').value = isoDate(hoje);
+  ['vc-ate','vr-ate','rel-ate'].forEach(id => document.getElementById(id).value = isoDate(hoje));
+  ['vc-de','vr-de','rel-de'].forEach(id => document.getElementById(id).value = isoDate(primMes));
+
+  await carregarCatalogo();
+  setCat('compra', 'proteina');
+  setCat('req', 'proteina');
+  atualizarAvisoCorte();
+  setInterval(atualizarAvisoCorte, 60_000);
+  montarChipsPdv();
+});
+
+function isoDate(d) { return d.toISOString().split('T')[0]; }
+function escapeHtml(s) { if (s==null) return ''; return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function ptDate(d) { const date = new Date(typeof d === 'string' && d.length === 10 ? d + 'T12:00:00' : d); return date.toLocaleDateString('pt-BR'); }
+
+const tabTitles = {
+  criar:        ['Solicitar / Requisitar', 'Criar compra ou requisição em nome de qualquer PDV'],
+  compras:      ['Compras (todos os PDVs)', 'Histórico consolidado de solicitações de compra'],
+  reqs:         ['Requisições (todos os PDVs)', 'Histórico consolidado de requisições da Comissaria'],
+  niveis:       ['Consultar Estoque', 'Saldo teórico atual dos itens de câmara'],
+  divergencias: ['Divergências de Estoque', 'Diferenças entre contagem física e saldo teórico'],
+  rel:          ['Relatório por PDV', 'Aquisições finalizadas consolidadas'],
+};
+
+function toggleNavGroup(headEl) {
+  const grp = headEl.closest('.nav-group');
+  if (grp) grp.classList.toggle('open');
+}
+function openParentGroup(itemEl) {
+  const grp = itemEl?.closest?.('.nav-group');
+  if (grp) grp.classList.add('open');
+}
+
+function goTab(aba, el) {
+  state.abaAtual = aba;
+  document.querySelectorAll('.tab-content').forEach(c => {
+    if (['tab-criar','tab-compras','tab-reqs','tab-niveis','tab-divergencias','tab-rel'].includes(c.id)) c.classList.remove('active');
+  });
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + aba).classList.add('active');
+  if (el) el.classList.add('active');
+  const [t, s] = tabTitles[aba] || [aba, ''];
+  document.getElementById('topTitle').textContent = t;
+  document.getElementById('topSub').textContent = s;
+  if (aba === 'compras') carregarComprasGeral();
+  if (aba === 'reqs')    carregarReqsGeral();
+  if (aba === 'niveis')       carregarNiveisEst();
+  if (aba === 'divergencias') carregarDivergencias();
+  if (aba === 'rel') {
+    if (!document.querySelector('#rel-pdv-wrap .filter-chip')) montarChipsPdv();
+  }
+  atualizarExecCartBar();
+  openParentGroup(el);
+}
+// Compat: alias pra chamadas internas que ainda usam switchAba
+const switchAba = (aba) => {
+  const map = { criar: 0, compras: 1, reqs: 2, niveis: 3, divergencias: 4, rel: 5 };
+  const nav = document.querySelectorAll('.nav-item')[map[aba] ?? 0];
+  goTab(aba, nav);
+};
+function switchSub(sub) {
+  state.subAtual = sub;
+  ['compra','req'].forEach(s => {
+    document.getElementById('sub-' + s).classList.toggle('active', s === sub);
+    document.getElementById('sub-btn-' + s).classList.toggle('active', s === sub);
+  });
+  atualizarExecCartBar();
+}
+
+async function carregarCatalogo() {
+  const { data, error } = await sb.from('itens').select('*').eq('ativo', true).order('nome');
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  state.catalogo = data || [];
+}
+
+function setCat(modo, cat) {
+  state.catAtual[modo] = cat;
+  document.querySelectorAll(`#${modo}-cat-tabs .cat-btn`).forEach(b => {
+    b.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
+    if (b.dataset.cat === cat) b.classList.add('on-' + cat);
+  });
+  document.getElementById(`${modo}-search`).value = '';
+  renderItens(modo);
+}
+
+function renderItens(modo) {
+  const cat = state.catAtual[modo];
+  const q = (document.getElementById(`${modo}-search`).value || '').toLowerCase();
+  const itens = state.catalogo.filter(i => i.categoria === cat && (!q || i.nome.toLowerCase().includes(q)));
+  const cont = document.getElementById(`${modo}-items`);
+  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
+  cont.innerHTML = itens.map(item => {
+    const sel = state.selecionados[modo][item.id];
+    const qty = sel ? sel.qty : 1;
+    const media = item.media_diaria || 0;
+    const alerta = sel && media > 0 && qty > media * 3
+      ? `<span class="text-orange" style="font-size:11px">⚠ ${(qty/media).toFixed(1)}× média</span>` : '';
+    return `<div class="item-row ${sel?'selected':''}" onclick="toggleItem('${modo}','${item.id}')">
+      <div class="item-check">${sel?'✓':''}</div>
+      <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span style="font-size:11px;color:var(--muted);margin-left:8px">${escapeHtml(item.fornecedor_principal)}</span>` : ''} ${alerta}</div>
+      <div class="item-unit">${item.unidade}</div>
+      <div class="item-qty-wrap" onclick="event.stopPropagation()">
+        <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',-1)">−</button>
+        <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQty('${modo}','${item.id}',this.value)">
+        <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',1)">+</button>
+      </div>
+    </div>`;
+  }).join('');
+  atualizarExecCartBar();
+}
+
+function atualizarExecCartBar() {
+  // Mostra a barra apenas na aba "Solicitar/Requisitar" e quando há itens na sub-aba ativa
+  if (state.abaAtual !== 'criar') {
+    document.getElementById('execCartBar').className = 'cart-bar';
+    return;
+  }
+  const modo = state.subAtual; // 'compra' ou 'req'
+  const total = Object.keys(state.selecionados[modo] || {}).length;
+  document.getElementById('execCartCount').textContent = total;
+  document.getElementById('execCartBtn').textContent = modo === 'compra' ? 'Enviar Solicitação' : 'Enviar Requisição';
+  document.getElementById('execCartBar').className = total > 0 ? 'cart-bar visible' : 'cart-bar';
+}
+
+function enviarFromCart() {
+  enviar(state.subAtual);
+}
+
+function toggleItem(modo, itemId) {
+  if (state.selecionados[modo][itemId]) delete state.selecionados[modo][itemId];
+  else {
+    const item = state.catalogo.find(i => i.id === itemId);
+    state.selecionados[modo][itemId] = { item, qty: 1 };
+  }
+  renderItens(modo);
+}
+function changeQty(modo, itemId, delta) {
+  const s = state.selecionados[modo][itemId]; if (!s) return;
+  s.qty = Math.max(0.1, Math.round((s.qty + delta) * 10) / 10);
+  renderItens(modo);
+}
+function setQty(modo, itemId, val) {
+  const s = state.selecionados[modo][itemId]; if (!s) return;
+  const v = parseFloat(val); s.qty = isNaN(v) || v <= 0 ? 1 : v;
+  renderItens(modo);
+}
+
+function getCompetenciaCompra() {
+  const agora = new Date();
+  const corte = new Date(); corte.setHours(10, 0, 0, 0);
+  const data = new Date();
+  if (agora >= corte) data.setDate(data.getDate() + 1);
+  return data;
+}
+
+function atualizarAvisoCorte() {
+  const agora = new Date();
+  const corte = new Date(); corte.setHours(10, 0, 0, 0);
+  const aviso = document.getElementById('avisoCorte');
+  if (agora < corte) {
+    aviso.className = 'aviso aviso-success';
+    const ms = corte - agora;
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    aviso.textContent = `Solicitação entra na lista de COMPRAS de hoje. Corte em ${h}h${String(m).padStart(2,'0')}.`;
+  } else {
+    aviso.className = 'aviso aviso-warn';
+    aviso.textContent = 'Após as 10h00 — entra na lista de COMPRAS de amanhã.';
+  }
+}
+
+async function enviar(modo) {
+  const pdvId = document.getElementById('pdvSel').value;
+  if (!pdvId) { showToast('Selecione o PDV em nome de quem está solicitando.', 'error'); return; }
+  const sel = Object.values(state.selecionados[modo]);
+  if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
+  const obs = document.getElementById(`${modo}-obs`).value.trim();
+  const dataEntrega = document.getElementById(`${modo}-data-entrega`).value || null;
+
+  if (modo === 'compra') {
+    const competencia = isoDate(getCompetenciaCompra());
+    const { data: solc, error } = await sb.from('solicitacoes_compra').insert({
+      pdv_id: pdvId, usuario_id: state.perfil.id,
+      status: 'enviada',
+      data_competencia: competencia, data_entrega_desejada: dataEntrega,
+      observacao: obs || null,
+    }).select().single();
+    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    const itens = sel.map(s => ({
+      solicitacao_id: solc.id, item_id: s.item.id,
+      item_nome: s.item.nome, item_categoria: s.item.categoria, item_unidade: s.item.unidade,
+      quantidade_solicitada: s.qty, item_livre: false,
+    }));
+    await sb.from('solicitacao_compra_itens').insert(itens);
+    showToast('Solicitação de compra enviada para aprovação.', 'success');
+  } else {
+    const { data: req, error } = await sb.from('requisicoes').insert({
+      pdv_id: pdvId, usuario_id: state.perfil.id,
+      status: 'enviado',
+      data_competencia: isoDate(new Date()),
+      data_entrega_desejada: dataEntrega,
+      observacao: obs || null,
+    }).select().single();
+    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    const itens = sel.map(s => ({
+      requisicao_id: req.id, item_id: s.item.id,
+      item_nome: s.item.nome, item_categoria: s.item.categoria, item_unidade: s.item.unidade,
+      quantidade_solicitada: s.qty, item_livre: false,
+    }));
+    await sb.from('requisicao_itens').insert(itens);
+    showToast('Requisição enviada para a Comissaria.', 'success');
+  }
+
+  state.selecionados[modo] = {};
+  document.getElementById(`${modo}-obs`).value = '';
+  renderItens(modo);
+}
+
+// =====================================================================
+// VISÃO AMPLA — COMPRAS E REQUISIÇÕES
+// =====================================================================
+async function carregarComprasGeral() {
+  const de = document.getElementById('vc-de').value;
+  const ate = document.getElementById('vc-ate').value;
+  const pdv = document.getElementById('vc-pdv').value;
+  const status = document.getElementById('vc-status').value;
+  let q = sb.from('solicitacoes_compra')
+    .select('*, pdvs(nome), solicitacao_compra_itens(*)')
+    .gte('data_competencia', de).lte('data_competencia', ate)
+    .order('created_at', { ascending: false });
+  if (pdv) q = q.eq('pdv_id', pdv);
+  if (status) q = q.eq('status', status);
+  const { data } = await q;
+  const cont = document.getElementById('comprasGeralCont');
+  if (!data || data.length === 0) { cont.innerHTML = '<div class="empty-text">Nada encontrado.</div>'; return; }
+  const statusLabel = { rascunho:'Rascunho', enviada:'Aguardando aprov.', aprovada:'Aprovada', rejeitada:'Rejeitada', entregue:'Entregue' };
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr><th>#</th><th>Data</th><th>PDV</th><th class="center">Itens</th><th>Entrega</th><th>Status</th></tr></thead>
+    <tbody>${data.map(s => {
+      const itens = s.solicitacao_compra_itens || [];
+      return `<tr>
+        <td class="text-muted">#${String(s.id).slice(0,8)}</td>
+        <td class="text-muted">${ptDate(s.data_competencia)}</td>
+        <td>${escapeHtml(s.pdvs?.nome||'—')}</td>
+        <td class="center">${itens.length}</td>
+        <td class="text-muted">${s.data_entrega_desejada ? ptDate(s.data_entrega_desejada) : '—'}</td>
+        <td><span class="badge status-${s.status}">${statusLabel[s.status]||s.status}</span></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+async function carregarReqsGeral() {
+  const de = document.getElementById('vr-de').value;
+  const ate = document.getElementById('vr-ate').value;
+  const pdv = document.getElementById('vr-pdv').value;
+  const status = document.getElementById('vr-status').value;
+  let q = sb.from('requisicoes')
+    .select('*, pdvs(nome), requisicao_itens(*)')
+    .gte('data_competencia', de).lte('data_competencia', ate)
+    .order('created_at', { ascending: false });
+  if (pdv) q = q.eq('pdv_id', pdv);
+  if (status) q = q.eq('status', status);
+  const { data } = await q;
+  const cont = document.getElementById('reqsGeralCont');
+  if (!data || data.length === 0) { cont.innerHTML = '<div class="empty-text">Nada encontrado.</div>'; return; }
+  const statusLabel = { enviado:'Aguardando', separacao:'Em Separação', entregue:'Entregue', cancelada:'Cancelada' };
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr><th>#</th><th>Data</th><th>PDV</th><th class="center">Itens</th><th class="center">Diverg.</th><th>Status</th></tr></thead>
+    <tbody>${data.map(r => {
+      const itens = r.requisicao_itens || [];
+      const divs = itens.filter(i => i.divergencia).length;
+      const manualTag = r.criada_pelo_estoque ? ' <span class="badge badge-gold" style="font-size:9px">MANUAL</span>' : '';
+      return `<tr>
+        <td class="text-muted">#${String(r.id).slice(0,8)}</td>
+        <td class="text-muted">${ptDate(r.data_competencia)}</td>
+        <td>${escapeHtml(r.pdvs?.nome||'—')}${manualTag}</td>
+        <td class="center">${itens.length}</td>
+        <td class="center ${divs>0?'text-error':'text-muted'}">${divs > 0 ? divs : '—'}</td>
+        <td><span class="badge status-${r.status}">${statusLabel[r.status]||r.status}</span></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+// =====================================================================
+// RELATÓRIOS — Executivo (multi-select PDVs + valor R$)
+// =====================================================================
+const CAT_LABEL_REL = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+state.relPdvsSel = new Set();  // vazio = todos
+state.precos = {};             // { item_id: preco_unitario_vigente }
+let relCache = null;
+
+function fmtQty(n) { if (n == null || isNaN(n)) return '—'; return Number(n).toFixed(2).replace(/\.?0+$/, ''); }
+function fmtBRL(n) { return (Number(n) || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }
+
+function montarChipsPdv() {
+  const wrap = document.getElementById('rel-pdv-wrap');
+  if (!wrap) return;
+  const html = ['<span class="text-muted" style="font-size:11px;letter-spacing:1px;text-transform:uppercase">PDVs:</span>',
+                '<button class="filter-chip active" data-pdv-all="1" onclick="togglePdvChip(this,\'\')">Todos</button>'];
+  state.pdvs.forEach(p => html.push(
+    `<button class="filter-chip" data-pdv-id="${p.id}" onclick="togglePdvChip(this,'${p.id}')">${escapeHtml(p.nome)}</button>`
+  ));
+  wrap.innerHTML = html.join('');
+}
+
+function togglePdvChip(btn, pdvId) {
+  if (!pdvId) {
+    // Clique em "Todos" — limpa seleção
+    state.relPdvsSel.clear();
+    document.querySelectorAll('#tab-rel .filter-chip').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    return;
+  }
+  if (state.relPdvsSel.has(pdvId)) {
+    state.relPdvsSel.delete(pdvId);
+    btn.classList.remove('active');
+  } else {
+    state.relPdvsSel.add(pdvId);
+    btn.classList.add('active');
+  }
+  // Se limpou tudo, volta "Todos" pra ativo
+  const allBtn = document.querySelector('#tab-rel [data-pdv-all]');
+  if (allBtn) allBtn.classList.toggle('active', state.relPdvsSel.size === 0);
+}
+
+async function carregarPrecos() {
+  const { data } = await sb.from('precos').select('item_id, preco_unitario').eq('vigente', true);
+  state.precos = Object.fromEntries((data || []).map(p => [p.item_id, parseFloat(p.preco_unitario) || 0]));
+}
+
+async function gerarRel() {
+  const de = document.getElementById('rel-de').value;
+  const ate = document.getElementById('rel-ate').value;
+  const fonte = document.getElementById('rel-fonte').value;
+  const cat = document.getElementById('rel-cat').value;
+  if (!de || !ate) { showToast('Preencha o período.', 'error'); return; }
+  if (de > ate) { showToast('Data inicial maior que a final.', 'error'); return; }
+
+  const pdvIds = state.relPdvsSel.size > 0 ? [...state.relPdvsSel] : null; // null = todos
+  const cont = document.getElementById('relCont');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+  document.getElementById('btnExportarRel').style.display = 'none';
+
+  if (Object.keys(state.precos).length === 0) await carregarPrecos();
+
+  const rows = [];
+
+  if (fonte === 'ambos' || fonte === 'compra') {
+    let q = sb.from('solicitacoes_compra')
+      .select('id, data_competencia, status, pdv_id, solicitacao_compra_itens(item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, itens(fornecedor_principal))')
+      .in('status', ['aprovada','entregue'])
+      .gte('data_competencia', de)
+      .lte('data_competencia', ate);
+    if (pdvIds) q = q.in('pdv_id', pdvIds);
+    const { data, error } = await q;
+    if (error) { showToast('Erro (compras): ' + error.message, 'error'); cont.innerHTML = ''; return; }
+    (data || []).forEach(s => (s.solicitacao_compra_itens || []).forEach(it => {
+      if (cat && it.item_categoria !== cat) return;
+      rows.push({ fonte:'compra', itemId:it.item_id, nome:it.item_nome, cat:it.item_categoria, unid:it.item_unidade,
+                  qty: parseFloat(it.quantidade_solicitada) || 0,
+                  forn: it.itens?.fornecedor_principal || '—' });
+    }));
+  }
+
+  if (fonte === 'ambos' || fonte === 'req') {
+    let q = sb.from('requisicoes')
+      .select('id, data_competencia, status, pdv_id, requisicao_itens(item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, itens(fornecedor_principal))')
+      .eq('status', 'entregue')
+      .gte('data_competencia', de)
+      .lte('data_competencia', ate);
+    if (pdvIds) q = q.in('pdv_id', pdvIds);
+    const { data, error } = await q;
+    if (error) { showToast('Erro (requisições): ' + error.message, 'error'); cont.innerHTML = ''; return; }
+    (data || []).forEach(r => (r.requisicao_itens || []).forEach(it => {
+      if (cat && it.item_categoria !== cat) return;
+      const q2 = it.quantidade_entregue != null ? it.quantidade_entregue : it.quantidade_solicitada;
+      rows.push({ fonte:'req', itemId:it.item_id, nome:it.item_nome, cat:it.item_categoria, unid:it.item_unidade,
+                  qty: parseFloat(q2) || 0,
+                  forn: it.itens?.fornecedor_principal || '—' });
+    }));
+  }
+
+  // Agregar por item
+  const acc = {};
+  rows.forEach(r => {
+    const k = `${r.nome}||${r.cat}||${r.unid || ''}`;
+    if (!acc[k]) acc[k] = { itemId:r.itemId, nome:r.nome, cat:r.cat, unid:r.unid, forn:r.forn,
+                            qtyCompra:0, qtyReq:0, qtyTotal:0 };
+    if (r.fonte === 'compra') acc[k].qtyCompra += r.qty;
+    else acc[k].qtyReq += r.qty;
+    acc[k].qtyTotal += r.qty;
+  });
+  const itens = Object.values(acc).map(x => {
+    const preco = state.precos[x.itemId] || 0;
+    return { ...x, preco, valorTotal: preco * x.qtyTotal };
+  }).sort((a,b) => b.valorTotal - a.valorTotal);
+
+  relCache = { itens, de, ate, fonte, cat, pdvIds };
+  renderRelKPIs(itens);
+  renderRelTabela(itens, fonte);
+  document.getElementById('btnExportarRel').style.display = itens.length ? 'inline-block' : 'none';
+}
+
+function renderRelKPIs(itens) {
+  const kpis = document.getElementById('rel-kpis');
+  if (itens.length === 0) { kpis.style.display = 'none'; return; }
+  const totalItens = itens.length;
+  const totalQty = itens.reduce((s,x) => s + x.qtyTotal, 0);
+  const valorTotal = itens.reduce((s,x) => s + x.valorTotal, 0);
+  kpis.style.display = 'grid';
+  kpis.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Itens distintos</div>
+      <div class="stat-val">${totalItens}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Quantidade total</div>
+      <div class="stat-val gold">${fmtQty(totalQty)}</div>
+      <div class="stat-sub">soma bruta (unidades variam)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Valor total estimado</div>
+      <div class="stat-val green">${fmtBRL(valorTotal)}</div>
+      <div class="stat-sub">preço vigente × qtd</div>
+    </div>
+  `;
+}
+
+function renderRelTabela(itens, fonte) {
+  const cont = document.getElementById('relCont');
+  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma aquisição finalizada no período.</div>'; return; }
+  const grupos = {};
+  itens.forEach(x => { (grupos[x.cat] = grupos[x.cat] || []).push(x); });
+  const ordemCat = ['proteina','laticinios','hortifruti','diversos'];
+  const showC = fonte === 'ambos' || fonte === 'compra';
+  const showR = fonte === 'ambos' || fonte === 'req';
+  cont.innerHTML = ordemCat.filter(c => grupos[c]).map(c => {
+    const lista = grupos[c];
+    const subtotalQty = lista.reduce((s,x) => s + x.qtyTotal, 0);
+    const subtotalVal = lista.reduce((s,x) => s + x.valorTotal, 0);
+    return `
+      <div class="section-title" style="margin-top:20px">
+        <span>${CAT_LABEL_REL[c]} <span class="text-muted" style="font-size:12px">· ${lista.length} itens · qtd ${fmtQty(subtotalQty)} · ${fmtBRL(subtotalVal)}</span></span>
+      </div>
+      <table class="data-table">
+        <thead><tr>
+          <th>Item</th><th>Fornecedor</th><th class="center">Un</th>
+          ${showC ? '<th class="num">Comprada</th>' : ''}
+          ${showR ? '<th class="num">Requisitada</th>' : ''}
+          <th class="num">Total</th>
+          <th class="num">Preço un.</th>
+          <th class="num">Valor total</th>
+        </tr></thead>
+        <tbody>${lista.map(x => `<tr>
+          <td>${escapeHtml(x.nome)}</td>
+          <td class="text-muted">${escapeHtml(x.forn)}</td>
+          <td class="center text-muted">${escapeHtml(x.unid || '')}</td>
+          ${showC ? `<td class="num">${x.qtyCompra > 0 ? fmtQty(x.qtyCompra) : '—'}</td>` : ''}
+          ${showR ? `<td class="num">${x.qtyReq > 0 ? fmtQty(x.qtyReq) : '—'}</td>` : ''}
+          <td class="num" style="font-weight:500">${fmtQty(x.qtyTotal)}</td>
+          <td class="num text-muted">${x.preco > 0 ? fmtBRL(x.preco) : '—'}</td>
+          <td class="num" style="font-weight:500">${x.preco > 0 ? fmtBRL(x.valorTotal) : '—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    `;
+  }).join('');
+}
+
+function exportarRel() {
+  if (!relCache || relCache.itens.length === 0) { showToast('Gere o relatório primeiro.', 'error'); return; }
+  const { fonte } = relCache;
+  const showC = fonte === 'ambos' || fonte === 'compra';
+  const showR = fonte === 'ambos' || fonte === 'req';
+  const header = ['Categoria','Item','Fornecedor','Unidade'];
+  if (showC) header.push('Qtd Comprada');
+  if (showR) header.push('Qtd Requisitada');
+  header.push('Qtd Total', 'Preço unit.', 'Valor total');
+  const linhas = [header];
+  relCache.itens.forEach(x => {
+    const row = [CAT_LABEL_REL[x.cat] || x.cat, x.nome, x.forn, x.unid || ''];
+    if (showC) row.push(x.qtyCompra || 0);
+    if (showR) row.push(x.qtyReq || 0);
+    row.push(x.qtyTotal, x.preco || 0, x.valorTotal || 0);
+    linhas.push(row);
+  });
+  const csv = linhas.map(r => r.map(c => {
+    const v = String(c ?? '');
+    return /[";,\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
+  }).join(';')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `relatorio_executivo_${relCache.de}_${relCache.ate}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+function showToast(msg, tipo='info') {
+  const stack = document.getElementById('toasts');
+  const t = document.createElement('div'); t.className = 'toast ' + tipo; t.textContent = msg;
+  stack.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+// =====================================================================
+// NÍVEIS DE ESTOQUE (só leitura) e DIVERGÊNCIAS
+// =====================================================================
+state.est = { itens: [], saldo: {}, consumo: {}, divergencias: [] };
+
+function classificarSemaforo(qtdAtual, mediaDiaria) {
+  if (qtdAtual === null || qtdAtual === undefined || isNaN(qtdAtual)) return 'pend';
+  if (!mediaDiaria || mediaDiaria <= 0) return qtdAtual > 0 ? 'verde' : 'vermelho';
+  const dias = qtdAtual / mediaDiaria;
+  if (dias >= 3) return 'verde';
+  if (dias >= 1) return 'amarelo';
+  return 'vermelho';
+}
+
+function consumoDiarioItemEst(item) {
+  const c = state.est.consumo?.[item.id];
+  if (c) {
+    const total = parseFloat(c.saidas_30d) || 0;
+    if (total > 0) return total / 30;
+  }
+  return parseFloat(item.media_diaria) || 0;
+}
+
+async function carregarNiveisEst() {
+  const cont = document.getElementById('nvContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const [itensR, saldoR, consumoR] = await Promise.all([
+    sb.from('itens').select('id, nome, categoria, unidade, media_diaria, fornecedor_principal')
+      .eq('ativo', true).eq('inventario', true).order('categoria').order('nome'),
+    sb.from('v_estoque_saldo').select('*'),
+    sb.from('v_estoque_consumo').select('*'),
+  ]);
+  state.est.itens = itensR.data || [];
+  state.est.saldo = {}; (saldoR.data || []).forEach(s => { state.est.saldo[s.item_id] = s; });
+  state.est.consumo = {}; (consumoR.data || []).forEach(c => { state.est.consumo[c.item_id] = c; });
+  renderNiveisEst();
+}
+
+function renderNiveisEst() {
+  const cont = document.getElementById('nvContainer');
+  const catFilt = document.getElementById('nv-cat').value;
+  const stFilt  = document.getElementById('nv-status').value;
+  const q       = (document.getElementById('nv-search').value || '').toLowerCase();
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+
+  const dados = state.est.itens.map(it => {
+    const saldo = state.est.saldo?.[it.id];
+    const qtd = saldo && !saldo.sem_baseline && saldo.saldo_teorico !== null ? parseFloat(saldo.saldo_teorico) : null;
+    const md = consumoDiarioItemEst(it);
+    const dias = md > 0 && qtd !== null ? qtd / md : null;
+    return { it, qtd, md, dias, semaforo: classificarSemaforo(qtd, md), saldo };
+  });
+
+  const cnt = { verde:0, amarelo:0, vermelho:0, pend:0 };
+  dados.forEach(d => cnt[d.semaforo]++);
+  document.getElementById('nvVerde').textContent    = cnt.verde;
+  document.getElementById('nvAmarelo').textContent  = cnt.amarelo;
+  document.getElementById('nvVermelho').textContent = cnt.vermelho;
+  document.getElementById('nvPend').textContent     = cnt.pend;
+
+  let filtrados = dados;
+  if (catFilt === 'camara')  filtrados = filtrados.filter(d => d.it.categoria === 'proteina' || d.it.categoria === 'laticinios');
+  else if (catFilt)          filtrados = filtrados.filter(d => d.it.categoria === catFilt);
+  if (stFilt) filtrados = filtrados.filter(d => d.semaforo === stFilt);
+  if (q) filtrados = filtrados.filter(d => d.it.nome.toLowerCase().includes(q));
+  document.getElementById('nvCount').textContent = `${filtrados.length} item(ns)`;
+
+  if (filtrados.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item nesses filtros.</div>'; return; }
+  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3 };
+  filtrados.sort((a,b) => (ordem[a.semaforo] - ordem[b.semaforo]) || a.it.nome.localeCompare(b.it.nome));
+  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—' };
+  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○' };
+
+  cont.innerHTML = filtrados.map(d => {
+    const it = d.it;
+    const qtdTxt = d.qtd !== null ? `${d.qtd.toFixed(1)}<small>${it.unidade||''}</small>` : '<span class="text-muted">— sem baseline</span>';
+    const cobTxt = d.md > 0 ? (d.dias !== null ? `<strong>${d.dias.toFixed(1)}</strong> dia(s)` : '—') : '<span class="text-muted">s/ consumo</span>';
+    let breakdown = '';
+    if (d.saldo && !d.saldo.sem_baseline) {
+      const base = parseFloat(d.saldo.baseline_contagem) || 0;
+      const ent = parseFloat(d.saldo.entradas_desde_contagem) || 0;
+      const sai = parseFloat(d.saldo.saidas_desde_contagem) || 0;
+      const dataUlt = d.saldo.ultima_contagem_data ? d.saldo.ultima_contagem_data.split('-').reverse().join('/') : '—';
+      breakdown = `Base ${base.toFixed(1)} (${dataUlt}) &nbsp;+ ent ${ent.toFixed(1)} − sai ${sai.toFixed(1)}`;
+    } else breakdown = '<em>sem contagem ainda</em>';
+    return `
+      <div class="nv-row ${d.semaforo}">
+        <div class="chk-semaforo ${d.semaforo}">
+          <span class="dot">${semDot[d.semaforo]}</span>
+          <span class="txt">${semLabel[d.semaforo]}</span>
+        </div>
+        <div class="nv-nome">
+          ${escapeHtml(it.nome)}
+          <span class="cat-pill cat-${it.categoria}" style="font-size:10px;margin-left:6px">${catLabels[it.categoria]||''}</span>
+          ${it.fornecedor_principal ? `<div class="text-muted" style="font-size:11px;margin-top:2px">${escapeHtml(it.fornecedor_principal)}</div>` : ''}
+        </div>
+        <div class="nv-qty">${qtdTxt}</div>
+        <div class="nv-cob">${cobTxt}</div>
+        <div class="nv-ultima">${breakdown}</div>
+      </div>`;
+  }).join('');
+}
+
+async function carregarDivergencias() {
+  const cont = document.getElementById('dvContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const { data, error } = await sb.from('divergencias_estoque')
+    .select('*, itens(nome, categoria, unidade, fornecedor_principal)')
+    .order('data_contagem', { ascending: false })
+    .order('diff_pct', { ascending: false });
+  if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + error.message + '</div>'; return; }
+  state.est.divergencias = data || [];
+  renderDivergencias();
+  atualizarBadgeDivergencias();
+}
+
+function renderDivergencias() {
+  const cont = document.getElementById('dvContainer');
+  const st = document.getElementById('dv-status').value;
+  const catFilt = document.getElementById('dv-cat').value;
+  const q = (document.getElementById('dv-search').value || '').toLowerCase();
+  let lista = state.est.divergencias || [];
+  if (st) lista = lista.filter(d => d.status === st);
+  if (catFilt === 'camara') lista = lista.filter(d => d.itens && (d.itens.categoria === 'proteina' || d.itens.categoria === 'laticinios'));
+  else if (catFilt)         lista = lista.filter(d => d.itens && d.itens.categoria === catFilt);
+  if (q) lista = lista.filter(d => (d.itens?.nome||'').toLowerCase().includes(q));
+
+  document.getElementById('dvCount').textContent = `${lista.length} divergência(s)`;
+  if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma divergência com esses filtros.</div>'; return; }
+
+  const stLabel = { pendente:'Pendente', recontagem:'Recontagem', perda_registrada:'Perda', ajuste_ok:'Ajuste OK' };
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+
+  cont.innerHTML = lista.map(d => {
+    const it = d.itens || {};
+    const teo = parseFloat(d.qtd_teorica);
+    const con = parseFloat(d.qtd_contada);
+    const diff = parseFloat(d.diff);
+    const pct = parseFloat(d.diff_pct).toFixed(1);
+    const sobra = diff < 0;
+    const diffTxt = sobra
+      ? `<span class="dv-diff sobra">+${Math.abs(diff).toFixed(1)} ${it.unidade||''} <small>(${pct}% a mais)</small></span>`
+      : `<span class="dv-diff">−${diff.toFixed(1)} ${it.unidade||''} <small>(${pct}% a menos)</small></span>`;
+    // Executivo vê mas não resolve (mantém supervisão só). Se quiser, edito depois.
+    const acoes = `<span class="dv-status-tag ${d.status}">${stLabel[d.status]||d.status}</span>`;
+    return `
+      <div class="dv-row ${d.status}">
+        <div class="dv-nome">
+          ${escapeHtml(it.nome||'—')}
+          <span class="cat-pill cat-${it.categoria||'diversos'}" style="font-size:10px;margin-left:6px">${catLabels[it.categoria]||''}</span>
+          <small>Contagem: ${d.data_contagem ? d.data_contagem.split('-').reverse().join('/') : '—'}${d.motivo ? ' · Motivo: ' + escapeHtml(d.motivo) : ''}</small>
+        </div>
+        <div class="dv-teo-cell"><div class="dv-num teorico">${teo.toFixed(1)}<small>teórico</small></div></div>
+        <div class="dv-con-cell"><div class="dv-num contado">${con.toFixed(1)}<small>contado</small></div></div>
+        ${diffTxt}
+        <div class="dv-actions">${acoes}</div>
+      </div>`;
+  }).join('');
+}
+
+async function atualizarBadgeDivergencias() {
+  const badge = document.getElementById('badgeDivergencias');
+  if (!badge) return;
+  const { count } = await sb.from('divergencias_estoque')
+    .select('*', { count: 'exact', head: true }).eq('status', 'pendente');
+  if (count && count > 0) {
+    badge.textContent = String(count);
+    badge.style.background = 'rgba(224,82,82,0.7)';
+    badge.style.color = '#fff';
+    badge.style.display = 'inline-block';
+  } else if (badge.style) badge.style.display = 'none';
+}
+
+// Carrega o badge no boot
+window.addEventListener('load', () => setTimeout(atualizarBadgeDivergencias, 500));
+
+async function logout() { await sb.auth.signOut(); window.location.href = 'index.html'; }
+</script>
 </body>
 </html>

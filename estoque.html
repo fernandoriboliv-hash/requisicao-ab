@@ -3,396 +3,2146 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Estoque — Rosewood A&B</title>
+<title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <style>
-  :root {
-    --gold: #B8963E; --gold-light: #D4AF6A;
-    --dark: #0F1117; --surface: #161B27; --panel: #1D2333;
-    --border: rgba(184,150,62,0.2); --border-subtle: rgba(255,255,255,0.07);
-    --text: #E8E4DC; --muted: #7A8094; --muted2: #4A5066;
-    --green: #4CAF7D; --orange: #E08C3E; --error: #E05252;
-    --proteina: #5B8DD9; --laticinios: #9B6DD9; --hortifruti: #4CAF7D;
-  }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'DM Sans', sans-serif; background: var(--dark); color: var(--text); min-height: 100vh; }
-
-  header {
-    background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 0 24px; display: flex; align-items: center;
-    justify-content: space-between; height: 60px; position: sticky; top: 0; z-index: 100;
-  }
-  .header-left { display: flex; align-items: center; gap: 16px; }
-  .hotel-mark { font-family: 'Cormorant Garamond', serif; font-size: 16px; color: var(--gold); letter-spacing: 2px; }
-  .divider-v { width: 1px; height: 20px; background: var(--border); }
-  .page-title { font-size: 13px; color: var(--muted); letter-spacing: 1px; }
-  .logout-btn { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; }
-  .logout-btn:hover { color: var(--text); }
-
-  /* FILTROS */
-  .filters-bar {
-    background: var(--surface); border-bottom: 1px solid var(--border-subtle);
-    padding: 12px 24px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-  }
-  .filter-btn {
-    padding: 6px 14px; background: none; border: 1px solid var(--border-subtle);
-    color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 12px;
-    cursor: pointer; transition: all 0.15s; letter-spacing: 0.5px;
-  }
-  .filter-btn.active { border-color: var(--gold); color: var(--gold); background: rgba(184,150,62,0.1); }
-  .filter-date { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-  input[type="date"] {
-    background: var(--panel); border: 1px solid var(--border-subtle);
-    color: var(--text); font-family: 'DM Sans', sans-serif;
-    font-size: 13px; padding: 6px 10px; outline: none;
-  }
-  .date-label { font-size: 12px; color: var(--muted); }
-  .btn-buscar {
-    padding: 6px 16px; background: rgba(184,150,62,0.15);
-    border: 1px solid var(--border); color: var(--gold);
-    font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer;
-  }
-
-  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
-
-  /* STATS */
-  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
-  .stat-card {
-    background: var(--panel); border: 1px solid var(--border-subtle);
-    padding: 16px 20px;
-  }
-  .stat-label { font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
-  .stat-val { font-size: 28px; font-weight: 300; }
-  .stat-val.orange { color: var(--orange); }
-  .stat-val.green { color: var(--green); }
-  .stat-val.muted { color: var(--muted); }
-  .stat-val.error { color: var(--error); }
-
-  /* LISTA */
-  .req-section-title {
-    font-size: 11px; letter-spacing: 2px; color: var(--muted);
-    text-transform: uppercase; margin-bottom: 12px;
-    display: flex; align-items: center; justify-content: space-between;
-  }
+  /* Lista de requisições */
   .req-card {
-    background: var(--panel); border: 1px solid var(--border-subtle);
-    margin-bottom: 8px; transition: border-color 0.2s;
+    background: var(--panel);
+    border: 1px solid var(--border-subtle);
+    margin-bottom: 8px;
+    transition: border-color 0.2s;
   }
   .req-card:hover { border-color: rgba(184,150,62,0.3); }
   .req-head {
-    padding: 16px 20px; display: flex; align-items: center;
-    gap: 16px; cursor: pointer;
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto auto auto;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
   }
-  .req-num { font-size: 13px; color: var(--muted); min-width: 60px; }
-  .req-pdv { font-size: 15px; font-weight: 500; flex: 1; }
+  .req-num { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .req-pdv { font-size: 15px; font-weight: 500; }
+  .req-pdv .manual-tag {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 10px;
+    padding: 2px 6px;
+    background: rgba(184,150,62,0.15);
+    color: var(--gold);
+    letter-spacing: 0.5px;
+  }
   .req-meta { font-size: 12px; color: var(--muted); }
   .req-count { font-size: 12px; color: var(--muted); }
-  .status-badge {
-    font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
-    padding: 4px 12px; font-weight: 500;
-  }
-  .status-enviado { background: rgba(122,128,148,0.15); color: var(--muted); }
-  .status-separacao { background: rgba(224,140,62,0.15); color: var(--orange); }
-  .status-entregue { background: rgba(76,175,125,0.15); color: var(--green); }
-  .chevron { transition: transform 0.2s; color: var(--muted2); }
+  .chevron { color: var(--muted2); transition: transform 0.2s; }
   .chevron.open { transform: rotate(180deg); }
 
-  /* DETALHE */
-  .req-detail { display: none; border-top: 1px solid var(--border-subtle); padding: 0 20px 20px; }
+  .req-detail { display: none; border-top: 1px solid var(--border-subtle); padding: 16px 20px; }
   .req-detail.open { display: block; }
-  .detail-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-  .detail-table th {
-    font-size: 10px; letter-spacing: 1.5px; color: var(--muted);
-    text-transform: uppercase; text-align: left; padding: 6px 12px;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-  .detail-table td { padding: 10px 12px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.04); }
-  .cat-pill {
-    font-size: 10px; padding: 2px 8px; letter-spacing: 0.5px;
-    display: inline-block;
-  }
-  .cat-proteina { background: rgba(91,141,217,0.15); color: var(--proteina); }
-  .cat-laticinios { background: rgba(155,109,217,0.15); color: var(--laticinios); }
-  .cat-hortifruti { background: rgba(76,175,125,0.15); color: var(--hortifruti); }
-  .cat-livre { background: rgba(224,140,62,0.15); color: var(--orange); }
   .qty-entrega {
-    width: 80px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle);
-    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px;
+    width: 80px; background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border-subtle);
+    color: var(--text); font-family: inherit; font-size: 14px;
     padding: 6px 8px; text-align: center; outline: none;
   }
   .qty-entrega:focus { border-color: rgba(184,150,62,0.4); }
   .motivo-input {
-    width: 100%; background: rgba(224,82,82,0.06); border: 1px solid rgba(224,82,82,0.2);
-    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px;
+    width: 100%; max-width: 280px;
+    background: rgba(224,82,82,0.06); border: 1px solid rgba(224,82,82,0.2);
+    color: var(--text); font-family: inherit; font-size: 12px;
     padding: 6px 8px; outline: none; display: none;
-    transition: border-color 0.2s;
   }
   .motivo-input.visible { display: block; }
+  .motivo-input.pulse {
+    animation: motivoPulse 0.6s ease 0s 2;
+    border-color: var(--c-proteina);
+    box-shadow: 0 0 0 2px rgba(224,82,82,0.15);
+  }
+  @keyframes motivoPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+  }
   .obs-box {
     margin-top: 12px; padding: 10px 14px;
     background: rgba(255,255,255,0.03); border-left: 2px solid var(--border);
     font-size: 13px; color: var(--muted);
   }
-  .req-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
-  .btn-entregar {
-    padding: 10px 24px; background: var(--green); color: #0F1117;
-    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
-    letter-spacing: 1px; text-transform: uppercase; border: none; cursor: pointer;
-    transition: opacity 0.2s;
-  }
-  .btn-entregar:hover { opacity: 0.85; }
-  .btn-entregar:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-separacao {
-    padding: 10px 20px; background: none; border: 1px solid var(--orange);
-    color: var(--orange); font-family: 'DM Sans', sans-serif; font-size: 13px;
-    cursor: pointer; transition: background 0.2s;
-  }
-  .btn-separacao:hover { background: rgba(224,140,62,0.1); }
 
-  .empty-text { text-align: center; color: var(--muted2); padding: 60px 20px; font-size: 14px; }
-  .loading-text { text-align: center; color: var(--muted); padding: 40px; font-size: 14px; }
+  /* Aba "Nova Requisição Manual" — reusa estilo do PDV */
+  .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .cat-btn {
+    padding: 10px 18px; background: var(--surface);
+    border: 1px solid var(--border-subtle); color: var(--muted);
+    font-family: inherit; font-size: 12px; letter-spacing: 1.5px;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .cat-btn:hover { color: var(--text); }
+  .cat-btn.on-proteina    { background: rgba(192,57,43,0.15);  border-color: var(--c-proteina);   color: var(--c-proteina); }
+  .cat-btn.on-laticinios  { background: rgba(37,99,168,0.15);  border-color: var(--c-laticinios); color: var(--c-laticinios); }
+  .cat-btn.on-hortifruti  { background: rgba(74,124,89,0.15);  border-color: var(--c-hortifruti); color: var(--c-hortifruti); }
+  .cat-btn.on-diversos    { background: rgba(184,150,62,0.15); border-color: var(--c-diversos);   color: var(--c-diversos); }
 
-  /* HISTÓRICO */
-  .hist-section { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-subtle); }
+  .item-row {
+    display: grid; grid-template-columns: 22px 1fr auto auto;
+    align-items: center; gap: 12px;
+    background: var(--panel); padding: 10px 14px; margin-bottom: 2px;
+    border: 1px solid transparent; cursor: pointer;
+  }
+  .item-row.selected { border-color: var(--gold); background: rgba(184,150,62,0.06); }
+  .item-check {
+    width: 18px; height: 18px; border: 1px solid var(--muted2);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .item-row.selected .item-check { background: var(--gold); border-color: var(--gold); color: #0F1117; }
+  .item-name { font-size: 14px; }
+  .item-unit { font-size: 12px; color: var(--muted); width: 50px; text-align: center; }
+  .item-qty-wrap { display: none; align-items: center; gap: 6px; }
+  .item-row.selected .item-qty-wrap { display: flex; }
+  .qty-btn {
+    width: 26px; height: 26px;
+    background: rgba(255,255,255,0.08); border: none; color: var(--text);
+    font-size: 16px; cursor: pointer;
+  }
+  .qty-input {
+    width: 60px; text-align: center;
+    background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle);
+    color: var(--text); font-family: inherit; font-size: 14px;
+    padding: 4px; outline: none;
+  }
+
+  body { padding-bottom: 80px; }
+  .filters-bar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  /* ================== CHECKLIST DE ESTOQUE ================== */
+  .chk-summary {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 900px) {
+    .chk-summary { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  }
+  .chk-summary .card {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    padding: 14px 18px;
+  }
+  .chk-summary .card.verde   { border-left: 3px solid var(--green); }
+  .chk-summary .card.amarelo { border-left: 3px solid var(--orange); }
+  .chk-summary .card.vermelho{ border-left: 3px solid var(--error); }
+  .chk-summary .card.pend    { border-left: 3px solid var(--muted2); }
+  .chk-summary .val {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 30px; font-weight: 300; margin-top: 4px;
+  }
+  .chk-summary .val.verde   { color: var(--green); }
+  .chk-summary .val.amarelo { color: var(--orange); }
+  .chk-summary .val.vermelho{ color: var(--error); }
+  .chk-summary .val.pend    { color: var(--muted); }
+  .chk-summary .lbl {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--muted);
+  }
+
+  .chk-filters {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+    align-items: end;
+  }
+  .chk-filter-item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .chk-filter-item label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--muted);
+  }
+  .chk-filter-item .input, .chk-filter-item .select {
+    width: 100%; box-sizing: border-box;
+  }
+  .chk-filter-search { grid-column: span 1; }
+  @media (max-width: 900px) {
+    .chk-filters { grid-template-columns: repeat(2, 1fr); }
+    .chk-filter-search { grid-column: span 2; }
+  }
+  @media (max-width: 500px) {
+    .chk-filters { grid-template-columns: 1fr; }
+    .chk-filter-search { grid-column: span 1; }
+  }
+
+  .chk-row {
+    display: grid;
+    grid-template-columns: 70px 1fr 220px 130px 60px 160px;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    padding: 12px 14px;
+    margin-bottom: 3px;
+    border: 1px solid var(--border-subtle);
+    border-left: 4px solid var(--muted2);
+    transition: border-color 0.15s;
+  }
+  @media (max-width: 900px) {
+    .chk-row {
+      grid-template-columns: 60px 1fr auto;
+      grid-template-areas:
+        "sem nome nome"
+        "sem meta qty"
+        "sem hist hist";
+      row-gap: 6px;
+      padding: 14px;
+    }
+    .chk-row .chk-semaforo { grid-area: sem; }
+    .chk-row .chk-nome     { grid-area: nome; }
+    .chk-row .chk-meta     { grid-area: meta; text-align: left; }
+    .chk-row .chk-qty-cell { grid-area: qty; display: flex; align-items: center; gap: 6px; }
+    .chk-row .chk-history-mini { grid-area: hist; text-align: left; }
+    .chk-row .chk-unit-standalone { display: none; }
+  }
+  .chk-qty-cell {
+    display: contents;
+  }
+  @media (max-width: 900px) {
+    .chk-qty-cell { display: flex; }
+    .chk-qty-input { width: 100px !important; font-size: 16px !important; padding: 10px !important; }
+  }
+  .chk-row.verde    { border-left-color: var(--green); }
+  .chk-row.amarelo  { border-left-color: var(--orange); }
+  .chk-row.vermelho { border-left-color: var(--error); background: rgba(224,82,82,0.04); }
+  .chk-row.pend     { border-left-color: var(--muted2); background: rgba(255,255,255,0.02); }
+
+  .chk-semaforo {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 2px; font-size: 20px;
+  }
+  .chk-semaforo .dot { line-height: 1; }
+  .chk-semaforo .txt {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px;
+  }
+  .chk-semaforo.verde    .dot { color: var(--green); }
+  .chk-semaforo.verde    .txt { color: var(--green); }
+  .chk-semaforo.amarelo  .dot { color: var(--orange); }
+  .chk-semaforo.amarelo  .txt { color: var(--orange); }
+  .chk-semaforo.vermelho .dot { color: var(--error); }
+  .chk-semaforo.vermelho .txt { color: var(--error); }
+  .chk-semaforo.pend     .dot { color: var(--muted2); }
+  .chk-semaforo.pend     .txt { color: var(--muted2); }
+
+  .chk-nome { font-size: 14px; }
+  .chk-nome .badge-cat {
+    display: inline-block; font-size: 9px; padding: 1px 6px;
+    margin-left: 8px; letter-spacing: 1px; text-transform: uppercase;
+  }
+  .chk-meta {
+    font-size: 11px; color: var(--muted); min-width: 130px; text-align: right;
+  }
+  .chk-meta strong { color: var(--text); font-weight: 500; }
+  .chk-qty-input {
+    width: 90px; text-align: right;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border-subtle);
+    color: var(--text); font-family: inherit; font-size: 14px;
+    padding: 6px 10px; outline: none;
+  }
+  .chk-qty-input:focus { border-color: rgba(184,150,62,0.5); }
+  .chk-qty-input.dirty { border-color: var(--gold); background: rgba(184,150,62,0.08); }
+  .chk-unit { font-size: 12px; color: var(--muted); min-width: 40px; }
+
+  .chk-history-mini {
+    font-size: 10px; color: var(--muted2); min-width: 120px;
+  }
+  .chk-teorico { font-size: 11px; color: var(--gold); margin-top: 3px; }
+  .chk-teorico strong { color: var(--gold); }
+  .chk-teorico-sem { color: var(--muted); font-style: italic; }
+  .chk-divergencia { color: var(--error) !important; font-weight: 500; }
+
+  /* Níveis de Estoque — grid compacto só-leitura */
+  .nv-row {
+    display: grid;
+    grid-template-columns: 70px 1fr 130px 130px 160px;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    padding: 10px 14px;
+    margin-bottom: 3px;
+    border: 1px solid var(--border-subtle);
+    border-left: 4px solid var(--muted2);
+  }
+  .nv-row.verde    { border-left-color: var(--green); }
+  .nv-row.amarelo  { border-left-color: var(--orange); }
+  .nv-row.vermelho { border-left-color: var(--error); background: rgba(224,82,82,0.04); }
+  .nv-row.pend     { border-left-color: var(--muted2); background: rgba(255,255,255,0.02); }
+  .nv-qty {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 22px; font-weight: 300;
+    text-align: right;
+  }
+  .nv-qty small { font-size: 11px; color: var(--muted); margin-left: 4px; }
+  .nv-cob { font-size: 12px; color: var(--muted); text-align: right; }
+  .nv-cob strong { color: var(--text); font-weight: 500; }
+  .nv-ultima { font-size: 11px; color: var(--muted2); }
+  @media (max-width: 900px) {
+    .nv-row {
+      grid-template-columns: 60px 1fr auto;
+      grid-template-areas:
+        "sem nome nome"
+        "sem qty cob"
+        "sem ult ult";
+      row-gap: 4px;
+    }
+    .nv-row .chk-semaforo { grid-area: sem; }
+    .nv-row .nv-nome      { grid-area: nome; }
+    .nv-row .nv-qty       { grid-area: qty; text-align: left; }
+    .nv-row .nv-cob       { grid-area: cob; text-align: right; }
+    .nv-row .nv-ultima    { grid-area: ult; }
+  }
+
+  /* Divergências */
+  .dv-row {
+    display: grid;
+    grid-template-columns: 1fr 110px 110px 130px auto;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    padding: 12px 16px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--error);
+  }
+  .dv-row.recontagem      { border-left-color: var(--orange); opacity: 0.85; }
+  .dv-row.perda_registrada { border-left-color: var(--muted2); opacity: 0.7; }
+  .dv-row.ajuste_ok        { border-left-color: var(--green);  opacity: 0.7; }
+  .dv-nome { font-size: 14px; }
+  .dv-nome small { font-size: 11px; color: var(--muted); display: block; margin-top: 2px; }
+  .dv-num {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 20px; font-weight: 300; text-align: right;
+  }
+  .dv-num small { font-size: 10px; color: var(--muted); margin-left: 4px; }
+  .dv-num.teorico { color: var(--gold); }
+  .dv-num.contado { color: var(--text); }
+  .dv-diff {
+    text-align: right; font-size: 13px;
+    color: var(--error); font-weight: 500;
+  }
+  .dv-diff small { font-size: 10px; color: var(--muted); display: block; margin-top: 2px; }
+  .dv-diff.sobra { color: var(--green); }
+  .dv-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .dv-action-btn {
+    padding: 5px 10px; border: 1px solid var(--border-subtle);
+    background: transparent; color: var(--muted); cursor: pointer;
+    font-family: inherit; font-size: 11px; letter-spacing: 0.5px;
+    transition: all 0.15s;
+  }
+  .dv-action-btn:hover { color: var(--text); border-color: var(--muted); }
+  .dv-action-btn.perda { color: var(--error); border-color: rgba(224,82,82,0.4); }
+  .dv-action-btn.perda:hover { background: rgba(224,82,82,0.12); }
+  .dv-action-btn.recontagem { color: var(--orange); border-color: rgba(224,140,62,0.4); }
+  .dv-action-btn.recontagem:hover { background: rgba(224,140,62,0.12); }
+  .dv-action-btn.ok { color: var(--green); border-color: rgba(76,175,125,0.4); }
+  .dv-action-btn.ok:hover { background: rgba(76,175,125,0.12); }
+  .dv-status-tag {
+    font-size: 10px; padding: 2px 8px; letter-spacing: 1px;
+    text-transform: uppercase; border: 1px solid;
+  }
+  .dv-status-tag.pendente         { color: var(--error);  border-color: rgba(224,82,82,0.4); }
+  .dv-status-tag.recontagem       { color: var(--orange); border-color: rgba(224,140,62,0.4); }
+  .dv-status-tag.perda_registrada { color: var(--muted);  border-color: var(--border-subtle); }
+  .dv-status-tag.ajuste_ok        { color: var(--green);  border-color: rgba(76,175,125,0.4); }
+  @media (max-width: 900px) {
+    .dv-row {
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "nome nome"
+        "teo con"
+        "diff diff"
+        "act  act";
+      row-gap: 6px;
+    }
+    .dv-row .dv-nome      { grid-area: nome; }
+    .dv-row .dv-teo-cell  { grid-area: teo; }
+    .dv-row .dv-con-cell  { grid-area: con; }
+    .dv-row .dv-diff      { grid-area: diff; text-align: left; }
+    .dv-row .dv-actions   { grid-area: act; justify-content: flex-start; }
+  }
+
+  .chk-save-bar {
+    position: fixed; left: 220px; right: 0; bottom: 0;
+    padding: 12px 24px; background: rgba(15,17,23,0.96);
+    border-top: 1px solid var(--border-subtle);
+    display: none; align-items: center; gap: 14px;
+    z-index: 40; backdrop-filter: blur(8px);
+  }
+  .chk-save-bar.visible { display: flex; }
+  .chk-save-bar .dirty-count { color: var(--gold); }
 </style>
 </head>
 <body>
-<header>
-  <div class="header-left">
-    <div class="hotel-mark">Rosewood</div>
-    <div class="divider-v"></div>
-    <div class="page-title">Comissário — Fila do Dia</div>
-  </div>
-  <button class="logout-btn" onclick="logout()">Sair</button>
-</header>
 
-<div class="filters-bar">
-  <button class="filter-btn active" onclick="setFiltro('pendentes', this)">Pendentes</button>
-  <button class="filter-btn" onclick="setFiltro('todos', this)">Todos do Dia</button>
-  <button class="filter-btn" onclick="setFiltro('entregues', this)">Entregues</button>
-  <select id="pdvFilter" style="padding:6px 10px;background:var(--panel);border:1px solid var(--border-subtle);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;cursor:pointer;">
-    <option value="">Todos os PDVs</option>
-  </select>
-  <div class="filter-date">
-    <span class="date-label">Data:</span>
-    <input type="date" id="dateFilter">
-    <button class="btn-buscar" onclick="carregar()">Buscar</button>
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="name">Rosewood</div>
+    <div class="sub">A&amp;B · Comissaria</div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-group open" id="grp-requisicoes">
+      <div class="nav-group-head" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">↔</span> Requisições
+        <span class="chev">▸</span>
+      </div>
+      <div class="nav-group-items">
+        <div class="nav-item active" onclick="goTab('fila',this)"><span class="nav-icon">≡</span> Requisições a Separar</div>
+        <div class="nav-item" onclick="goTab('manual',this)"><span class="nav-icon">＋</span> Criar Requisição</div>
+      </div>
+    </div>
+
+    <div class="nav-group" id="grp-estoque">
+      <div class="nav-group-head" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">◐</span> Estoque
+        <span class="chev">▸</span>
+      </div>
+      <div class="nav-group-items">
+        <div class="nav-item" onclick="goTab('checklist',this)">
+          <span class="nav-icon">☑</span> Checklist do Estoque
+          <span class="nav-badge" id="badgeChecklist"></span>
+        </div>
+        <div class="nav-item" onclick="goTab('niveis',this)"><span class="nav-icon">◐</span> Níveis do Estoque</div>
+        <div class="nav-item" onclick="goTab('divergencias',this)">
+          <span class="nav-icon">△</span> Divergências
+          <span class="nav-badge" id="badgeDivergencias"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-item" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
+    <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
+  </div>
+  <div class="sidebar-foot">
+    <div class="name" id="userName">—</div>
+    <button class="logout-btn" onclick="logout()">Sair do sistema</button>
+  </div>
+</nav>
+
+<div class="sidebar-overlay" id="sbOverlay" onclick="toggleSidebar()"></div>
+
+<div class="main-with-sidebar">
+  <div class="top-bar">
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Abrir menu">☰</button>
+    <div class="top-bar-hero">
+      <div class="top-title" id="topTitle">Fila de Requisições</div>
+      <div class="top-sub" id="topSub">Separar e entregar pedidos dos PDVs</div>
+    </div>
+  </div>
+
+  <div class="main full">
+
+  <!-- ========================================================== -->
+  <!-- ABA FILA — atender separação                               -->
+  <!-- ========================================================== -->
+  <div class="tab-content active" id="tab-fila">
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Aguardando</div><div class="stat-val orange" id="stAg">—</div><div class="stat-sub">requisições enviadas</div></div>
+      <div class="stat-card"><div class="stat-label">Em Separação</div><div class="stat-val" id="stSep">—</div></div>
+      <div class="stat-card"><div class="stat-label">Entregues Hoje</div><div class="stat-val green" id="stEnt">—</div></div>
+      <div class="stat-card"><div class="stat-label">Divergências</div><div class="stat-val error" id="stDiv">—</div><div class="stat-sub">itens com diferença</div></div>
+    </div>
+
+    <div class="filters-bar">
+      <button class="btn btn-sm btn-outline" id="f-pendentes" onclick="setFiltro('pendentes')">Pendentes</button>
+      <button class="btn btn-sm btn-secondary" id="f-todos" onclick="setFiltro('todos')">Todos</button>
+      <button class="btn btn-sm btn-secondary" id="f-entregues" onclick="setFiltro('entregues')">Entregues</button>
+      <select class="select" id="f-pdv" style="max-width:200px" onchange="renderFila()">
+        <option value="">Todos os PDVs</option>
+      </select>
+      <span class="text-muted" style="margin-left:8px;font-size:12px">Data:</span>
+      <input class="input" type="date" id="f-data" style="max-width:160px" onchange="carregarFila()">
+      <button class="btn btn-sm btn-outline" onclick="carregarFila()">Buscar</button>
+    </div>
+
+    <div class="section-title">
+      <span id="filaTitle">Pendentes</span>
+      <span id="filaCount" class="text-muted" style="font-size:12px"></span>
+    </div>
+    <div id="filaContainer"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- ABA NOVA REQUISIÇÃO MANUAL                                 -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-manual">
+    <div class="aviso aviso-info">
+      Cadastre uma requisição em nome de outro PDV — usado quando alguém vem pessoalmente buscar item da comissaria.
+      O sistema registra a transferência para alocar custo no PDV correto.
+    </div>
+
+    <div class="form-row col2">
+      <div class="field">
+        <label class="field-label">PDV de Destino</label>
+        <select class="select" id="m-pdv">
+          <option value="">Selecione o PDV...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Observação (opcional)</label>
+        <input class="input" id="m-obs" placeholder="Ex.: retirada balcão por João">
+      </div>
+    </div>
+
+    <div class="cat-tabs" id="m-cat-tabs">
+      <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCatManual('proteina')">Proteína</button>
+      <button class="cat-btn" data-cat="laticinios" onclick="setCatManual('laticinios')">Laticínios</button>
+      <button class="cat-btn" data-cat="hortifruti" onclick="setCatManual('hortifruti')">Hortifruti</button>
+      <button class="cat-btn" data-cat="diversos" onclick="setCatManual('diversos')">Diversos</button>
+    </div>
+
+    <div style="position:relative;margin-bottom:14px">
+      <input class="input" id="m-search" placeholder="Buscar item..." oninput="renderItensManual()" style="padding-left:14px">
+    </div>
+
+    <div id="m-items"><div class="loading-text">Carregando catálogo...</div></div>
+  </div>
+
+  <!-- Barra fixa: aparece ao selecionar pelo menos 1 item na aba Manual -->
+  <div class="cart-bar" id="manualCartBar">
+    <div class="cart-info">
+      <span class="cart-count" id="manualCartCount">0</span>
+      <span>iten(s) selecionado(s)</span>
+    </div>
+    <div class="cart-actions">
+      <button class="btn btn-primary" onclick="enviarManual()">Registrar Saída</button>
+    </div>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- ABA SOLICITAR COMPRA (COMISSARIA)                          -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-compra">
+    <div class="aviso aviso-info" id="c-avisoCorte">
+      Carregando regra de corte...
+    </div>
+
+    <div class="form-row col2">
+      <div class="field">
+        <label class="field-label">Data de Entrega Desejada</label>
+        <input class="input" type="date" id="c-data-entrega">
+      </div>
+      <div class="field">
+        <label class="field-label">Observação Geral (opcional)</label>
+        <input class="input" id="c-obs" placeholder="Ex.: reposição estoque commissary">
+      </div>
+    </div>
+
+    <div class="cat-tabs" id="c-cat-tabs">
+      <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCatCompra('proteina')">Proteína</button>
+      <button class="cat-btn" data-cat="laticinios" onclick="setCatCompra('laticinios')">Laticínios</button>
+      <button class="cat-btn" data-cat="hortifruti" onclick="setCatCompra('hortifruti')">Hortifruti</button>
+      <button class="cat-btn" data-cat="diversos" onclick="setCatCompra('diversos')">Diversos</button>
+    </div>
+
+    <div style="position:relative;margin-bottom:14px">
+      <input class="input" id="c-search" placeholder="Buscar item..." oninput="renderItensCompra()">
+    </div>
+
+    <div id="c-items"><div class="loading-text">Carregando catálogo...</div></div>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- ABA CHECKLIST ESTOQUE — contagem diária + semáforo         -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-checklist">
+    <div class="aviso aviso-info">
+      Registre a quantidade atual em estoque de cada item de inventário.
+      O semáforo compara com o consumo médio: <strong>verde</strong> ≥ 50% da cobertura ideal,
+      <strong>amarelo</strong> 25–50%, <strong>vermelho</strong> abaixo de 25%.
+      PDVs recebem alerta ao requisitar item em vermelho.
+    </div>
+
+    <div class="chk-filters">
+      <div class="chk-filter-item">
+        <label>Data da contagem</label>
+        <input class="input" type="date" id="chk-data" onchange="carregarChecklist()">
+      </div>
+      <div class="chk-filter-item">
+        <label>Categorias (câmara)</label>
+        <select class="select" id="chk-filtro" onchange="renderChecklist()">
+          <option value="camara" selected>Proteínas + Laticínios</option>
+          <option value="proteina">Só Proteína</option>
+          <option value="laticinios">Só Laticínios</option>
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="chk-filter-item">
+        <label>Consumo médio</label>
+        <select class="select" id="chk-janela" onchange="renderChecklist()" title="Janela de dias usada pra calcular o consumo diário médio">
+          <option value="7">Últimos 7 dias</option>
+          <option value="14">Últimos 14 dias</option>
+          <option value="30" selected>Últimos 30 dias</option>
+          <option value="60">Últimos 60 dias</option>
+        </select>
+      </div>
+      <div class="chk-filter-item">
+        <label>Status</label>
+        <select class="select" id="chk-status" onchange="renderChecklist()">
+          <option value="">Todos</option>
+          <option value="vermelho">Só vermelho</option>
+          <option value="amarelo">Só amarelo</option>
+          <option value="verde">Só verde</option>
+          <option value="pend">Só pendentes</option>
+        </select>
+      </div>
+      <div class="chk-filter-item chk-filter-search">
+        <label>Buscar</label>
+        <input class="input" type="text" id="chk-search" placeholder="Nome do item..." oninput="renderChecklist()">
+      </div>
+    </div>
+
+    <div class="chk-summary" id="chkSummary">
+      <div class="card verde"><div class="lbl">Verde (OK)</div><div class="val verde" id="chkVerde">—</div></div>
+      <div class="card amarelo"><div class="lbl">Amarelo (Repor)</div><div class="val amarelo" id="chkAmarelo">—</div></div>
+      <div class="card vermelho"><div class="lbl">Vermelho (Crítico)</div><div class="val vermelho" id="chkVermelho">—</div></div>
+      <div class="card pend"><div class="lbl">Não contados</div><div class="val pend" id="chkPend">—</div></div>
+    </div>
+
+    <div class="section-title">
+      <span>Itens de Inventário</span>
+      <span id="chkCount" class="text-muted" style="font-size:12px"></span>
+    </div>
+    <div id="chkContainer"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- ABA NÍVEIS DE ESTOQUE — consulta rápida (só leitura)         -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-niveis">
+    <div class="aviso aviso-info">
+      Visão rápida dos níveis atuais de estoque baseada na última contagem. Para atualizar, use o Checklist.
+    </div>
+
+    <div class="chk-filters">
+      <div class="chk-filter-item">
+        <label>Categorias</label>
+        <select class="select" id="nv-cat" onchange="renderNiveis()">
+          <option value="camara" selected>Proteínas + Laticínios</option>
+          <option value="proteina">Só Proteína</option>
+          <option value="laticinios">Só Laticínios</option>
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="chk-filter-item">
+        <label>Status</label>
+        <select class="select" id="nv-status" onchange="renderNiveis()">
+          <option value="">Todos</option>
+          <option value="vermelho">Só vermelho</option>
+          <option value="amarelo">Só amarelo</option>
+          <option value="verde">Só verde</option>
+          <option value="pend">Só sem contagem</option>
+        </select>
+      </div>
+      <div class="chk-filter-item chk-filter-search">
+        <label>Buscar</label>
+        <input class="input" type="text" id="nv-search" placeholder="Nome do item..." oninput="renderNiveis()">
+      </div>
+      <div class="chk-filter-item" style="align-self:end">
+        <button class="btn btn-sm btn-outline" onclick="carregarNiveis()">↻ Recarregar</button>
+      </div>
+    </div>
+
+    <div class="chk-summary" id="nvSummary">
+      <div class="card verde"><div class="lbl">Verde (OK)</div><div class="val verde" id="nvVerde">—</div></div>
+      <div class="card amarelo"><div class="lbl">Amarelo (Repor)</div><div class="val amarelo" id="nvAmarelo">—</div></div>
+      <div class="card vermelho"><div class="lbl">Vermelho (Crítico)</div><div class="val vermelho" id="nvVermelho">—</div></div>
+      <div class="card pend"><div class="lbl">Sem contagem</div><div class="val pend" id="nvPend">—</div></div>
+    </div>
+
+    <div class="section-title">
+      <span>Estoque atual</span>
+      <span id="nvCount" class="text-muted" style="font-size:12px"></span>
+    </div>
+    <div id="nvContainer"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- ABA DIVERGÊNCIAS DE ESTOQUE                                 -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-divergencias">
+    <div class="aviso aviso-info">
+      Itens em que a contagem física divergiu do saldo teórico em <strong>10% ou mais</strong>.
+      Escolha uma ação: <strong>Recontagem</strong> (recontar amanhã), <strong>Perda registrada</strong>
+      (baixa contábil) ou <strong>Ajuste OK</strong> (aceita e arquiva).
+    </div>
+
+    <div class="chk-filters">
+      <div class="chk-filter-item">
+        <label>Status</label>
+        <select class="select" id="dv-status" onchange="renderDivergencias()">
+          <option value="pendente" selected>Pendentes</option>
+          <option value="recontagem">Aguardando recontagem</option>
+          <option value="perda_registrada">Perda registrada</option>
+          <option value="ajuste_ok">Ajuste OK</option>
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="chk-filter-item">
+        <label>Categoria</label>
+        <select class="select" id="dv-cat" onchange="renderDivergencias()">
+          <option value="camara" selected>Proteínas + Laticínios</option>
+          <option value="proteina">Só Proteína</option>
+          <option value="laticinios">Só Laticínios</option>
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="chk-filter-item chk-filter-search">
+        <label>Buscar</label>
+        <input class="input" type="text" id="dv-search" placeholder="Nome do item..." oninput="renderDivergencias()">
+      </div>
+      <div class="chk-filter-item" style="align-self:end">
+        <button class="btn btn-sm btn-outline" onclick="carregarDivergencias()">↻ Recarregar</button>
+      </div>
+    </div>
+
+    <div class="section-title">
+      <span>Divergências</span>
+      <span id="dvCount" class="text-muted" style="font-size:12px"></span>
+    </div>
+    <div id="dvContainer"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- Barra fixa: salvar contagens pendentes -->
+  <div class="chk-save-bar" id="chkSaveBar">
+    <span><span class="dirty-count" id="chkDirtyCount">0</span> alteração(ões) pendente(s)</span>
+    <span style="margin-left:auto"></span>
+    <button class="btn btn-sm btn-outline" onclick="descartarChecklist()">Descartar</button>
+    <button class="btn btn-sm btn-primary" onclick="salvarChecklist()">Salvar contagem</button>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- ABA RELATÓRIOS — Comissaria                                -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-relatorios">
+
+    <div class="aviso aviso-info">
+      Dois cortes: <strong>Saídas</strong> (requisições que a Comissaria atendeu, por PDV destino) e
+      <strong>Compras próprias</strong> (o que a Comissaria pediu pra repor estoque). Considera requisições
+      entregues e compras aprovadas/entregues.
+    </div>
+
+    <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <span class="text-muted" style="font-size:12px">De</span>
+      <input class="input" type="date" id="rel-de" style="max-width:160px">
+      <span class="text-muted" style="font-size:12px">até</span>
+      <input class="input" type="date" id="rel-ate" style="max-width:160px">
+      <select class="select" id="rel-cat" style="max-width:160px">
+        <option value="">Todas as categorias</option>
+        <option value="proteina">Proteína</option>
+        <option value="laticinios">Laticínios</option>
+        <option value="hortifruti">Hortifruti</option>
+        <option value="diversos">Diversos</option>
+      </select>
+      <button class="btn btn-outline" onclick="gerarRelatoriosComissaria()">Gerar</button>
+      <button class="btn btn-outline" id="btnExportarRelS" onclick="exportarRelatorioS()" style="display:none">⤓ Exportar Saídas</button>
+      <button class="btn btn-outline" id="btnExportarRelC" onclick="exportarRelatorioC()" style="display:none">⤓ Exportar Compras</button>
+    </div>
+
+    <!-- SEÇÃO 1: SAÍDAS (requisições atendidas) -->
+    <div class="section-title" style="margin-top:24px">
+      <span>Seção 1 — Saídas para os PDVs (requisições entregues)</span>
+    </div>
+
+    <div id="rel-pdv-wrap" style="display:flex;gap:6px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <span class="text-muted" style="font-size:11px;letter-spacing:1px;text-transform:uppercase">Filtrar por PDV destino:</span>
+      <span class="loading-text" style="font-size:12px">Carregando PDVs...</span>
+    </div>
+
+    <div id="relS-kpis" class="stats-grid" style="display:none"></div>
+    <div id="relS-cards"></div>
+    <div id="relS-tabela"><div class="empty-text">Clique em Gerar pra carregar.</div></div>
+
+    <!-- SEÇÃO 2: COMPRAS PRÓPRIAS -->
+    <div class="section-title" style="margin-top:32px">
+      <span>Seção 2 — Compras próprias da Comissaria</span>
+    </div>
+    <div id="relC-kpis" class="stats-grid" style="display:none"></div>
+    <div id="relC-tabela"><div class="empty-text">Clique em Gerar pra carregar.</div></div>
+
+  </div>
+
   </div>
 </div>
 
-<main>
-  <div class="stats-row">
-    <div class="stat-card"><div class="stat-label">Aguardando</div><div class="stat-val orange" id="statAguardando">—</div></div>
-    <div class="stat-card"><div class="stat-label">Em Separação</div><div class="stat-val" id="statSeparacao">—</div></div>
-    <div class="stat-card"><div class="stat-label">Entregues</div><div class="stat-val green" id="statEntregues">—</div></div>
-    <div class="stat-card"><div class="stat-label">Divergências</div><div class="stat-val error" id="statDivergencias">—</div></div>
+<!-- Barra fixa: aparece ao selecionar pelo menos 1 item na aba Solicitar Compra -->
+<div class="cart-bar" id="compraCartBar">
+  <div class="cart-info">
+    <span class="cart-count" id="compraCartCount">0</span>
+    <span>iten(s) selecionado(s)</span>
   </div>
+  <div class="cart-actions">
+    <button class="btn btn-primary" onclick="enviarCompraCommissary()">Enviar Solicitação</button>
+  </div>
+</div>
 
-  <div class="req-section-title">
-    <span id="listaTitle">Requisições Pendentes</span>
-    <span id="listaCount" style="font-size:13px; font-weight:400"></span>
-  </div>
-  <div id="listaContainer"><div class="loading-text">Carregando...</div></div>
-
-  <div class="hist-section">
-    <div class="req-section-title">Entregues Hoje</div>
-    <div id="entreguesContainer"><div class="loading-text">Carregando...</div></div>
-  </div>
-</main>
+<div class="toast-stack" id="toasts"></div>
 
 <script>
-const SUPABASE_URL = 'https://nyijprhukndlyijqljbm.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55aWpwcmh1a25kbHlpanFsamJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MjUwMDgsImV4cCI6MjA5MjIwMTAwOH0.Vzljd9xesi1ZJ-l7du00v-elUSDQObRCUz2jPyqL5p8';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let filtroAtual = 'pendentes';
-let todosReqs = [];
+const state = {
+  user: null, perfil: null, pdvComissariaId: null,
+  pdvs: [],
+  catalogo: [],
+  abaAtual: 'fila',
+  // Fila
+  filtro: 'pendentes',
+  reqs: [],
+  // Manual
+  manual: { pdvId: null, cat: 'proteina', search: '', selecionados: {} },
+  // Compra Comissaria
+  compra: { cat: 'proteina', search: '', selecionados: {} },
+  // Checklist
+  chk: { itens: [], contagens: {}, dirty: {}, historico: {} },
+};
 
 window.addEventListener('load', async () => {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) { window.location.href = 'index.html'; return; }
-  const { data: perfil } = await sb.from('usuarios').select('perfil').eq('auth_uid', user.id).single();
+  state.user = user;
+
+  const { data: perfil } = await sb.from('usuarios').select('id, perfil, nome').eq('auth_uid', user.id).single();
   if (!perfil || perfil.perfil !== 'estoque') { window.location.href = 'index.html'; return; }
+  state.perfil = perfil;
+  document.getElementById('userName').textContent = perfil.nome || '';
 
-  const hoje = new Date().toISOString().split('T')[0];
-  document.getElementById('dateFilter').value = hoje;
+  // Carrega PDVs e identifica o "Comissaria"
+  const { data: pdvs } = await sb.from('pdvs').select('*').eq('ativo', true).order('ordem');
+  state.pdvs = pdvs || [];
+  const com = state.pdvs.find(p => p.tipo === 'comissaria');
+  state.pdvComissariaId = com?.id;
 
-  const { data: pdvs } = await sb.from('pdvs').select('id, nome').eq('ativo', true).order('nome');
-  const pdvSel = document.getElementById('pdvFilter');
-  (pdvs || []).forEach(p => {
-    const o = document.createElement('option');
-    o.value = p.id; o.textContent = p.nome;
-    pdvSel.appendChild(o);
+  // Popular dropdowns de PDV
+  const pdvSel = document.getElementById('f-pdv');
+  state.pdvs.forEach(p => {
+    const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; pdvSel.appendChild(o);
+  });
+  const mSel = document.getElementById('m-pdv');
+  state.pdvs.filter(p => p.tipo !== 'comissaria').forEach(p => {
+    const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; mSel.appendChild(o);
   });
 
-  await carregar();
+  // Datas padrão
+  const hoje = new Date();
+  document.getElementById('f-data').value = isoDate(hoje);
+  document.getElementById('chk-data').value = isoDate(hoje);
+  const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
+  document.getElementById('c-data-entrega').value = isoDate(amanha);
+
+  await Promise.all([carregarCatalogo(), carregarFila()]);
+  atualizarBadgeChecklist();
+  atualizarBadgeDivergencias();
+
+  setCatManual('proteina');
+  setCatCompra('proteina');
+  atualizarAvisoCorte();
+  setInterval(atualizarAvisoCorte, 60_000);
 });
 
-function setFiltro(f, btn) {
-  filtroAtual = f;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  renderLista();
+function isoDate(d) { return d.toISOString().split('T')[0]; }
+
+const tabTitles = {
+  fila:         ['Requisições a Separar', ''],
+  manual:       ['Criar Requisição', ''],
+  compra:       ['Solicitar Compra', ''],
+  checklist:    ['Checklist do Estoque', ''],
+  niveis:       ['Níveis do Estoque', ''],
+  divergencias: ['Divergências de Estoque', ''],
+  relatorios:   ['Relatórios', ''],
+};
+
+function toggleNavGroup(headEl) {
+  const grp = headEl.closest('.nav-group');
+  if (grp) grp.classList.toggle('open');
+}
+function openParentGroup(itemEl) {
+  const grp = itemEl?.closest?.('.nav-group');
+  if (grp) grp.classList.add('open');
 }
 
-async function carregar() {
-  const data = document.getElementById('dateFilter').value;
-  const pdvId = document.getElementById('pdvFilter').value;
-  let q = sb.from('requisicoes')
-    .select('*, pdvs(nome), requisicao_itens(*)')
+function toggleSidebar() {
+  const sb = document.querySelector('.sidebar');
+  const ov = document.getElementById('sbOverlay');
+  if (!sb || !ov) return;
+  const open = !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  ov.classList.toggle('open', open);
+}
+
+function goTab(aba, el) {
+  state.abaAtual = aba;
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + aba).classList.add('active');
+  if (el) el.classList.add('active');
+  // Fecha sidebar em mobile após navegar
+  if (window.innerWidth <= 900) {
+    document.querySelector('.sidebar')?.classList.remove('open');
+    document.getElementById('sbOverlay')?.classList.remove('open');
+  }
+  const [t, s] = tabTitles[aba] || [aba, ''];
+  document.getElementById('topTitle').textContent = t;
+  document.getElementById('topSub').textContent = s;
+  atualizarManualCartBar();
+  atualizarCompraCartBar();
+  if (aba === 'relatorios') setupRelatorios();
+  if (aba === 'checklist') carregarChecklist();
+  if (aba === 'niveis') carregarNiveis();
+  if (aba === 'divergencias') carregarDivergencias();
+  openParentGroup(el);
+  document.getElementById('chkSaveBar').classList.toggle('visible',
+    aba === 'checklist' && Object.keys(state.chk.dirty).length > 0);
+}
+// Compat: alias pra chamadas internas que ainda usam switchAba
+const switchAba = (aba) => {
+  const map = { fila: 0, manual: 1, compra: 2, relatorios: 3 };
+  const nav = document.querySelectorAll('.nav-item')[map[aba] ?? 0];
+  goTab(aba, nav);
+};
+
+// =====================================================================
+// FILA
+// =====================================================================
+async function carregarFila() {
+  const data = document.getElementById('f-data').value;
+  const { data: reqs } = await sb.from('requisicoes')
+    .select('*, pdvs(nome,tipo), requisicao_itens(*)')
     .eq('data_competencia', data)
     .order('created_at', { ascending: true });
-  if (pdvId) q = q.eq('pdv_id', pdvId);
-  const { data: reqs } = await q;
-
-  todosReqs = reqs || [];
+  state.reqs = reqs || [];
   atualizarStats();
-  renderLista();
-  renderEntregues();
+  renderFila();
+}
+
+function setFiltro(f) {
+  state.filtro = f;
+  ['pendentes','todos','entregues'].forEach(name => {
+    const b = document.getElementById('f-' + name);
+    b.className = 'btn btn-sm ' + (name === f ? 'btn-outline' : 'btn-secondary');
+  });
+  renderFila();
 }
 
 function atualizarStats() {
-  const aguardando = todosReqs.filter(r => r.status === 'enviado').length;
-  const separacao = todosReqs.filter(r => r.status === 'separacao').length;
-  const entregues = todosReqs.filter(r => r.status === 'entregue').length;
-  const divs = todosReqs.reduce((acc, r) => acc + (r.requisicao_itens || []).filter(i => i.divergencia).length, 0);
-  document.getElementById('statAguardando').textContent = aguardando;
-  document.getElementById('statSeparacao').textContent = separacao;
-  document.getElementById('statEntregues').textContent = entregues;
-  document.getElementById('statDivergencias').textContent = divs;
+  const ag = state.reqs.filter(r => r.status === 'enviado').length;
+  const sep = state.reqs.filter(r => r.status === 'separacao').length;
+  const ent = state.reqs.filter(r => r.status === 'entregue').length;
+  const divs = state.reqs.reduce((acc, r) => acc + (r.requisicao_itens||[]).filter(i => i.divergencia).length, 0);
+  document.getElementById('stAg').textContent = ag;
+  document.getElementById('stSep').textContent = sep;
+  document.getElementById('stEnt').textContent = ent;
+  document.getElementById('stDiv').textContent = divs;
 }
 
-function renderLista() {
-  let filtrados = todosReqs;
-  if (filtroAtual === 'pendentes') filtrados = todosReqs.filter(r => r.status === 'enviado' || r.status === 'separacao');
-  if (filtroAtual === 'entregues') filtrados = todosReqs.filter(r => r.status === 'entregue');
-  const labels = { pendentes: 'Requisições Pendentes', todos: 'Todas as Requisições', entregues: 'Requisições Entregues' };
-  document.getElementById('listaTitle').textContent = labels[filtroAtual];
-  document.getElementById('listaCount').textContent = `${filtrados.length} requisição(ões)`;
+function renderFila() {
+  const pdvFiltro = document.getElementById('f-pdv').value;
+  let lista = state.reqs;
+  if (state.filtro === 'pendentes') lista = lista.filter(r => r.status === 'enviado' || r.status === 'separacao');
+  if (state.filtro === 'entregues') lista = lista.filter(r => r.status === 'entregue');
+  if (pdvFiltro) lista = lista.filter(r => r.pdv_id === pdvFiltro);
 
-  const cont = document.getElementById('listaContainer');
-  if (filtrados.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma requisição encontrada.</div>'; return; }
-  cont.innerHTML = filtrados.map(r => buildReqCard(r)).join('');
-}
+  const titles = { pendentes:'Pendentes', todos:'Todas as requisições', entregues:'Entregues' };
+  document.getElementById('filaTitle').textContent = titles[state.filtro];
+  document.getElementById('filaCount').textContent = `${lista.length} requisição(ões)`;
 
-function renderEntregues() {
-  const entregues = todosReqs.filter(r => r.status === 'entregue');
-  const cont = document.getElementById('entreguesContainer');
-  if (entregues.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma entrega registrada.</div>'; return; }
-  cont.innerHTML = entregues.map(r => buildReqCard(r, true)).join('');
-}
+  const cont = document.getElementById('filaContainer');
+  if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma requisição encontrada.</div>'; return; }
 
-function buildReqCard(r, compacto = false) {
-  const itens = r.requisicao_itens || [];
-  const catLabels = { proteina: 'Proteína', laticinios: 'Laticínio', hortifruti: 'Hortifruti' };
-  const hora = new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  const statusLabel = { enviado: 'Aguardando', separacao: 'Em Separação', entregue: 'Entregue' }[r.status] || r.status;
-  const entregue = r.status === 'entregue';
+  const statusLabel = { enviado:'Aguardando', separacao:'Em Separação', entregue:'Entregue', cancelada:'Cancelada' };
+  cont.innerHTML = lista.map(r => {
+    const itens = r.requisicao_itens || [];
+    const hora = new Date(r.created_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+    const entregue = r.status === 'entregue';
+    const manualTag = r.criada_pelo_estoque ? '<span class="manual-tag">MANUAL</span>' : '';
 
-  const linhasItens = itens.map((it, idx) => {
-    const catCls = it.item_livre ? 'cat-livre' : `cat-${it.item_categoria}`;
-    const catTxt = it.item_livre ? '⚠ Livre' : (catLabels[it.item_categoria] || it.item_categoria);
-    const qEntrega = it.quantidade_entregue ?? it.quantidade_solicitada;
-    return `
-      <tr>
-        <td><span class="cat-pill ${catCls}">${catTxt}</span></td>
-        <td>${it.item_nome}</td>
-        <td>${it.quantidade_solicitada} ${it.item_unidade || ''}</td>
-        <td>${entregue
-          ? `${it.quantidade_entregue ?? '—'} ${it.item_unidade || ''}`
-          : `<input class="qty-entrega" type="number" step="0.1" min="0" value="${it.quantidade_solicitada}"
-              id="qe-${r.id}-${idx}" onchange="checkDivergencia('${r.id}',${idx},${it.quantidade_solicitada},this.value,'${it.item_unidade||''}')">`
-        }</td>
-        <td>${entregue && it.divergencia
-          ? `<span style="color:var(--error);font-size:12px">⚠ ${it.motivo_divergencia || 'Divergência'}</span>`
-          : (!entregue ? `<input class="motivo-input" type="text" placeholder="Motivo da divergência..." id="mot-${r.id}-${idx}">` : '—')
-        }</td>
-      </tr>`;
-  }).join('');
+    const linhasItens = itens.map((it, idx) => {
+      const catCls = it.item_livre ? 'cat-livre' : `cat-${it.item_categoria}`;
+      const catTxt = it.item_livre ? '⚠ Livre' : it.item_categoria;
+      return `
+        <tr>
+          <td><span class="cat-pill ${catCls}">${catTxt}</span></td>
+          <td>${escapeHtml(it.item_nome)}${it.comentario ? `<br><em style="color:var(--muted);font-size:11px">${escapeHtml(it.comentario)}</em>` : ''}</td>
+          <td class="num">${it.quantidade_solicitada} ${it.item_unidade || ''}</td>
+          <td>${entregue
+            ? `${it.quantidade_entregue ?? '—'} ${it.item_unidade || ''}`
+            : `<input class="qty-entrega" type="number" step="0.1" min="0" value="${it.quantidade_solicitada}" id="qe-${r.id}-${idx}" oninput="checkDiv('${r.id}',${idx},${it.quantidade_solicitada},this.value)">`}
+          </td>
+          <td>${entregue && it.divergencia
+            ? `<span class="text-error" style="font-size:12px">⚠ ${escapeHtml(it.motivo_divergencia || 'Divergência')}</span>`
+            : (!entregue ? `<input class="motivo-input" placeholder="Motivo da divergência..." id="mot-${r.id}-${idx}">` : '—')}
+          </td>
+        </tr>`;
+    }).join('');
 
-  const acoes = !entregue ? `
-    <div class="req-actions">
-      ${r.status === 'enviado' ? `<button class="btn-separacao" onclick="marcarSeparacao('${r.id}')">Em Separação</button>` : ''}
-      <button class="btn-entregar" onclick="registrarEntrega('${r.id}')">Registrar Entrega</button>
-    </div>` : '';
+    const acoes = !entregue ? `
+      <div class="form-actions mt-3">
+        ${r.status === 'enviado' ? `<button class="btn btn-sm btn-orange" onclick="event.stopPropagation();marcarSeparacao('${r.id}')">Em Separação</button>` : ''}
+        <button class="btn btn-sm btn-green" onclick="event.stopPropagation();registrarEntrega('${r.id}')">Registrar Entrega</button>
+      </div>` : '';
 
-  return `
-    <div class="req-card" id="card-${r.id}">
+    return `<div class="req-card" id="card-${r.id}">
       <div class="req-head" onclick="toggleDetail('${r.id}')">
-        <span class="req-num">#${String(r.id).padStart(5,'0')}</span>
-        <span class="req-pdv">${r.pdvs?.nome || 'PDV'}</span>
+        <span class="req-num">#${String(r.id).slice(0,8)}</span>
+        <span class="req-pdv">${escapeHtml(r.pdvs?.nome || '—')}${manualTag}</span>
         <span class="req-meta">${hora}</span>
-        <span class="req-count">${itens.length} iten(s)</span>
-        <span class="status-badge status-${r.status}">${statusLabel}</span>
+        <span class="req-count">${itens.length} item(ns)</span>
+        <span class="badge status-${r.status}">${statusLabel[r.status] || r.status}</span>
         <span class="chevron" id="chev-${r.id}">▼</span>
       </div>
       <div class="req-detail" id="detail-${r.id}">
-        ${r.observacao ? `<div class="obs-box">💬 ${r.observacao}</div>` : ''}
-        <table class="detail-table">
-          <thead><tr>
-            <th>Categoria</th><th>Item</th>
-            <th>Solicitado</th><th>Entregue</th><th>Divergência</th>
-          </tr></thead>
+        ${r.observacao ? `<div class="obs-box">💬 ${escapeHtml(r.observacao)}</div>` : ''}
+        <table class="data-table mt-3">
+          <thead><tr><th>Categoria</th><th>Item</th><th>Solicitado</th><th>Entregue</th><th>Divergência</th></tr></thead>
           <tbody>${linhasItens}</tbody>
         </table>
         ${acoes}
       </div>
     </div>`;
+  }).join('');
 }
 
 function toggleDetail(id) {
-  const det = document.getElementById(`detail-${id}`);
-  const chev = document.getElementById(`chev-${id}`);
-  det.classList.toggle('open');
-  chev.classList.toggle('open');
+  document.getElementById('detail-' + id).classList.toggle('open');
+  document.getElementById('chev-' + id).classList.toggle('open');
 }
 
-function checkDivergencia(reqId, idx, solicitado, entregueVal, unidade) {
+function checkDiv(reqId, idx, solic, val) {
   const motInput = document.getElementById(`mot-${reqId}-${idx}`);
   if (!motInput) return;
-  const diff = parseFloat(entregueVal) !== parseFloat(solicitado);
-  if (diff) motInput.classList.add('visible');
+  if (parseFloat(val) !== parseFloat(solic)) motInput.classList.add('visible');
   else motInput.classList.remove('visible');
 }
 
 async function marcarSeparacao(id) {
   await sb.from('requisicoes').update({ status: 'separacao' }).eq('id', id);
-  await carregar();
+  showToast('Marcado como Em Separação.', 'info');
+  await carregarFila();
 }
 
 async function registrarEntrega(reqId) {
-  const btn = document.querySelector(`#card-${reqId} .btn-entregar`);
-  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
-
-  const req = todosReqs.find(r => r.id === reqId);
+  const req = state.reqs.find(r => r.id === reqId);
   if (!req) return;
   const itens = req.requisicao_itens || [];
 
-  // Atualizar cada item
+  // Validar divergências antes de submeter: toda divergência precisa de motivo.
   for (let idx = 0; idx < itens.length; idx++) {
     const it = itens[idx];
     const qeEl = document.getElementById(`qe-${reqId}-${idx}`);
     const motEl = document.getElementById(`mot-${reqId}-${idx}`);
-    const qEntregue = qeEl ? parseFloat(qeEl.value) : it.quantidade_solicitada;
+    const qEntregue = qeEl ? parseFloat(qeEl.value) : parseFloat(it.quantidade_solicitada);
+    const divergencia = qEntregue !== parseFloat(it.quantidade_solicitada);
+    const motivo = motEl?.value.trim() || '';
+    if (divergencia && !motivo) {
+      showToast(`Informe o motivo da divergência para "${it.item_nome}".`, 'error');
+      if (motEl) {
+        motEl.classList.add('visible', 'pulse');
+        motEl.focus();
+        motEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => motEl.classList.remove('pulse'), 1500);
+      }
+      return;
+    }
+  }
+
+  // Tudo validado → grava.
+  for (let idx = 0; idx < itens.length; idx++) {
+    const it = itens[idx];
+    const qeEl = document.getElementById(`qe-${reqId}-${idx}`);
+    const motEl = document.getElementById(`mot-${reqId}-${idx}`);
+    const qEntregue = qeEl ? parseFloat(qeEl.value) : parseFloat(it.quantidade_solicitada);
     const motivo = motEl?.value.trim() || null;
     const divergencia = qEntregue !== parseFloat(it.quantidade_solicitada);
-
     await sb.from('requisicao_itens').update({
       quantidade_entregue: qEntregue,
       divergencia,
-      motivo_divergencia: divergencia ? motivo : null
+      motivo_divergencia: divergencia ? motivo : null,
     }).eq('id', it.id);
   }
-
-  await sb.from('requisicoes').update({ status: 'entregue', entregue_em: new Date().toISOString() }).eq('id', reqId);
-  await carregar();
+  await sb.from('requisicoes').update({
+    status: 'entregue',
+    entregue_em: new Date().toISOString(),
+  }).eq('id', reqId);
+  showToast('Entrega registrada.', 'success');
+  await carregarFila();
 }
 
-async function logout() {
-  await sb.auth.signOut();
-  window.location.href = 'index.html';
+// =====================================================================
+// CATÁLOGO COMPARTILHADO
+// =====================================================================
+async function carregarCatalogo() {
+  const { data, error } = await sb.from('itens').select('*').eq('ativo', true).order('nome');
+  if (error) { showToast('Erro ao carregar catálogo: ' + error.message, 'error'); return; }
+  state.catalogo = data || [];
 }
+
+// =====================================================================
+// ABA MANUAL — Comissaria registra saída em nome de outro PDV
+// =====================================================================
+function setCatManual(cat) {
+  state.manual.cat = cat;
+  document.querySelectorAll('#m-cat-tabs .cat-btn').forEach(b => {
+    b.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
+    if (b.dataset.cat === cat) b.classList.add('on-' + cat);
+  });
+  document.getElementById('m-search').value = '';
+  renderItensManual();
+}
+
+function renderItensManual() {
+  const cat = state.manual.cat;
+  const q = (document.getElementById('m-search').value || '').toLowerCase();
+  const itens = state.catalogo.filter(i => i.categoria === cat && (!q || i.nome.toLowerCase().includes(q)));
+  const cont = document.getElementById('m-items');
+  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
+  cont.innerHTML = itens.map(item => {
+    const sel = state.manual.selecionados[item.id];
+    const qty = sel ? sel.qty : 1;
+    return `<div class="item-row ${sel ? 'selected' : ''}" onclick="toggleManual('${item.id}')">
+      <div class="item-check">${sel ? '✓' : ''}</div>
+      <div class="item-name">${escapeHtml(item.nome)}</div>
+      <div class="item-unit">${item.unidade}</div>
+      <div class="item-qty-wrap" onclick="event.stopPropagation()">
+        <button class="qty-btn" onclick="changeQtyManual('${item.id}',-1)">−</button>
+        <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQtyManual('${item.id}',this.value)">
+        <button class="qty-btn" onclick="changeQtyManual('${item.id}',1)">+</button>
+      </div>
+    </div>`;
+  }).join('');
+  atualizarManualCartBar();
+}
+
+function atualizarManualCartBar() {
+  const total = Object.keys(state.manual.selecionados).length;
+  document.getElementById('manualCartCount').textContent = total;
+  const bar = document.getElementById('manualCartBar');
+  // Só aparece se estamos na aba manual E tem pelo menos 1 item
+  const naAba = state.abaAtual === 'manual';
+  bar.className = total > 0 && naAba ? 'cart-bar visible' : 'cart-bar';
+}
+
+function toggleManual(itemId) {
+  if (state.manual.selecionados[itemId]) delete state.manual.selecionados[itemId];
+  else {
+    const item = state.catalogo.find(i => i.id === itemId);
+    state.manual.selecionados[itemId] = { item, qty: 1 };
+  }
+  renderItensManual();
+}
+function changeQtyManual(itemId, delta) {
+  const s = state.manual.selecionados[itemId]; if (!s) return;
+  s.qty = Math.max(0.1, Math.round((s.qty + delta) * 10) / 10);
+  renderItensManual();
+}
+function setQtyManual(itemId, val) {
+  const s = state.manual.selecionados[itemId]; if (!s) return;
+  const v = parseFloat(val); s.qty = isNaN(v) || v <= 0 ? 1 : v;
+}
+
+async function enviarManual() {
+  const pdvId = document.getElementById('m-pdv').value;
+  const obs = document.getElementById('m-obs').value.trim();
+  const sel = Object.values(state.manual.selecionados);
+  if (!pdvId) { showToast('Selecione o PDV de destino.', 'error'); return; }
+  if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
+
+  const { data: req, error } = await sb.from('requisicoes').insert({
+    pdv_id: pdvId,
+    usuario_id: state.perfil.id,
+    criada_pelo_estoque: true,
+    status: 'entregue',  // como é registro de saída balcão, já entra como entregue
+    data_competencia: isoDate(new Date()),
+    entregue_em: new Date().toISOString(),
+    observacao: obs || 'Retirada balcão',
+  }).select().single();
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+  const itens = sel.map(s => ({
+    requisicao_id: req.id,
+    item_id: s.item.id,
+    item_nome: s.item.nome,
+    item_categoria: s.item.categoria,
+    item_unidade: s.item.unidade,
+    quantidade_solicitada: s.qty,
+    quantidade_entregue: s.qty,
+    divergencia: false,
+    item_livre: false,
+  }));
+  const { error: ei } = await sb.from('requisicao_itens').insert(itens);
+  if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
+
+  showToast(`Saída registrada para ${state.pdvs.find(p=>p.id===pdvId)?.nome}.`, 'success');
+  state.manual.selecionados = {};
+  document.getElementById('m-pdv').value = '';
+  document.getElementById('m-obs').value = '';
+  renderItensManual();
+  await carregarFila();
+}
+
+// =====================================================================
+// ABA COMPRA — Comissaria solicita compra para repor estoque
+// =====================================================================
+function getCompetenciaCompra() {
+  const agora = new Date();
+  const corte = new Date(); corte.setHours(10, 0, 0, 0);
+  const data = new Date();
+  if (agora >= corte) data.setDate(data.getDate() + 1);
+  return data;
+}
+
+function atualizarAvisoCorte() {
+  const agora = new Date();
+  const corte = new Date(); corte.setHours(10, 0, 0, 0);
+  const aviso = document.getElementById('c-avisoCorte');
+  if (agora < corte) {
+    aviso.className = 'aviso aviso-success';
+    const ms = corte - agora;
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    aviso.textContent = `Solicitação entra na lista de COMPRAS de hoje. Corte em ${h}h${String(m).padStart(2,'0')}.`;
+  } else {
+    aviso.className = 'aviso aviso-warn';
+    aviso.textContent = 'Após as 10h00 — solicitação entra na lista de COMPRAS de amanhã.';
+  }
+}
+
+function setCatCompra(cat) {
+  state.compra.cat = cat;
+  document.querySelectorAll('#c-cat-tabs .cat-btn').forEach(b => {
+    b.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
+    if (b.dataset.cat === cat) b.classList.add('on-' + cat);
+  });
+  document.getElementById('c-search').value = '';
+  renderItensCompra();
+}
+
+function renderItensCompra() {
+  const cat = state.compra.cat;
+  const q = (document.getElementById('c-search').value || '').toLowerCase();
+  const itens = state.catalogo.filter(i => i.categoria === cat && (!q || i.nome.toLowerCase().includes(q)));
+  const cont = document.getElementById('c-items');
+  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
+  cont.innerHTML = itens.map(item => {
+    const sel = state.compra.selecionados[item.id];
+    const qty = sel ? sel.qty : 1;
+    return `<div class="item-row ${sel ? 'selected' : ''}" onclick="toggleCompra('${item.id}')">
+      <div class="item-check">${sel ? '✓' : ''}</div>
+      <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span style="font-size:11px;color:var(--muted);margin-left:8px">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+      <div class="item-unit">${item.unidade}</div>
+      <div class="item-qty-wrap" onclick="event.stopPropagation()">
+        <button class="qty-btn" onclick="changeQtyCompra('${item.id}',-1)">−</button>
+        <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQtyCompra('${item.id}',this.value)">
+        <button class="qty-btn" onclick="changeQtyCompra('${item.id}',1)">+</button>
+      </div>
+    </div>`;
+  }).join('');
+  atualizarCompraCartBar();
+}
+
+function atualizarCompraCartBar() {
+  const total = Object.keys(state.compra.selecionados).length;
+  document.getElementById('compraCartCount').textContent = total;
+  const bar = document.getElementById('compraCartBar');
+  const naAba = state.abaAtual === 'compra';
+  bar.className = total > 0 && naAba ? 'cart-bar visible' : 'cart-bar';
+}
+
+function toggleCompra(itemId) {
+  if (state.compra.selecionados[itemId]) delete state.compra.selecionados[itemId];
+  else {
+    const item = state.catalogo.find(i => i.id === itemId);
+    state.compra.selecionados[itemId] = { item, qty: 1 };
+  }
+  renderItensCompra();
+}
+function changeQtyCompra(itemId, delta) {
+  const s = state.compra.selecionados[itemId]; if (!s) return;
+  s.qty = Math.max(0.1, Math.round((s.qty + delta) * 10) / 10);
+  renderItensCompra();
+}
+function setQtyCompra(itemId, val) {
+  const s = state.compra.selecionados[itemId]; if (!s) return;
+  const v = parseFloat(val); s.qty = isNaN(v) || v <= 0 ? 1 : v;
+}
+
+async function enviarCompraCommissary() {
+  const sel = Object.values(state.compra.selecionados);
+  if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
+  if (!state.pdvComissariaId) { showToast('PDV "Comissaria" não encontrado no banco.', 'error'); return; }
+
+  const obs = document.getElementById('c-obs').value.trim();
+  const dataEntrega = document.getElementById('c-data-entrega').value || null;
+  const competencia = isoDate(getCompetenciaCompra());
+
+  const { data: solc, error } = await sb.from('solicitacoes_compra').insert({
+    pdv_id: state.pdvComissariaId,
+    usuario_id: state.perfil.id,
+    status: 'enviada',
+    data_competencia: competencia,
+    data_entrega_desejada: dataEntrega,
+    observacao: obs || 'Reposição estoque commissary',
+  }).select().single();
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+  const itens = sel.map(s => ({
+    solicitacao_id: solc.id,
+    item_id: s.item.id,
+    item_nome: s.item.nome,
+    item_categoria: s.item.categoria,
+    item_unidade: s.item.unidade,
+    quantidade_solicitada: s.qty,
+    item_livre: false,
+  }));
+  const { error: ei } = await sb.from('solicitacao_compra_itens').insert(itens);
+  if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
+
+  showToast('Solicitação de compra enviada para o Gerente de Compras.', 'success');
+  state.compra.selecionados = {};
+  document.getElementById('c-obs').value = '';
+  renderItensCompra();
+}
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+function escapeHtml(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function showToast(msg, tipo='info') {
+  const stack = document.getElementById('toasts');
+  const t = document.createElement('div'); t.className = 'toast ' + tipo; t.textContent = msg;
+  stack.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+// =====================================================================
+// RELATÓRIOS — Comissaria (2 seções: Compras próprias + Saídas por PDV)
+// =====================================================================
+const CAT_LABEL_REL = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+state.precos = {};              // { item_id: preco_unitario }
+state.relPdvsSel = new Set();   // filtro de PDV destino nas Saídas
+let relCacheC = null;           // cache seção Compras próprias
+let relCacheS = null;           // cache seção Saídas
+
+function fmtQty(n) { if (n == null || isNaN(n)) return '—'; return Number(n).toFixed(2).replace(/\.?0+$/, ''); }
+function fmtBRL(n) { return (Number(n) || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }
+
+function setupRelatorios() {
+  const de = document.getElementById('rel-de');
+  const ate = document.getElementById('rel-ate');
+  if (!de.value) {
+    const now = new Date();
+    de.value = isoDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    ate.value = isoDate(now);
+  }
+  if (!document.querySelector('#rel-pdv-wrap .filter-chip')) montarChipsPdvComissaria();
+}
+
+function montarChipsPdvComissaria() {
+  const wrap = document.getElementById('rel-pdv-wrap');
+  if (!wrap) return;
+  const html = ['<span class="text-muted" style="font-size:11px;letter-spacing:1px;text-transform:uppercase">Filtrar por PDV destino:</span>',
+                '<button class="filter-chip active" data-pdv-all="1" onclick="togglePdvChipC(this,\'\')">Todos</button>'];
+  // Só PDVs consumidores (exclui a própria Comissaria)
+  state.pdvs.filter(p => p.tipo !== 'comissaria').forEach(p => html.push(
+    `<button class="filter-chip" data-pdv-id="${p.id}" onclick="togglePdvChipC(this,'${p.id}')">${escapeHtml(p.nome)}</button>`
+  ));
+  wrap.innerHTML = html.join('');
+}
+
+function togglePdvChipC(btn, pdvId) {
+  if (!pdvId) {
+    state.relPdvsSel.clear();
+    document.querySelectorAll('#rel-pdv-wrap .filter-chip').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    if (relCacheS) renderSecaoSaidas(); // re-renderiza sem re-fetch
+    return;
+  }
+  if (state.relPdvsSel.has(pdvId)) { state.relPdvsSel.delete(pdvId); btn.classList.remove('active'); }
+  else { state.relPdvsSel.add(pdvId); btn.classList.add('active'); }
+  const allBtn = document.querySelector('#rel-pdv-wrap [data-pdv-all]');
+  if (allBtn) allBtn.classList.toggle('active', state.relPdvsSel.size === 0);
+  if (relCacheS) renderSecaoSaidas();
+}
+
+async function carregarPrecosRel() {
+  const { data } = await sb.from('precos').select('item_id, preco_unitario').eq('vigente', true);
+  state.precos = Object.fromEntries((data || []).map(p => [p.item_id, parseFloat(p.preco_unitario) || 0]));
+}
+
+async function gerarRelatoriosComissaria() {
+  const de = document.getElementById('rel-de').value;
+  const ate = document.getElementById('rel-ate').value;
+  const cat = document.getElementById('rel-cat').value;
+  if (!de || !ate) { showToast('Preencha o período.', 'error'); return; }
+  if (de > ate) { showToast('Data inicial maior que a final.', 'error'); return; }
+
+  document.getElementById('relC-tabela').innerHTML = '<div class="loading-text">Carregando...</div>';
+  document.getElementById('relS-tabela').innerHTML = '<div class="loading-text">Carregando...</div>';
+  document.getElementById('relS-cards').innerHTML = '';
+  document.getElementById('btnExportarRelC').style.display = 'none';
+  document.getElementById('btnExportarRelS').style.display = 'none';
+
+  if (Object.keys(state.precos).length === 0) await carregarPrecosRel();
+
+  // === SEÇÃO 1: Compras próprias da Comissaria ===
+  const rowsC = [];
+  {
+    let q = sb.from('solicitacoes_compra')
+      .select('id, data_competencia, status, pdv_id, solicitacao_compra_itens(item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, itens(fornecedor_principal))')
+      .eq('pdv_id', state.pdvComissariaId)
+      .in('status', ['aprovada','entregue'])
+      .gte('data_competencia', de)
+      .lte('data_competencia', ate);
+    const { data, error } = await q;
+    if (error) { showToast('Erro (compras): ' + error.message, 'error'); return; }
+    (data || []).forEach(s => (s.solicitacao_compra_itens || []).forEach(it => {
+      if (cat && it.item_categoria !== cat) return;
+      rowsC.push({ itemId: it.item_id, nome: it.item_nome, cat: it.item_categoria, unid: it.item_unidade,
+                   qty: parseFloat(it.quantidade_solicitada) || 0,
+                   forn: it.itens?.fornecedor_principal || '—' });
+    }));
+  }
+
+  // === SEÇÃO 2: Saídas (requisições entregues, agrupadas por PDV destino) ===
+  const rowsS = [];
+  {
+    let q = sb.from('requisicoes')
+      .select('id, data_competencia, status, pdv_id, pdvs(nome), requisicao_itens(item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, itens(fornecedor_principal))')
+      .eq('status', 'entregue')
+      .gte('data_competencia', de)
+      .lte('data_competencia', ate);
+    const { data, error } = await q;
+    if (error) { showToast('Erro (saídas): ' + error.message, 'error'); return; }
+    (data || []).forEach(r => (r.requisicao_itens || []).forEach(it => {
+      if (cat && it.item_categoria !== cat) return;
+      const q2 = it.quantidade_entregue != null ? it.quantidade_entregue : it.quantidade_solicitada;
+      rowsS.push({ pdvId: r.pdv_id, pdvNome: r.pdvs?.nome || '—',
+                   itemId: it.item_id, nome: it.item_nome, cat: it.item_categoria, unid: it.item_unidade,
+                   qty: parseFloat(q2) || 0,
+                   forn: it.itens?.fornecedor_principal || '—' });
+    }));
+  }
+
+  relCacheC = { rows: rowsC, de, ate, cat };
+  relCacheS = { rows: rowsS, de, ate, cat };
+  renderSecaoCompras();
+  renderSecaoSaidas();
+}
+
+function agregarItens(rows) {
+  const acc = {};
+  rows.forEach(r => {
+    const k = `${r.nome}||${r.cat}||${r.unid || ''}`;
+    if (!acc[k]) acc[k] = { itemId:r.itemId, nome:r.nome, cat:r.cat, unid:r.unid, forn:r.forn, qty:0 };
+    acc[k].qty += r.qty;
+  });
+  return Object.values(acc).map(x => {
+    const preco = state.precos[x.itemId] || 0;
+    return { ...x, preco, valor: preco * x.qty };
+  }).sort((a,b) => b.valor - a.valor);
+}
+
+function renderKPIsSecao(divId, itens) {
+  const kpis = document.getElementById(divId);
+  if (itens.length === 0) { kpis.style.display = 'none'; return; }
+  const totalItens = itens.length;
+  const totalQty = itens.reduce((s,x) => s + x.qty, 0);
+  const valorTotal = itens.reduce((s,x) => s + x.valor, 0);
+  kpis.style.display = 'grid';
+  kpis.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Itens distintos</div>
+      <div class="stat-val">${totalItens}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Quantidade total</div>
+      <div class="stat-val gold">${fmtQty(totalQty)}</div>
+      <div class="stat-sub">soma bruta (unidades variam)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Valor total estimado</div>
+      <div class="stat-val green">${fmtBRL(valorTotal)}</div>
+      <div class="stat-sub">preço vigente × qtd</div>
+    </div>
+  `;
+}
+
+function renderTabelaItens(divId, itens) {
+  const cont = document.getElementById(divId);
+  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum dado no período.</div>'; return; }
+  const grupos = {};
+  itens.forEach(x => { (grupos[x.cat] = grupos[x.cat] || []).push(x); });
+  const ordemCat = ['proteina','laticinios','hortifruti','diversos'];
+  cont.innerHTML = ordemCat.filter(c => grupos[c]).map(c => {
+    const lista = grupos[c];
+    const subQty = lista.reduce((s,x) => s + x.qty, 0);
+    const subVal = lista.reduce((s,x) => s + x.valor, 0);
+    return `
+      <div class="uppercase-label" style="margin-top:16px;margin-bottom:8px">
+        ${CAT_LABEL_REL[c]} <span class="text-muted" style="text-transform:none;letter-spacing:0">· ${lista.length} itens · qtd ${fmtQty(subQty)} · ${fmtBRL(subVal)}</span>
+      </div>
+      <table class="data-table">
+        <thead><tr>
+          <th>Item</th><th>Fornecedor</th><th class="center">Un</th>
+          <th class="num">Quantidade</th><th class="num">Preço un.</th><th class="num">Valor total</th>
+        </tr></thead>
+        <tbody>${lista.map(x => `<tr>
+          <td>${escapeHtml(x.nome)}</td>
+          <td class="text-muted">${escapeHtml(x.forn)}</td>
+          <td class="center text-muted">${escapeHtml(x.unid || '')}</td>
+          <td class="num" style="font-weight:500">${fmtQty(x.qty)}</td>
+          <td class="num text-muted">${x.preco > 0 ? fmtBRL(x.preco) : '—'}</td>
+          <td class="num" style="font-weight:500">${x.preco > 0 ? fmtBRL(x.valor) : '—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    `;
+  }).join('');
+}
+
+function renderSecaoCompras() {
+  if (!relCacheC) return;
+  const itens = agregarItens(relCacheC.rows);
+  renderKPIsSecao('relC-kpis', itens);
+  renderTabelaItens('relC-tabela', itens);
+  document.getElementById('btnExportarRelC').style.display = itens.length ? 'inline-block' : 'none';
+  relCacheC.itens = itens;
+}
+
+function renderSecaoSaidas() {
+  if (!relCacheS) return;
+  // Aplicar filtro de PDV destino (state.relPdvsSel) sobre o cache
+  const pdvIds = state.relPdvsSel.size > 0 ? state.relPdvsSel : null;
+  const rowsFiltrados = pdvIds ? relCacheS.rows.filter(r => pdvIds.has(r.pdvId)) : relCacheS.rows;
+  const itens = agregarItens(rowsFiltrados);
+
+  // Total por PDV destino (agregado bruto)
+  const porPdv = {};
+  rowsFiltrados.forEach(r => {
+    if (!porPdv[r.pdvId]) porPdv[r.pdvId] = { nome: r.pdvNome, qty: 0, valor: 0 };
+    porPdv[r.pdvId].qty += r.qty;
+    porPdv[r.pdvId].valor += r.qty * (state.precos[r.itemId] || 0);
+  });
+  const pdvArr = Object.values(porPdv).sort((a,b) => b.valor - a.valor);
+
+  renderKPIsSecao('relS-kpis', itens);
+
+  // Card total por PDV
+  const cardsCont = document.getElementById('relS-cards');
+  if (pdvArr.length > 0) {
+    cardsCont.innerHTML = `<div class="card" style="margin-bottom:16px">
+      <div class="uppercase-label mb-3">Total entregue por PDV destino</div>
+      ${pdvArr.map(p => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
+        <span>${escapeHtml(p.nome)}</span>
+        <span><span class="text-muted" style="margin-right:12px">${fmtQty(p.qty)}</span><span class="text-gold" style="font-weight:500">${fmtBRL(p.valor)}</span></span>
+      </div>`).join('')}
+    </div>`;
+  } else cardsCont.innerHTML = '';
+
+  renderTabelaItens('relS-tabela', itens);
+  document.getElementById('btnExportarRelS').style.display = itens.length ? 'inline-block' : 'none';
+  relCacheS.itens = itens;
+  relCacheS.porPdv = pdvArr;
+}
+
+function exportarCSVRel(nome, header, rows) {
+  const linhas = [header, ...rows];
+  const csv = linhas.map(r => r.map(c => {
+    const v = String(c ?? '');
+    return /[";,\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
+  }).join(';')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nome;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+function exportarRelatorioC() {
+  if (!relCacheC || !relCacheC.itens?.length) { showToast('Gere o relatório primeiro.', 'error'); return; }
+  const header = ['Categoria','Item','Fornecedor','Unidade','Quantidade','Preço unit.','Valor total'];
+  const rows = relCacheC.itens.map(x => [
+    CAT_LABEL_REL[x.cat] || x.cat, x.nome, x.forn, x.unid || '',
+    x.qty, x.preco || 0, x.valor || 0,
+  ]);
+  exportarCSVRel(`comissaria_compras_${relCacheC.de}_${relCacheC.ate}.csv`, header, rows);
+}
+
+function exportarRelatorioS() {
+  if (!relCacheS || !relCacheS.itens?.length) { showToast('Gere o relatório primeiro.', 'error'); return; }
+  const header = ['Categoria','Item','Fornecedor','Unidade','Quantidade','Preço unit.','Valor total'];
+  const rows = relCacheS.itens.map(x => [
+    CAT_LABEL_REL[x.cat] || x.cat, x.nome, x.forn, x.unid || '',
+    x.qty, x.preco || 0, x.valor || 0,
+  ]);
+  exportarCSVRel(`comissaria_saidas_${relCacheS.de}_${relCacheS.ate}.csv`, header, rows);
+}
+
+// =====================================================================
+// CHECKLIST DE ESTOQUE — contagem diária + semáforo
+// =====================================================================
+// Semáforo por dias de cobertura:
+//   Verde ≥ 3 dias  |  Amarelo 1–3 dias  |  Vermelho < 1 dia  |  Pend = não contado
+// Cobertura = qtdAtual / mediaDiaria (dias que o estoque atual dura no consumo médio)
+function classificarSemaforo(qtdAtual, mediaDiaria) {
+  if (qtdAtual === null || qtdAtual === undefined || isNaN(qtdAtual)) return 'pend';
+  if (!mediaDiaria || mediaDiaria <= 0) {
+    return qtdAtual > 0 ? 'verde' : 'vermelho';
+  }
+  const dias = qtdAtual / mediaDiaria;
+  if (dias >= 3) return 'verde';
+  if (dias >= 1) return 'amarelo';
+  return 'vermelho';
+}
+
+async function carregarChecklist() {
+  const data = document.getElementById('chk-data').value || isoDate(new Date());
+  const cont = document.getElementById('chkContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+
+  // Paralelo: catálogo, contagens do dia, histórico 7d, saldo teórico, consumo por janela
+  const seteDias = new Date();
+  seteDias.setDate(seteDias.getDate() - 7);
+
+  const [ itensR, csR, histR, saldoR, consumoR ] = await Promise.all([
+    sb.from('itens')
+      .select('id, nome, categoria, unidade, media_diaria, fornecedor_principal, inventario, ativo')
+      .eq('ativo', true).eq('inventario', true)
+      .order('categoria').order('nome'),
+    sb.from('contagens_estoque').select('*').eq('data_contagem', data),
+    sb.from('contagens_estoque')
+      .select('item_id, data_contagem, quantidade_atual')
+      .gte('data_contagem', isoDate(seteDias))
+      .lte('data_contagem', data)
+      .order('data_contagem', { ascending: false }),
+    sb.from('v_estoque_saldo').select('*'),
+    sb.from('v_estoque_consumo').select('*'),
+  ]);
+
+  state.chk.itens = itensR.data || [];
+  state.chk.contagens = {};
+  (csR.data || []).forEach(c => { state.chk.contagens[c.item_id] = c; });
+  state.chk.historico = {};
+  (histR.data || []).forEach(h => {
+    if (!state.chk.historico[h.item_id]) state.chk.historico[h.item_id] = [];
+    state.chk.historico[h.item_id].push(h);
+  });
+  state.chk.saldo = {};
+  (saldoR.data || []).forEach(s => { state.chk.saldo[s.item_id] = s; });
+  state.chk.consumo = {};
+  (consumoR.data || []).forEach(c => { state.chk.consumo[c.item_id] = c; });
+  state.chk.dirty = {};
+  document.getElementById('chkSaveBar').classList.remove('visible');
+
+  renderChecklist();
+}
+
+// Retorna consumo médio diário do item respeitando a janela escolhida.
+// Fallback pra media_diaria do catálogo se não há saídas na janela.
+function consumoDiarioItem(item) {
+  const janela = parseInt(document.getElementById('chk-janela')?.value, 10) || 30;
+  const c = state.chk.consumo?.[item.id];
+  if (c) {
+    const col = janela === 7 ? c.saidas_7d : janela === 14 ? c.saidas_14d : janela === 60 ? c.saidas_60d : c.saidas_30d;
+    const total = parseFloat(col) || 0;
+    if (total > 0) return total / janela;
+  }
+  return parseFloat(item.media_diaria) || 0;
+}
+
+function renderChecklist() {
+  const cont = document.getElementById('chkContainer');
+  const catFilt = document.getElementById('chk-filtro').value;
+  const stFilt  = document.getElementById('chk-status').value;
+  const q       = (document.getElementById('chk-search').value || '').toLowerCase();
+
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+
+  const dados = state.chk.itens.map(it => {
+    const dirtyQty = state.chk.dirty[it.id];
+    const contagem = state.chk.contagens[it.id];
+    const qtdSalva = contagem ? parseFloat(contagem.quantidade_atual) : null;
+    const qtdAtual = dirtyQty !== undefined ? dirtyQty : qtdSalva;
+    const md = consumoDiarioItem(it);
+    const dias = md > 0 && qtdAtual !== null && qtdAtual !== undefined
+      ? qtdAtual / md : null;
+    const semaforo = classificarSemaforo(qtdAtual, md);
+    const saldo = state.chk.saldo?.[it.id] || null;
+    return { it, qtdAtual, qtdSalva, md, dias, semaforo, contagem, saldo };
+  });
+
+  // Contadores globais (não filtrados)
+  const cnt = { verde: 0, amarelo: 0, vermelho: 0, pend: 0 };
+  dados.forEach(d => cnt[d.semaforo]++);
+  document.getElementById('chkVerde').textContent    = cnt.verde;
+  document.getElementById('chkAmarelo').textContent  = cnt.amarelo;
+  document.getElementById('chkVermelho').textContent = cnt.vermelho;
+  document.getElementById('chkPend').textContent     = cnt.pend;
+
+  // Filtros
+  let filtrados = dados;
+  if (catFilt === 'camara')       filtrados = filtrados.filter(d => d.it.categoria === 'proteina' || d.it.categoria === 'laticinios');
+  else if (catFilt)               filtrados = filtrados.filter(d => d.it.categoria === catFilt);
+  if (stFilt) filtrados = filtrados.filter(d => d.semaforo === stFilt);
+  if (q)      filtrados = filtrados.filter(d =>
+    d.it.nome.toLowerCase().includes(q) ||
+    (d.it.fornecedor_principal || '').toLowerCase().includes(q));
+
+  document.getElementById('chkCount').textContent = `${filtrados.length} item(ns)`;
+
+  if (filtrados.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item de inventário com esses filtros.</div>';
+    return;
+  }
+
+  // Ordena: pend primeiro, depois vermelho → amarelo → verde
+  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3 };
+  filtrados.sort((a,b) => (ordem[a.semaforo] - ordem[b.semaforo]) || a.it.nome.localeCompare(b.it.nome));
+
+  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—' };
+  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○' };
+
+  cont.innerHTML = filtrados.map(d => {
+    const it = d.it;
+    const histTxt = (state.chk.historico[it.id] || [])
+      .slice(0, 4)
+      .map(h => `${h.data_contagem.slice(5)}: ${parseFloat(h.quantidade_atual).toFixed(1)}`)
+      .join(' · ');
+    const coberturaTxt = d.md > 0
+      ? (d.dias !== null ? `${d.dias.toFixed(1)} dia(s) de cobertura` : '—')
+      : 'Sem histórico de consumo';
+    const consumoTxt = d.md > 0 ? `Consumo ${d.md.toFixed(2)} ${it.unidade||''}/dia` : '';
+    // Saldo teórico: comparação com o que o sistema espera ver
+    let teoricoTxt = '';
+    if (d.saldo && !d.saldo.sem_baseline && d.saldo.saldo_teorico !== null) {
+      const t = parseFloat(d.saldo.saldo_teorico);
+      teoricoTxt = `<div class="chk-teorico">Teórico: <strong>${t.toFixed(1)} ${it.unidade||''}</strong></div>`;
+    } else if (d.saldo && d.saldo.sem_baseline) {
+      teoricoTxt = `<div class="chk-teorico chk-teorico-sem">Sem baseline — primeira contagem define o saldo</div>`;
+    }
+    const metaTxt = [coberturaTxt, consumoTxt].filter(Boolean).join(' · ') + teoricoTxt;
+    const dirtyClass = state.chk.dirty[it.id] !== undefined ? 'dirty' : '';
+    const valInput = d.qtdAtual !== null && d.qtdAtual !== undefined ? d.qtdAtual : '';
+    return `
+      <div class="chk-row ${d.semaforo}" id="chkrow-${it.id}">
+        <div class="chk-semaforo ${d.semaforo}">
+          <span class="dot">${semDot[d.semaforo]}</span>
+          <span class="txt">${semLabel[d.semaforo]}</span>
+        </div>
+        <div class="chk-nome">
+          ${escapeHtml(it.nome)}
+          <span class="badge-cat cat-${it.categoria} cat-pill">${catLabels[it.categoria]||it.categoria}</span>
+          ${it.fornecedor_principal ? `<div class="text-muted" style="font-size:11px;margin-top:2px">${escapeHtml(it.fornecedor_principal)}</div>` : ''}
+        </div>
+        <div class="chk-meta">${metaTxt}</div>
+        <div class="chk-qty-cell">
+          <input class="chk-qty-input ${dirtyClass}" type="number" min="0" step="0.1"
+            inputmode="decimal" enterkeyhint="next"
+            placeholder="—" value="${valInput}"
+            oninput="setChkQty('${it.id}', this.value)" onclick="this.select()">
+          <span class="chk-unit">${it.unidade||'—'}</span>
+        </div>
+        <span class="chk-unit chk-unit-standalone">${it.unidade||'—'}</span>
+        <div class="chk-history-mini">${histTxt || '<em>sem histórico</em>'}</div>
+      </div>`;
+  }).join('');
+}
+
+function setChkQty(itemId, val) {
+  const it = state.chk.itens.find(x => x.id === itemId);
+  if (!it) return;
+  const v = val === '' ? null : parseFloat(val);
+  if (v !== null && (isNaN(v) || v < 0)) return;
+  // Marca dirty; se voltou ao valor salvo, tira do dirty.
+  const contagem = state.chk.contagens[itemId];
+  const salvo = contagem ? parseFloat(contagem.quantidade_atual) : null;
+  if ((salvo === null && v === null) || (salvo !== null && v !== null && Math.abs(salvo - v) < 0.001)) {
+    delete state.chk.dirty[itemId];
+  } else {
+    state.chk.dirty[itemId] = v;
+  }
+  // Atualização in-place: só a linha do item + contadores + save-bar.
+  // NÃO chamamos renderChecklist() pra não perder foco / reordenar.
+  const row = document.getElementById(`chkrow-${itemId}`);
+  if (row) {
+    const md = consumoDiarioItem(it);
+    const sem = classificarSemaforo(v, md);
+    row.classList.remove('verde','amarelo','vermelho','pend');
+    row.classList.add(sem);
+    const sf = row.querySelector('.chk-semaforo');
+    if (sf) {
+      sf.classList.remove('verde','amarelo','vermelho','pend');
+      sf.classList.add(sem);
+      const dot = sf.querySelector('.dot');
+      const txt = sf.querySelector('.txt');
+      const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—' };
+      const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○' };
+      if (dot) dot.textContent = semDot[sem];
+      if (txt) txt.textContent = semLabel[sem];
+    }
+    const input = row.querySelector('.chk-qty-input');
+    if (input) input.classList.toggle('dirty', state.chk.dirty[itemId] !== undefined);
+    // Atualiza a coluna meta com a nova cobertura em dias (mantém o bloco teórico)
+    const metaCell = row.querySelector('.chk-meta');
+    if (metaCell && md > 0) {
+      const cob = v !== null && v !== undefined ? (v / md).toFixed(1) + ' dia(s) de cobertura' : '—';
+      const teoricoEl = metaCell.querySelector('.chk-teorico');
+      const linha1 = `${cob} · Consumo ${md.toFixed(2)} ${it.unidade||''}/dia`;
+      const teoricoHtml = teoricoEl ? teoricoEl.outerHTML : '';
+      metaCell.innerHTML = linha1 + teoricoHtml;
+    }
+  }
+  atualizarContadoresChk();
+  atualizarSaveBar();
+}
+
+function atualizarContadoresChk() {
+  const cnt = { verde: 0, amarelo: 0, vermelho: 0, pend: 0 };
+  state.chk.itens.forEach(it => {
+    const dirtyQty = state.chk.dirty[it.id];
+    const contagem = state.chk.contagens[it.id];
+    const qtdSalva = contagem ? parseFloat(contagem.quantidade_atual) : null;
+    const qtdAtual = dirtyQty !== undefined ? dirtyQty : qtdSalva;
+    const md = consumoDiarioItem(it);
+    cnt[classificarSemaforo(qtdAtual, md)]++;
+  });
+  document.getElementById('chkVerde').textContent    = cnt.verde;
+  document.getElementById('chkAmarelo').textContent  = cnt.amarelo;
+  document.getElementById('chkVermelho').textContent = cnt.vermelho;
+  document.getElementById('chkPend').textContent     = cnt.pend;
+}
+
+function atualizarSaveBar() {
+  const count = Object.keys(state.chk.dirty).length;
+  document.getElementById('chkDirtyCount').textContent = count;
+  document.getElementById('chkSaveBar').classList.toggle('visible',
+    state.abaAtual === 'checklist' && count > 0);
+}
+
+function descartarChecklist() {
+  if (Object.keys(state.chk.dirty).length === 0) return;
+  if (!confirm('Descartar todas as alterações pendentes?')) return;
+  state.chk.dirty = {};
+  renderChecklist();
+  atualizarSaveBar();
+}
+
+async function salvarChecklist() {
+  const dirty = state.chk.dirty;
+  const ids = Object.keys(dirty);
+  if (ids.length === 0) { showToast('Nada a salvar.', 'info'); return; }
+  const data = document.getElementById('chk-data').value || isoDate(new Date());
+
+  const rows = ids
+    .filter(id => dirty[id] !== null && dirty[id] !== undefined)
+    .map(id => ({
+      data_contagem: data,
+      item_id: id,
+      quantidade_atual: dirty[id],
+      contado_por: state.perfil.id,
+    }));
+
+  if (rows.length === 0) {
+    showToast('Nenhum valor válido para salvar.', 'error');
+    return;
+  }
+
+  // Detectar divergências ANTES de gravar (saldo teórico atual vira histórico ao gravar).
+  const divergencias = [];
+  const LIMIAR_PCT = 10;
+  for (const row of rows) {
+    const saldo = state.chk.saldo?.[row.item_id];
+    if (!saldo || saldo.sem_baseline || saldo.saldo_teorico === null) continue;
+    const teorico = parseFloat(saldo.saldo_teorico);
+    const contado = parseFloat(row.quantidade_atual);
+    if (teorico <= 0 && contado <= 0) continue;
+    const diff = teorico - contado; // positivo = "faltou"
+    const base = Math.max(Math.abs(teorico), 0.001);
+    const pct = Math.abs(diff) / base * 100;
+    if (pct >= LIMIAR_PCT) {
+      divergencias.push({
+        data_contagem: data,
+        item_id: row.item_id,
+        qtd_teorica: teorico,
+        qtd_contada: contado,
+        diff: Number(diff.toFixed(3)),
+        diff_pct: Number(pct.toFixed(2)),
+        status: 'pendente',
+        detectado_por: state.perfil.id,
+      });
+    }
+  }
+
+  const { error } = await sb.from('contagens_estoque')
+    .upsert(rows, { onConflict: 'data_contagem,item_id' });
+  if (error) { showToast('Erro ao salvar: ' + error.message, 'error'); return; }
+
+  let msgExtra = '';
+  if (divergencias.length > 0) {
+    const { error: eDiv } = await sb.from('divergencias_estoque').insert(divergencias);
+    if (eDiv) {
+      console.error('Erro ao gravar divergências:', eDiv);
+      msgExtra = ' (falha ao registrar divergências — veja console)';
+    } else {
+      msgExtra = ` · ${divergencias.length} divergência(s) ≥ ${LIMIAR_PCT}% registrada(s)`;
+    }
+  }
+
+  showToast(`${rows.length} contagem(ns) salva(s)${msgExtra}.`, 'success');
+  await carregarChecklist();
+  atualizarBadgeChecklist();
+  atualizarBadgeDivergencias();
+}
+
+// =====================================================================
+// NÍVEIS DE ESTOQUE — só leitura, view compacta
+// =====================================================================
+async function carregarNiveis() {
+  const cont = document.getElementById('nvContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+
+  const [ itensR, saldoR, consumoR ] = await Promise.all([
+    sb.from('itens')
+      .select('id, nome, categoria, unidade, media_diaria, fornecedor_principal, inventario, ativo')
+      .eq('ativo', true).eq('inventario', true)
+      .order('categoria').order('nome'),
+    sb.from('v_estoque_saldo').select('*'),
+    sb.from('v_estoque_consumo').select('*'),
+  ]);
+
+  state.chk.nvItens = itensR.data || [];
+  state.chk.saldo = {};
+  (saldoR.data || []).forEach(s => { state.chk.saldo[s.item_id] = s; });
+  state.chk.consumo = {};
+  (consumoR.data || []).forEach(c => { state.chk.consumo[c.item_id] = c; });
+  renderNiveis();
+}
+
+function renderNiveis() {
+  const cont = document.getElementById('nvContainer');
+  if (!state.chk.nvItens) { cont.innerHTML = '<div class="empty-text">Carregue primeiro.</div>'; return; }
+  const catFilt = document.getElementById('nv-cat').value;
+  const stFilt  = document.getElementById('nv-status').value;
+  const q       = (document.getElementById('nv-search').value || '').toLowerCase();
+
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+
+  const dados = state.chk.nvItens.map(it => {
+    const saldo = state.chk.saldo?.[it.id];
+    // saldo_teorico é null se nunca teve contagem (sem_baseline=true)
+    const qtd = saldo && !saldo.sem_baseline && saldo.saldo_teorico !== null
+      ? parseFloat(saldo.saldo_teorico) : null;
+    const md = consumoDiarioItem(it);
+    const dias = md > 0 && qtd !== null ? qtd / md : null;
+    const semaforo = classificarSemaforo(qtd, md);
+    return { it, qtd, md, dias, semaforo, saldo };
+  });
+
+  // Contadores globais
+  const cnt = { verde: 0, amarelo: 0, vermelho: 0, pend: 0 };
+  dados.forEach(d => cnt[d.semaforo]++);
+  document.getElementById('nvVerde').textContent    = cnt.verde;
+  document.getElementById('nvAmarelo').textContent  = cnt.amarelo;
+  document.getElementById('nvVermelho').textContent = cnt.vermelho;
+  document.getElementById('nvPend').textContent     = cnt.pend;
+
+  let filtrados = dados;
+  if (catFilt === 'camara')  filtrados = filtrados.filter(d => d.it.categoria === 'proteina' || d.it.categoria === 'laticinios');
+  else if (catFilt)          filtrados = filtrados.filter(d => d.it.categoria === catFilt);
+  if (stFilt) filtrados = filtrados.filter(d => d.semaforo === stFilt);
+  if (q)      filtrados = filtrados.filter(d =>
+    d.it.nome.toLowerCase().includes(q) ||
+    (d.it.fornecedor_principal || '').toLowerCase().includes(q));
+
+  document.getElementById('nvCount').textContent = `${filtrados.length} item(ns)`;
+
+  if (filtrados.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item nesses filtros.</div>';
+    return;
+  }
+
+  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3 };
+  filtrados.sort((a,b) => (ordem[a.semaforo] - ordem[b.semaforo]) || a.it.nome.localeCompare(b.it.nome));
+
+  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—' };
+  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○' };
+
+  cont.innerHTML = filtrados.map(d => {
+    const it = d.it;
+    const qtdTxt = d.qtd !== null
+      ? `${d.qtd.toFixed(1)}<small>${it.unidade||''}</small>`
+      : '<span class="text-muted">— sem baseline</span>';
+    const cobTxt = d.md > 0
+      ? (d.dias !== null ? `<strong>${d.dias.toFixed(1)}</strong> dia(s)` : '—')
+      : '<span class="text-muted">s/ consumo</span>';
+    let breakdown = '';
+    if (d.saldo && !d.saldo.sem_baseline) {
+      const base = parseFloat(d.saldo.baseline_contagem) || 0;
+      const ent = parseFloat(d.saldo.entradas_desde_contagem) || 0;
+      const sai = parseFloat(d.saldo.saidas_desde_contagem) || 0;
+      const dataUlt = d.saldo.ultima_contagem_data ? d.saldo.ultima_contagem_data.split('-').reverse().join('/') : '—';
+      breakdown = `Base ${base.toFixed(1)} (${dataUlt}) &nbsp;+ ent ${ent.toFixed(1)} − sai ${sai.toFixed(1)}`;
+    } else {
+      breakdown = '<em>sem contagem — faça o Checklist</em>';
+    }
+    return `
+      <div class="nv-row ${d.semaforo}">
+        <div class="chk-semaforo ${d.semaforo}">
+          <span class="dot">${semDot[d.semaforo]}</span>
+          <span class="txt">${semLabel[d.semaforo]}</span>
+        </div>
+        <div class="nv-nome">
+          ${escapeHtml(it.nome)}
+          <span class="badge-cat cat-${it.categoria} cat-pill">${catLabels[it.categoria]||it.categoria}</span>
+          ${it.fornecedor_principal ? `<div class="text-muted" style="font-size:11px;margin-top:2px">${escapeHtml(it.fornecedor_principal)}</div>` : ''}
+        </div>
+        <div class="nv-qty">${qtdTxt}</div>
+        <div class="nv-cob">${cobTxt}</div>
+        <div class="nv-ultima">${breakdown}</div>
+      </div>`;
+  }).join('');
+}
+
+// =====================================================================
+// DIVERGÊNCIAS DE ESTOQUE
+// =====================================================================
+async function carregarDivergencias() {
+  const cont = document.getElementById('dvContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const { data, error } = await sb.from('divergencias_estoque')
+    .select('*, itens(nome, categoria, unidade, fornecedor_principal)')
+    .order('data_contagem', { ascending: false })
+    .order('diff_pct', { ascending: false });
+  if (error) {
+    cont.innerHTML = '<div class="empty-text">Erro ao carregar: ' + error.message + '</div>';
+    return;
+  }
+  state.chk.divergencias = data || [];
+  renderDivergencias();
+}
+
+function renderDivergencias() {
+  const cont = document.getElementById('dvContainer');
+  const st = document.getElementById('dv-status').value;
+  const catFilt = document.getElementById('dv-cat').value;
+  const q = (document.getElementById('dv-search').value || '').toLowerCase();
+
+  let lista = state.chk.divergencias || [];
+  if (st) lista = lista.filter(d => d.status === st);
+  if (catFilt === 'camara') lista = lista.filter(d => d.itens && (d.itens.categoria === 'proteina' || d.itens.categoria === 'laticinios'));
+  else if (catFilt)        lista = lista.filter(d => d.itens && d.itens.categoria === catFilt);
+  if (q) lista = lista.filter(d => (d.itens?.nome||'').toLowerCase().includes(q));
+
+  document.getElementById('dvCount').textContent = `${lista.length} divergência(s)`;
+  if (lista.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhuma divergência com esses filtros.</div>';
+    return;
+  }
+
+  const stLabel = {
+    pendente: 'Pendente', recontagem: 'Recontagem', perda_registrada: 'Perda',
+    ajuste_ok: 'Ajuste OK',
+  };
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+
+  cont.innerHTML = lista.map(d => {
+    const it = d.itens || {};
+    const teo = parseFloat(d.qtd_teorica);
+    const con = parseFloat(d.qtd_contada);
+    const diff = parseFloat(d.diff);
+    const pct = parseFloat(d.diff_pct).toFixed(1);
+    const sobra = diff < 0;
+    const diffTxt = sobra
+      ? `<span class="dv-diff sobra">+${Math.abs(diff).toFixed(1)} ${it.unidade||''} <small>(${pct}% a mais)</small></span>`
+      : `<span class="dv-diff">−${diff.toFixed(1)} ${it.unidade||''} <small>(${pct}% a menos)</small></span>`;
+    const acoes = d.status === 'pendente' ? `
+      <button class="dv-action-btn recontagem" onclick="resolverDivergencia('${d.id}','recontagem')" title="Marca pra recontar amanhã">↻ Recontagem</button>
+      <button class="dv-action-btn perda" onclick="resolverDivergencia('${d.id}','perda_registrada')" title="Registra a falta como perda">− Perda</button>
+      <button class="dv-action-btn ok" onclick="resolverDivergencia('${d.id}','ajuste_ok')" title="Aceita a divergência (sem tratamento)">✓ Ajuste OK</button>
+    ` : `<span class="dv-status-tag ${d.status}">${stLabel[d.status]||d.status}</span>`;
+    return `
+      <div class="dv-row ${d.status}">
+        <div class="dv-nome">
+          ${escapeHtml(it.nome||'—')}
+          <span class="cat-pill cat-${it.categoria||'diversos'}" style="font-size:10px;margin-left:6px">${catLabels[it.categoria]||''}</span>
+          <small>Contagem: ${d.data_contagem ? d.data_contagem.split('-').reverse().join('/') : '—'}${it.fornecedor_principal ? ' · ' + escapeHtml(it.fornecedor_principal) : ''}${d.motivo ? ' · Motivo: ' + escapeHtml(d.motivo) : ''}</small>
+        </div>
+        <div class="dv-teo-cell"><div class="dv-num teorico">${teo.toFixed(1)}<small>teórico</small></div></div>
+        <div class="dv-con-cell"><div class="dv-num contado">${con.toFixed(1)}<small>contado</small></div></div>
+        ${diffTxt}
+        <div class="dv-actions">${acoes}</div>
+      </div>`;
+  }).join('');
+}
+
+async function resolverDivergencia(id, novoStatus) {
+  let motivo = null;
+  if (novoStatus === 'perda_registrada') {
+    motivo = prompt('Motivo/observação da perda (opcional):') || '';
+  }
+  const patch = {
+    status: novoStatus,
+    resolvido_por: state.perfil.id,
+    resolvido_em: new Date().toISOString(),
+  };
+  if (motivo !== null) patch.motivo = motivo;
+  const { error } = await sb.from('divergencias_estoque').update(patch).eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  showToast('Divergência atualizada.', 'success');
+  await carregarDivergencias();
+  atualizarBadgeDivergencias();
+}
+
+async function atualizarBadgeDivergencias() {
+  const badge = document.getElementById('badgeDivergencias');
+  if (!badge) return;
+  const { count } = await sb.from('divergencias_estoque')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'pendente');
+  if (count && count > 0) {
+    badge.textContent = String(count);
+    badge.style.background = 'rgba(224,82,82,0.7)';
+    badge.style.color = '#fff';
+  } else {
+    badge.textContent = '';
+  }
+}
+
+async function atualizarBadgeChecklist() {
+  const badge = document.getElementById('badgeChecklist');
+  if (!badge) return;
+  const hoje = isoDate(new Date());
+  const { count } = await sb.from('contagens_estoque')
+    .select('*', { count: 'exact', head: true })
+    .eq('data_contagem', hoje);
+  // Compara com total de itens de inventário
+  const { count: totInv } = await sb.from('itens')
+    .select('*', { count: 'exact', head: true })
+    .eq('ativo', true).eq('inventario', true);
+  if ((count || 0) === 0 && (totInv || 0) > 0) {
+    badge.textContent = '!';
+    badge.style.background = 'rgba(224,82,82,0.7)';
+    badge.style.color = '#fff';
+  } else if ((count || 0) < (totInv || 0)) {
+    badge.textContent = `${count}/${totInv}`;
+    badge.style.background = '';
+    badge.style.color = '';
+  } else {
+    badge.textContent = '';
+  }
+}
+
+async function logout() { await sb.auth.signOut(); window.location.href = 'index.html'; }
 </script>
 </body>
 </html>
