@@ -208,9 +208,12 @@
   </div>
 </nav>
 
+<div class="sidebar-overlay" id="sbOverlay" onclick="toggleSidebar()"></div>
+
 <div class="main-with-sidebar">
   <div class="top-bar">
-    <div>
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Abrir menu">☰</button>
+    <div class="top-bar-hero">
       <div class="top-title" id="topTitle">Solicitar Compra</div>
       <div class="top-sub" id="topSub">Pedido para compra externa (aprovação do Gerente)</div>
     </div>
@@ -713,6 +716,15 @@ const tabTitles = {
   relatorios: ['Relatórios', 'Aquisições finalizadas do seu PDV'],
 };
 
+function toggleSidebar() {
+  const sb = document.querySelector('.sidebar');
+  const ov = document.getElementById('sbOverlay');
+  if (!sb || !ov) return;
+  const open = !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  ov.classList.toggle('open', open);
+}
+
 function goTab(aba, el) {
   state.abaAtual = aba;
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -725,6 +737,10 @@ function goTab(aba, el) {
   atualizarCarrinho();
   if (aba === 'relatorios') setupRelatorio();
   if (aba === 'rascunhos') carregarRascunhos();
+  if (window.innerWidth <= 900) {
+    document.querySelector('.sidebar')?.classList.remove('open');
+    document.getElementById('sbOverlay')?.classList.remove('open');
+  }
 }
 // Compat: manter switchAba como alias pra chamadas internas (ex: novoPedido, load inicial)
 const switchAba = (aba) => {

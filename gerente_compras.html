@@ -196,9 +196,12 @@
   </div>
 </nav>
 
+<div class="sidebar-overlay" id="sbOverlay" onclick="toggleSidebar()"></div>
+
 <div class="main-with-sidebar">
   <div class="top-bar">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Abrir menu">☰</button>
+    <div class="top-bar-hero" style="display:flex;align-items:center;justify-content:space-between;gap:16px">
       <div>
         <div class="top-title" id="topTitle">Dashboard</div>
         <div class="top-sub" id="topSub">Visão geral do dia</div>
@@ -670,6 +673,14 @@ function openParentGroup(itemEl) {
   const grp = itemEl?.closest?.('.nav-group');
   if (grp) grp.classList.add('open');
 }
+function toggleSidebar() {
+  const sb = document.querySelector('.sidebar');
+  const ov = document.getElementById('sbOverlay');
+  if (!sb || !ov) return;
+  const open = !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  ov.classList.toggle('open', open);
+}
 
 const state = {
   user: null, perfil: null,
@@ -800,6 +811,10 @@ function goTab(tab, el) {
   if (tab === 'reqCreate')   initReqCreate();
   // Auto-abre grupo pai se sub-item ativo
   openParentGroup(el);
+  if (window.innerWidth <= 900) {
+    document.querySelector('.sidebar')?.classList.remove('open');
+    document.getElementById('sbOverlay')?.classList.remove('open');
+  }
 }
 
 async function atualizarBadges() {

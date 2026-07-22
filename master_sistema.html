@@ -55,10 +55,15 @@
   </div>
 </nav>
 
+<div class="sidebar-overlay" id="sbOverlay" onclick="toggleSidebar()"></div>
+
 <div class="main-with-sidebar">
   <div class="top-bar">
-    <div class="top-title" id="topTitle">Usuários</div>
-    <div class="top-sub" id="topSub">Gestão de acesso ao sistema</div>
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Abrir menu">☰</button>
+    <div class="top-bar-hero">
+      <div class="top-title" id="topTitle">Usuários</div>
+      <div class="top-sub" id="topSub">Gestão de acesso ao sistema</div>
+    </div>
   </div>
 
   <!-- ====================== USUÁRIOS ====================== -->
@@ -268,6 +273,14 @@ function openParentGroup(itemEl) {
   const grp = itemEl?.closest?.('.nav-group');
   if (grp) grp.classList.add('open');
 }
+function toggleSidebar() {
+  const sb = document.querySelector('.sidebar');
+  const ov = document.getElementById('sbOverlay');
+  if (!sb || !ov) return;
+  const open = !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  ov.classList.toggle('open', open);
+}
 
 const state = { user: null, perfil: null, usuarios: [], pdvs: [] };
 
@@ -297,6 +310,10 @@ function goTab(tab, el) {
   if (tab === 'niveis') carregarNiveisMst();
   if (tab === 'divergencias') carregarDivergenciasMst();
   openParentGroup(el);
+  if (window.innerWidth <= 900) {
+    document.querySelector('.sidebar')?.classList.remove('open');
+    document.getElementById('sbOverlay')?.classList.remove('open');
+  }
 }
 
 function togglePdvField() {

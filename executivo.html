@@ -98,9 +98,12 @@
   </div>
 </nav>
 
+<div class="sidebar-overlay" id="sbOverlay" onclick="toggleSidebar()"></div>
+
 <div class="main-with-sidebar">
   <div class="top-bar">
-    <div>
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Abrir menu">☰</button>
+    <div class="top-bar-hero">
       <div class="top-title" id="topTitle">Solicitar / Requisitar</div>
       <div class="top-sub" id="topSub">Criar compra ou requisição em nome de qualquer PDV</div>
     </div>
@@ -402,6 +405,14 @@ function openParentGroup(itemEl) {
   const grp = itemEl?.closest?.('.nav-group');
   if (grp) grp.classList.add('open');
 }
+function toggleSidebar() {
+  const sb = document.querySelector('.sidebar');
+  const ov = document.getElementById('sbOverlay');
+  if (!sb || !ov) return;
+  const open = !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  ov.classList.toggle('open', open);
+}
 
 function goTab(aba, el) {
   state.abaAtual = aba;
@@ -423,6 +434,10 @@ function goTab(aba, el) {
   }
   atualizarExecCartBar();
   openParentGroup(el);
+  if (window.innerWidth <= 900) {
+    document.querySelector('.sidebar')?.classList.remove('open');
+    document.getElementById('sbOverlay')?.classList.remove('open');
+  }
 }
 // Compat: alias pra chamadas internas que ainda usam switchAba
 const switchAba = (aba) => {
