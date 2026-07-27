@@ -934,23 +934,15 @@ function calcularCompetenciaFinal(dataEntregaIso, itens) {
 
 function atualizarAvisoCorte() {
   const dataEntrega = document.getElementById('compra-data-entrega')?.value;
-  const itensCompra = Object.values(state.selecionados?.compra || {}).map(s => s.item);
-
   const aviso = document.getElementById('avisoCorte');
   const txt = document.getElementById('avisoCorteTxt');
   if (!aviso || !txt) return;
 
-  const competencia = calcularCompetenciaFinal(dataEntrega, itensCompra);
-  const compStr = competencia.toLocaleDateString('pt-BR');
-  const hojeStr = new Date().toLocaleDateString('pt-BR');
   const entrega = isoParaData(dataEntrega);
-
-  if (entrega && entrega > new Date() && itensCompra.length > 0) {
-    // Modo "data futura + itens definidos" — mostra a data calculada
+  if (entrega && entrega > new Date()) {
+    // Data futura escolhida — só confirma a data de entrega
     aviso.className = 'aviso aviso-info';
-    const prazos = itensCompra.map(prazoItemDias).filter(Boolean);
-    const prazoTxt = prazos.length > 0 ? Math.max(...prazos) + ' dia(s)' : '1 dia';
-    txt.textContent = `Entrega em ${entrega.toLocaleDateString('pt-BR')} · Prazo máx dos itens: ${prazoTxt} · Compra entra na lista do Gerente em ${compStr}.`;
+    txt.textContent = `Entrega prevista para ${entrega.toLocaleDateString('pt-BR')}.`;
     return;
   }
 
@@ -962,11 +954,11 @@ function atualizarAvisoCorte() {
     const ms = corte - agora;
     const h = Math.floor(ms / 3600000);
     const m = Math.floor((ms % 3600000) / 60000);
-    txt.textContent = `Pedido será incluído na lista de COMPRAS de hoje (${hojeStr}). Corte em ${h}h${String(m).padStart(2,'0')}.`;
+    txt.textContent = `Entrega prevista para hoje. Corte de pedidos em ${h}h${String(m).padStart(2,'0')}.`;
   } else {
     aviso.className = 'aviso aviso-warn';
     const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
-    txt.textContent = `Após as 10h00 — pedido entra na lista de COMPRAS de amanhã (${amanha.toLocaleDateString('pt-BR')}).`;
+    txt.textContent = `Após as 10h00 — entrega prevista para amanhã (${amanha.toLocaleDateString('pt-BR')}).`;
   }
 }
 

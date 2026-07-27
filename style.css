@@ -811,6 +811,33 @@ main, .main {
   .stats-grid { grid-template-columns: 1fr; }
 }
 
+/* ============================== ITEM ROW (catálogo interativo) ============================== */
+/* Padrão compartilhado entre PDV, Executivo, Comissaria — regras de exibição
+   dos botões Adicionar/Remover e estilos base dos botões. */
+.item-actions-cell {
+  display: flex; align-items: center; gap: 12px; justify-content: flex-end;
+}
+.item-action {
+  background: rgba(184,150,62,0.15);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font-family: inherit; font-size: 12px;
+  letter-spacing: 0.5px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.item-action:hover { background: rgba(184,150,62,0.25); }
+.item-action.remove {
+  background: transparent;
+  border-color: var(--border-subtle);
+  color: var(--muted);
+}
+.item-action.remove:hover { color: var(--error); border-color: var(--error); }
+.item-row.selected .item-action.add { display: none; }
+.item-row:not(.selected) .item-action.remove { display: none; }
+
 /* ============================== CART SIDEBAR ============================== */
 /* Sidebar direita persistente no desktop + drawer no mobile. Controlado por
    body.has-cart (adicionar/remover conforme a aba ativa tem carrinho). */

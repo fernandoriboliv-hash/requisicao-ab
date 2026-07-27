@@ -646,32 +646,27 @@ function calcularCompetenciaFinal(dataEntregaIso, itens) {
 
 function atualizarAvisoCorte() {
   const dataEntrega = document.getElementById('compra-data-entrega')?.value;
-  const itensCompra = Object.values(state.selecionados?.compra || {}).map(s => s.item);
   const aviso = document.getElementById('avisoCorte');
   if (!aviso) return;
   const entrega = isoParaData(dataEntrega);
 
-  if (entrega && entrega > new Date() && itensCompra.length > 0) {
-    const competencia = calcularCompetenciaFinal(dataEntrega, itensCompra);
-    const prazos = itensCompra.map(prazoItemDias).filter(Boolean);
-    const prazoTxt = prazos.length > 0 ? Math.max(...prazos) + ' dia(s)' : '1 dia';
+  if (entrega && entrega > new Date()) {
     aviso.className = 'aviso aviso-info';
-    aviso.textContent = `Entrega em ${entrega.toLocaleDateString('pt-BR')} · Prazo máx dos itens: ${prazoTxt} · Compra entra na lista do Gerente em ${competencia.toLocaleDateString('pt-BR')}.`;
+    aviso.textContent = `Entrega prevista para ${entrega.toLocaleDateString('pt-BR')}.`;
     return;
   }
   const agora = new Date();
   const corte = new Date(); corte.setHours(10, 0, 0, 0);
-  const hojeStr = new Date().toLocaleDateString('pt-BR');
   if (agora < corte) {
     aviso.className = 'aviso aviso-success';
     const ms = corte - agora;
     const h = Math.floor(ms / 3600000);
     const m = Math.floor((ms % 3600000) / 60000);
-    aviso.textContent = `Solicitação entra na lista de COMPRAS de hoje (${hojeStr}). Corte em ${h}h${String(m).padStart(2,'0')}.`;
+    aviso.textContent = `Entrega prevista para hoje. Corte de pedidos em ${h}h${String(m).padStart(2,'0')}.`;
   } else {
     aviso.className = 'aviso aviso-warn';
     const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
-    aviso.textContent = `Após as 10h00 — entra na lista de COMPRAS de amanhã (${amanha.toLocaleDateString('pt-BR')}).`;
+    aviso.textContent = `Após as 10h00 — entrega prevista para amanhã (${amanha.toLocaleDateString('pt-BR')}).`;
   }
 }
 
