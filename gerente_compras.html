@@ -359,14 +359,27 @@
     </div>
   </div>
 
-  <div class="cart-bar" id="rcCartBar">
-    <div class="cart-info">
-      <span class="cart-count" id="rcCartCount">0</span>
-      <span>iten(s) selecionado(s)</span>
+  <!-- Cart sidebar (desktop) / drawer (mobile) — só na aba Solicitar Requisição -->
+  <div class="cart-sidebar-overlay" id="cartOverlay" onclick="fecharCartSidebar()"></div>
+  <aside class="cart-sidebar" id="cartSidebar">
+    <div class="cart-sidebar-head">
+      <div>
+        <div class="title">Sua requisição</div>
+        <div class="subtitle" id="cartSubtitle">0 iten(s)</div>
+      </div>
+      <button class="cart-mobile-close" onclick="fecharCartSidebar()" aria-label="Fechar">✕</button>
     </div>
-    <button class="btn btn-outline" onclick="descartarReqCreate()">Descartar</button>
-    <button class="btn btn-primary" onclick="enviarReqCreate()">Enviar Requisição</button>
-  </div>
+    <div class="cart-sidebar-body" id="cartSidebarBody">
+      <div class="cart-sidebar-empty">Adicione itens do catálogo à esquerda.</div>
+    </div>
+    <div class="cart-sidebar-foot">
+      <button class="btn btn-outline" onclick="descartarReqCreate()">Descartar</button>
+      <button class="btn btn-primary" id="rcSendBtn" onclick="enviarReqCreate()" disabled>Enviar Requisição</button>
+    </div>
+  </aside>
+  <button class="cart-fab" id="cartFab" onclick="abrirCartSidebar()" aria-label="Ver lista">
+    🛒<span class="cart-fab-badge" id="cartFabBadge">0</span>
+  </button>
 
   <!-- ====================== NÍVEIS DE ESTOQUE (só leitura) ====================== -->
   <div class="tab-content" id="tab-niveis">
@@ -810,6 +823,8 @@ function goTab(tab, el) {
   if (tab === 'niveis')      carregarNiveisGer();
   if (tab === 'divergencias') carregarDivergencias();
   if (tab === 'reqCreate')   initReqCreate();
+  // Atualiza cart sidebar (aparece só em reqCreate)
+  if (typeof atualizarCartBarRC === 'function') atualizarCartBarRC();
   // Auto-abre grupo pai se sub-item ativo
   openParentGroup(el);
   if (window.innerWidth <= 900) {
@@ -1835,10 +1850,48 @@ function removerItemRC(itemId) {
   renderItensReqCreate();
   atualizarCartBarRC();
 }
+function abrirCartSidebar() {
+  document.getElementById('cartSidebar').classList.add('open');
+  document.getElementById('cartOverlay').classList.add('open');
+}
+function fecharCartSidebar() {
+  document.getElementById('cartSidebar').classList.remove('open');
+  document.getElementById('cartOverlay').classList.remove('open');
+}
+
 function atualizarCartBarRC() {
-  const n = Object.keys(state.reqNew.selecionados).length;
-  document.getElementById('rcCartCount').textContent = n;
-  document.getElementById('rcCartBar').classList.toggle('visible', n > 0);
+  // Só mostra a sidebar na aba reqCreate
+  const usaCart = ['reqCreate'].includes(state.abaAtualGerente || '');
+  const abaEl = document.getElementById('tab-reqCreate');
+  const isActive = abaEl && abaEl.classList.contains('active');
+  document.body.classList.toggle('has-cart', isActive);
+  if (!isActive) { fecharCartSidebar(); return; }
+
+  const sels = Object.values(state.reqNew.selecionados);
+  const total = sels.length;
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+
+  document.getElementById('cartSubtitle').textContent =
+    total === 0 ? 'lista vazia' :
+    total === 1 ? '1 item na requisição' :
+    `${total} itens na requisição`;
+
+  const body = document.getElementById('cartSidebarBody');
+  if (total === 0) {
+    body.innerHTML = '<div class="cart-sidebar-empty">Adicione itens do catálogo à esquerda.</div>';
+  } else {
+    body.innerHTML = sels.map(s => `
+      <div class="cart-sidebar-item">
+        <div class="cs-name">
+          ${escapeHtml(s.item.nome)}
+          <span class="cs-cat">${catLabels[s.item.categoria]||''}</span>
+        </div>
+        <div class="cs-qty">${s.qty} ${s.item.unidade||''}</div>
+        <button class="cs-del" onclick="removerItemRC('${s.item.id}')" title="Remover">✕</button>
+      </div>`).join('');
+  }
+  document.getElementById('rcSendBtn').disabled = total === 0;
+  document.getElementById('cartFabBadge').textContent = total;
 }
 function descartarReqCreate() {
   if (Object.keys(state.reqNew.selecionados).length === 0) return;

@@ -545,16 +545,6 @@
     <div id="m-items"><div class="loading-text">Carregando catálogo...</div></div>
   </div>
 
-  <!-- Barra fixa: aparece ao selecionar pelo menos 1 item na aba Manual -->
-  <div class="cart-bar" id="manualCartBar">
-    <div class="cart-info">
-      <span class="cart-count" id="manualCartCount">0</span>
-      <span>iten(s) selecionado(s)</span>
-    </div>
-    <div class="cart-actions">
-      <button class="btn btn-primary" onclick="enviarManual()">Registrar Saída</button>
-    </div>
-  </div>
 
   <!-- ========================================================== -->
   <!-- ABA SOLICITAR COMPRA (COMISSARIA)                          -->
@@ -842,16 +832,26 @@
   </div>
 </div>
 
-<!-- Barra fixa: aparece ao selecionar pelo menos 1 item na aba Solicitar Compra -->
-<div class="cart-bar" id="compraCartBar">
-  <div class="cart-info">
-    <span class="cart-count" id="compraCartCount">0</span>
-    <span>iten(s) selecionado(s)</span>
+<!-- Cart sidebar (desktop) / drawer (mobile) — usado nas abas Criar Requisição e Solicitar Compra -->
+<div class="cart-sidebar-overlay" id="cartOverlay" onclick="fecharCartSidebar()"></div>
+<aside class="cart-sidebar" id="cartSidebar">
+  <div class="cart-sidebar-head">
+    <div>
+      <div class="title">Sua lista</div>
+      <div class="subtitle" id="cartSubtitle">0 iten(s)</div>
+    </div>
+    <button class="cart-mobile-close" onclick="fecharCartSidebar()" aria-label="Fechar">✕</button>
   </div>
-  <div class="cart-actions">
-    <button class="btn btn-primary" onclick="enviarCompraCommissary()">Enviar Solicitação</button>
+  <div class="cart-sidebar-body" id="cartSidebarBody">
+    <div class="cart-sidebar-empty">Adicione itens do catálogo à esquerda.</div>
   </div>
-</div>
+  <div class="cart-sidebar-foot">
+    <button class="btn btn-primary" id="cartSendBtn" onclick="cartEnviar()" disabled>Enviar</button>
+  </div>
+</aside>
+<button class="cart-fab" id="cartFab" onclick="abrirCartSidebar()" aria-label="Ver lista">
+  🛒<span class="cart-fab-badge" id="cartFabBadge">0</span>
+</button>
 
 <div class="toast-stack" id="toasts"></div>
 
@@ -1189,14 +1189,68 @@ function renderItensManual() {
   atualizarManualCartBar();
 }
 
-function atualizarManualCartBar() {
-  const total = Object.keys(state.manual.selecionados).length;
-  document.getElementById('manualCartCount').textContent = total;
-  const bar = document.getElementById('manualCartBar');
-  // Só aparece se estamos na aba manual E tem pelo menos 1 item
-  const naAba = state.abaAtual === 'manual';
-  bar.className = total > 0 && naAba ? 'cart-bar visible' : 'cart-bar';
+// Cart sidebar comum (Criar Requisição + Solicitar Compra)
+function abrirCartSidebar() {
+  document.getElementById('cartSidebar').classList.add('open');
+  document.getElementById('cartOverlay').classList.add('open');
 }
+function fecharCartSidebar() {
+  document.getElementById('cartSidebar').classList.remove('open');
+  document.getElementById('cartOverlay').classList.remove('open');
+}
+
+function atualizarCartSidebarComis() {
+  const aba = state.abaAtual;
+  let sels, remover, botao, actionFn;
+  if (aba === 'manual') {
+    sels = Object.values(state.manual.selecionados);
+    remover = (id) => toggleManual(id);
+    botao = 'Registrar Saída';
+    actionFn = 'enviarManual';
+  } else if (aba === 'compra') {
+    sels = Object.values(state.compra.selecionados);
+    remover = (id) => toggleCompra(id);
+    botao = 'Enviar Solicitação';
+    actionFn = 'enviarCompraCommissary';
+  } else {
+    document.body.classList.remove('has-cart');
+    fecharCartSidebar();
+    return;
+  }
+  document.body.classList.add('has-cart');
+
+  const total = sels.length;
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  const abaLabel = aba === 'compra' ? 'compra' : 'saída';
+
+  document.getElementById('cartSubtitle').textContent =
+    total === 0 ? 'lista vazia' :
+    total === 1 ? `1 item na ${abaLabel}` :
+    `${total} itens na ${abaLabel}`;
+
+  const body = document.getElementById('cartSidebarBody');
+  if (total === 0) {
+    body.innerHTML = '<div class="cart-sidebar-empty">Adicione itens do catálogo à esquerda.</div>';
+  } else {
+    body.innerHTML = sels.map(s => `
+      <div class="cart-sidebar-item">
+        <div class="cs-name">
+          ${escapeHtml(s.item.nome)}
+          <span class="cs-cat">${catLabels[s.item.categoria]||''}</span>
+        </div>
+        <div class="cs-qty">${s.qty} ${s.item.unidade||''}</div>
+        <button class="cs-del" onclick="${aba === 'manual' ? 'toggleManual' : 'toggleCompra'}('${s.item.id}')" title="Remover">✕</button>
+      </div>`).join('');
+  }
+  const btn = document.getElementById('cartSendBtn');
+  btn.textContent = botao;
+  btn.disabled = total === 0;
+  btn.onclick = () => window[actionFn]();
+  document.getElementById('cartFabBadge').textContent = total;
+}
+
+// Aliases para compat com chamadas existentes
+function atualizarManualCartBar() { atualizarCartSidebarComis(); }
 
 function toggleManual(itemId) {
   if (state.manual.selecionados[itemId]) delete state.manual.selecionados[itemId];
@@ -1316,13 +1370,7 @@ function renderItensCompra() {
   atualizarCompraCartBar();
 }
 
-function atualizarCompraCartBar() {
-  const total = Object.keys(state.compra.selecionados).length;
-  document.getElementById('compraCartCount').textContent = total;
-  const bar = document.getElementById('compraCartBar');
-  const naAba = state.abaAtual === 'compra';
-  bar.className = total > 0 && naAba ? 'cart-bar visible' : 'cart-bar';
-}
+function atualizarCompraCartBar() { atualizarCartSidebarComis(); }
 
 function toggleCompra(itemId) {
   if (state.compra.selecionados[itemId]) delete state.compra.selecionados[itemId];

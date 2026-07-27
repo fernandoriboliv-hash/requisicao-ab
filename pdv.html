@@ -458,18 +458,28 @@
 </div>
 
 <!-- ============================================== -->
-<!-- BARRA DO CARRINHO FIXA                          -->
+<!-- CART SIDEBAR (desktop) / DRAWER (mobile)       -->
 <!-- ============================================== -->
-<div class="cart-bar" id="cartBar">
-  <div class="cart-info">
-    <span class="cart-count" id="cartCount">0</span>
-    <span id="cartLabel">iten(s) selecionado(s)</span>
+<div class="cart-sidebar-overlay" id="cartOverlay" onclick="fecharCartSidebar()"></div>
+<aside class="cart-sidebar" id="cartSidebar">
+  <div class="cart-sidebar-head">
+    <div>
+      <div class="title">Sua lista</div>
+      <div class="subtitle" id="cartSubtitle">0 iten(s)</div>
+    </div>
+    <button class="cart-mobile-close" onclick="fecharCartSidebar()" aria-label="Fechar">✕</button>
   </div>
-  <div class="cart-actions">
+  <div class="cart-sidebar-body" id="cartSidebarBody">
+    <div class="cart-sidebar-empty">Adicione itens do catálogo à esquerda.</div>
+  </div>
+  <div class="cart-sidebar-foot">
     <button class="btn btn-secondary" id="btn-rascunho" onclick="salvarRascunho()" style="display:none">Salvar Rascunho</button>
-    <button class="btn btn-primary" onclick="abrirRevisao()">Revisar e Enviar</button>
+    <button class="btn btn-primary" id="btn-enviar" onclick="abrirRevisao()" disabled>Revisar e Enviar</button>
   </div>
-</div>
+</aside>
+<button class="cart-fab" id="cartFab" onclick="abrirCartSidebar()" aria-label="Ver lista">
+  🛒<span class="cart-fab-badge" id="cartFabBadge">0</span>
+</button>
 
 <!-- Modal de revisão -->
 <div class="modal-overlay" id="revisaoModal">
@@ -750,18 +760,76 @@ function removeLivre(aba, idx) {
 }
 
 // =====================================================================
-// CARRINHO
+// CARRINHO — sidebar direita (desktop) + drawer (mobile)
 // =====================================================================
+function abrirCartSidebar() {
+  document.getElementById('cartSidebar').classList.add('open');
+  document.getElementById('cartOverlay').classList.add('open');
+}
+function fecharCartSidebar() {
+  document.getElementById('cartSidebar').classList.remove('open');
+  document.getElementById('cartOverlay').classList.remove('open');
+}
+
 function atualizarCarrinho() {
   const aba = state.abaAtual;
-  if (aba === 'relatorios') {
-    document.getElementById('cartBar').className = 'cart-bar';
+  const abasComCart = ['compra', 'req'];
+  const usaCart = abasComCart.includes(aba);
+  document.body.classList.toggle('has-cart', usaCart);
+  if (!usaCart) {
+    fecharCartSidebar();
     return;
   }
-  const total = Object.keys(state.selecionados[aba]).length + state.livres[aba].length;
-  document.getElementById('cartCount').textContent = total;
-  document.getElementById('cartBar').className = total > 0 ? 'cart-bar visible' : 'cart-bar';
-  document.getElementById('btn-rascunho').style.display = aba === 'compra' ? 'inline-block' : 'none';
+
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  const sels = Object.values(state.selecionados[aba]);
+  const livres = state.livres[aba];
+  const total = sels.length + livres.length;
+
+  // Subtitle
+  const abaLabel = aba === 'compra' ? 'compra' : 'requisição';
+  document.getElementById('cartSubtitle').textContent =
+    total === 0 ? 'lista vazia' :
+    total === 1 ? `1 item na ${abaLabel}` :
+    `${total} itens na ${abaLabel}`;
+
+  // Body
+  const body = document.getElementById('cartSidebarBody');
+  if (total === 0) {
+    body.innerHTML = '<div class="cart-sidebar-empty">Adicione itens do catálogo à esquerda.</div>';
+  } else {
+    let html = '';
+    sels.forEach(s => {
+      html += `
+        <div class="cart-sidebar-item">
+          <div class="cs-name">
+            ${escapeHtml(s.item.nome)}
+            <span class="cs-cat">${catLabels[s.item.categoria]||''}</span>
+          </div>
+          <div class="cs-qty">${s.qty} ${s.item.unidade||''}</div>
+          <button class="cs-del" onclick="removerItem('${aba}','${s.item.id}')" title="Remover">✕</button>
+        </div>`;
+    });
+    livres.forEach((l, i) => {
+      html += `
+        <div class="cart-sidebar-item">
+          <div class="cs-name">
+            ${escapeHtml(l.nome)}
+            <span class="cs-cat" style="color:var(--orange)">AVULSO</span>
+          </div>
+          <div class="cs-qty">${l.qtd} ${l.unidade||''}</div>
+          <button class="cs-del" onclick="removeLivre('${aba}',${i})" title="Remover">✕</button>
+        </div>`;
+    });
+    body.innerHTML = html;
+  }
+
+  // Foot: botões
+  document.getElementById('btn-rascunho').style.display = aba === 'compra' ? 'block' : 'none';
+  document.getElementById('btn-enviar').disabled = total === 0;
+
+  // FAB badge
+  document.getElementById('cartFabBadge').textContent = total;
 }
 
 const tabTitles = {

@@ -189,16 +189,26 @@
 
   </div>
 
-  <!-- Barra fixa: aparece ao selecionar pelo menos 1 item na aba Solicitar/Requisitar -->
-  <div class="cart-bar" id="execCartBar">
-    <div class="cart-info">
-      <span class="cart-count" id="execCartCount">0</span>
-      <span id="execCartLabel">iten(s) selecionado(s)</span>
+  <!-- Cart sidebar (desktop) / drawer (mobile) — só na aba Solicitar/Requisitar -->
+  <div class="cart-sidebar-overlay" id="cartOverlay" onclick="fecharCartSidebar()"></div>
+  <aside class="cart-sidebar" id="cartSidebar">
+    <div class="cart-sidebar-head">
+      <div>
+        <div class="title">Sua lista</div>
+        <div class="subtitle" id="cartSubtitle">0 iten(s)</div>
+      </div>
+      <button class="cart-mobile-close" onclick="fecharCartSidebar()" aria-label="Fechar">✕</button>
     </div>
-    <div class="cart-actions">
-      <button class="btn btn-primary" id="execCartBtn" onclick="enviarFromCart()">Enviar</button>
+    <div class="cart-sidebar-body" id="cartSidebarBody">
+      <div class="cart-sidebar-empty">Adicione itens do catálogo à esquerda.</div>
     </div>
-  </div>
+    <div class="cart-sidebar-foot">
+      <button class="btn btn-primary" id="execCartBtn" onclick="enviarFromCart()" disabled>Enviar</button>
+    </div>
+  </aside>
+  <button class="cart-fab" id="cartFab" onclick="abrirCartSidebar()" aria-label="Ver lista">
+    🛒<span class="cart-fab-badge" id="cartFabBadge">0</span>
+  </button>
 
   <!-- ========================== ABA COMPRAS GERAL ========================== -->
   <div class="tab-content" id="tab-compras">
@@ -523,17 +533,53 @@ function renderItens(modo) {
   atualizarExecCartBar();
 }
 
+function abrirCartSidebar() {
+  document.getElementById('cartSidebar').classList.add('open');
+  document.getElementById('cartOverlay').classList.add('open');
+}
+function fecharCartSidebar() {
+  document.getElementById('cartSidebar').classList.remove('open');
+  document.getElementById('cartOverlay').classList.remove('open');
+}
+
 function atualizarExecCartBar() {
-  // Mostra a barra apenas na aba "Solicitar/Requisitar" e quando há itens na sub-aba ativa
-  if (state.abaAtual !== 'criar') {
-    document.getElementById('execCartBar').className = 'cart-bar';
-    return;
-  }
+  // Só na aba "Solicitar/Requisitar"
+  const usaCart = state.abaAtual === 'criar';
+  document.body.classList.toggle('has-cart', usaCart);
+  if (!usaCart) { fecharCartSidebar(); return; }
+
   const modo = state.subAtual; // 'compra' ou 'req'
-  const total = Object.keys(state.selecionados[modo] || {}).length;
-  document.getElementById('execCartCount').textContent = total;
-  document.getElementById('execCartBtn').textContent = modo === 'compra' ? 'Enviar Solicitação' : 'Enviar Requisição';
-  document.getElementById('execCartBar').className = total > 0 ? 'cart-bar visible' : 'cart-bar';
+  const sels = Object.values(state.selecionados[modo] || {});
+  const total = sels.length;
+
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  const abaLabel = modo === 'compra' ? 'compra' : 'requisição';
+
+  document.getElementById('cartSubtitle').textContent =
+    total === 0 ? 'lista vazia' :
+    total === 1 ? `1 item na ${abaLabel}` :
+    `${total} itens na ${abaLabel}`;
+
+  const body = document.getElementById('cartSidebarBody');
+  if (total === 0) {
+    body.innerHTML = '<div class="cart-sidebar-empty">Adicione itens do catálogo à esquerda.</div>';
+  } else {
+    body.innerHTML = sels.map(s => `
+      <div class="cart-sidebar-item">
+        <div class="cs-name">
+          ${escapeHtml(s.item.nome)}
+          <span class="cs-cat">${catLabels[s.item.categoria]||''}</span>
+        </div>
+        <div class="cs-qty">${s.qty} ${s.item.unidade||''}</div>
+        <button class="cs-del" onclick="toggleItem('${modo}','${s.item.id}')" title="Remover">✕</button>
+      </div>`).join('');
+  }
+
+  const btn = document.getElementById('execCartBtn');
+  btn.textContent = modo === 'compra' ? 'Enviar Solicitação' : 'Enviar Requisição';
+  btn.disabled = total === 0;
+
+  document.getElementById('cartFabBadge').textContent = total;
 }
 
 function enviarFromCart() {
