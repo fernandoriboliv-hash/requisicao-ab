@@ -287,7 +287,7 @@
     <div class="form-row col2">
       <div class="field">
         <label class="field-label">Data de Entrega Desejada</label>
-        <input class="input" type="date" id="compra-data-entrega">
+        <input class="input" type="date" id="compra-data-entrega" onchange="atualizarAvisoCorte()">
       </div>
       <div class="field">
         <label class="field-label">Observação Geral (opcional)</label>
@@ -582,9 +582,14 @@ function isoDate(d) { return d.toISOString().split('T')[0]; }
 // CATÁLOGO
 // =====================================================================
 async function carregarCatalogo() {
-  const { data, error } = await sb.from('itens').select('*').eq('ativo', true).order('nome');
-  if (error) { console.error(error); showToast('Erro ao carregar catálogo: ' + error.message, 'error'); return; }
-  state.catalogo = data || [];
+  const [catR, prazoR] = await Promise.all([
+    sb.from('itens').select('*').eq('ativo', true).order('nome'),
+    sb.from('configuracoes_categoria').select('categoria, prazo_reposicao_horas'),
+  ]);
+  if (catR.error) { console.error(catR.error); showToast('Erro ao carregar catálogo: ' + catR.error.message, 'error'); return; }
+  state.catalogo = catR.data || [];
+  state.prazoPorCategoria = {};
+  (prazoR.data || []).forEach(c => { state.prazoPorCategoria[c.categoria] = c.prazo_reposicao_horas; });
 }
 
 // Carrega níveis de estoque atuais (saldo teórico da view) para exibir alertas
@@ -830,6 +835,9 @@ function atualizarCarrinho() {
 
   // FAB badge
   document.getElementById('cartFabBadge').textContent = total;
+
+  // Atualiza aviso de corte (considera prazo dos itens agora no carrinho)
+  if (aba === 'compra') atualizarAvisoCorte();
 }
 
 const tabTitles = {
@@ -873,9 +881,22 @@ const switchAba = (aba) => {
 };
 
 // =====================================================================
-// REGRA DE CORTE 10h (somente Compra)
+// CÁLCULO DE DATA DE COMPETÊNCIA (data que entra na lista do Gerente)
 // =====================================================================
+// Regra:
+//   1) Se data_entrega_desejada vazia/passada/hoje/amanhã → regra 10h (hoje ou amanhã)
+//   2) Se data_entrega_desejada futura → data_competencia = data_entrega - MAX(prazo dos itens)
+//      (nunca antes de hoje)
+function prazoItemDias(item) {
+  const horas = item.prazo_reposicao_horas
+             ?? (state.prazoPorCategoria || {})[item.categoria]
+             ?? null;
+  if (!horas) return null;
+  return Math.max(1, Math.ceil(horas / 24));
+}
+
 function getCompetenciaCompra() {
+  // Sem itens ou compra normal → regra 10h atual
   const agora = new Date();
   const corte = new Date(); corte.setHours(10, 0, 0, 0);
   const data = new Date();
@@ -883,20 +904,69 @@ function getCompetenciaCompra() {
   return data;
 }
 
+function isoParaData(iso) {
+  if (!iso) return null;
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(y, m-1, d, 12, 0, 0, 0);
+  return dt;
+}
+
+function calcularCompetenciaFinal(dataEntregaIso, itens) {
+  const entrega = isoParaData(dataEntregaIso);
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  if (!entrega) return getCompetenciaCompra();
+
+  // Se entrega é hoje ou passado → cai na regra 10h
+  if (entrega <= hoje) return getCompetenciaCompra();
+
+  // Prazo máximo dos itens (dias)
+  const prazos = itens
+    .map(prazoItemDias)
+    .filter(p => p !== null && p !== undefined);
+  const prazoMax = prazos.length > 0 ? Math.max(...prazos) : 1; // fallback 1d
+
+  // Data ideal = entrega - prazoMax
+  const ideal = new Date(entrega);
+  ideal.setDate(ideal.getDate() - prazoMax);
+  // Não pode ser antes de hoje
+  return ideal < hoje ? hoje : ideal;
+}
+
 function atualizarAvisoCorte() {
-  const agora = new Date();
-  const corte = new Date(); corte.setHours(10, 0, 0, 0);
+  const dataEntrega = document.getElementById('compra-data-entrega')?.value;
+  const itensCompra = Object.values(state.selecionados?.compra || {}).map(s => s.item);
+
   const aviso = document.getElementById('avisoCorte');
   const txt = document.getElementById('avisoCorteTxt');
+  if (!aviso || !txt) return;
+
+  const competencia = calcularCompetenciaFinal(dataEntrega, itensCompra);
+  const compStr = competencia.toLocaleDateString('pt-BR');
+  const hojeStr = new Date().toLocaleDateString('pt-BR');
+  const entrega = isoParaData(dataEntrega);
+
+  if (entrega && entrega > new Date() && itensCompra.length > 0) {
+    // Modo "data futura + itens definidos" — mostra a data calculada
+    aviso.className = 'aviso aviso-info';
+    const prazos = itensCompra.map(prazoItemDias).filter(Boolean);
+    const prazoTxt = prazos.length > 0 ? Math.max(...prazos) + ' dia(s)' : '1 dia';
+    txt.textContent = `Entrega em ${entrega.toLocaleDateString('pt-BR')} · Prazo máx dos itens: ${prazoTxt} · Compra entra na lista do Gerente em ${compStr}.`;
+    return;
+  }
+
+  // Modo regra 10h (sem entrega ou entrega hoje)
+  const agora = new Date();
+  const corte = new Date(); corte.setHours(10, 0, 0, 0);
   if (agora < corte) {
     aviso.className = 'aviso aviso-success';
     const ms = corte - agora;
     const h = Math.floor(ms / 3600000);
     const m = Math.floor((ms % 3600000) / 60000);
-    txt.textContent = `Pedido será incluído na lista de COMPRAS de hoje. Corte em ${h}h${String(m).padStart(2,'0')}.`;
+    txt.textContent = `Pedido será incluído na lista de COMPRAS de hoje (${hojeStr}). Corte em ${h}h${String(m).padStart(2,'0')}.`;
   } else {
     aviso.className = 'aviso aviso-warn';
-    txt.textContent = 'Após as 10h00 — este pedido entra na lista de COMPRAS de amanhã.';
+    const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
+    txt.textContent = `Após as 10h00 — pedido entra na lista de COMPRAS de amanhã (${amanha.toLocaleDateString('pt-BR')}).`;
   }
 }
 
@@ -914,7 +984,10 @@ function abrirRevisao() {
 
   const obs = document.getElementById(`${aba}-obs`).value.trim();
   const dataEntrega = document.getElementById(`${aba}-data-entrega`).value;
-  const competencia = aba === 'compra' ? isoDate(getCompetenciaCompra()) : isoDate(new Date());
+  const itensDoCarrinho = sel.map(s => s.item);
+  const competencia = aba === 'compra'
+    ? isoDate(calcularCompetenciaFinal(dataEntrega, itensDoCarrinho))
+    : isoDate(new Date());
 
   const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
   const porCat = { proteina: [], laticinios: [], hortifruti: [], diversos: [] };
@@ -981,7 +1054,9 @@ async function confirmarEnvio() {
 async function enviarCompra() {
   const obs = document.getElementById('compra-obs').value.trim();
   const dataEntrega = document.getElementById('compra-data-entrega').value || null;
-  const competencia = isoDate(getCompetenciaCompra());
+  // Data de competência considera prazo dos itens quando data_entrega é futura
+  const itensCompra = Object.values(state.selecionados.compra).map(s => s.item);
+  const competencia = isoDate(calcularCompetenciaFinal(dataEntrega, itensCompra));
 
   let solcId = state.rascunhoIdCompra;
   if (solcId) {

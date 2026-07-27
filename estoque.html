@@ -557,7 +557,7 @@
     <div class="form-row col2">
       <div class="field">
         <label class="field-label">Data de Entrega Desejada</label>
-        <input class="input" type="date" id="c-data-entrega">
+        <input class="input" type="date" id="c-data-entrega" onchange="atualizarAvisoCorte()">
       </div>
       <div class="field">
         <label class="field-label">Observação Geral (opcional)</label>
@@ -853,6 +853,23 @@
   🛒<span class="cart-fab-badge" id="cartFabBadge">0</span>
 </button>
 
+<!-- Modal: Revisão da Solicitação de Compra da Comissaria -->
+<div class="modal-overlay" id="revisaoCompraComisModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>Revisar Solicitação de Compra</span>
+      <button class="modal-close" onclick="fecharModal('revisaoCompraComisModal')">✕</button>
+    </div>
+    <div class="modal-body" id="revisaoCompraComisBody">
+      <div class="loading-text">Carregando...</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('revisaoCompraComisModal')">Voltar</button>
+      <button class="btn btn-primary" id="btnConfirmarEnvioCompraComis" onclick="confirmarEnvioCompraComis()">Confirmar Envio</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-stack" id="toasts"></div>
 
 <script>
@@ -867,9 +884,9 @@ const state = {
   filtro: 'pendentes',
   reqs: [],
   // Manual
-  manual: { pdvId: null, cat: 'proteina', search: '', selecionados: {} },
+  manual: { pdvId: null, cat: 'proteina', search: '', selecionados: {}, qtdInputs: {} },
   // Compra Comissaria
-  compra: { cat: 'proteina', search: '', selecionados: {} },
+  compra: { cat: 'proteina', search: '', selecionados: {}, qtdInputs: {} },
   // Checklist
   chk: { itens: [], contagens: {}, dirty: {}, historico: {} },
 };
@@ -1148,9 +1165,14 @@ async function registrarEntrega(reqId) {
 // CATÁLOGO COMPARTILHADO
 // =====================================================================
 async function carregarCatalogo() {
-  const { data, error } = await sb.from('itens').select('*').eq('ativo', true).order('nome');
-  if (error) { showToast('Erro ao carregar catálogo: ' + error.message, 'error'); return; }
-  state.catalogo = data || [];
+  const [catR, prazoR] = await Promise.all([
+    sb.from('itens').select('*').eq('ativo', true).order('nome'),
+    sb.from('configuracoes_categoria').select('categoria, prazo_reposicao_horas'),
+  ]);
+  if (catR.error) { showToast('Erro ao carregar catálogo: ' + catR.error.message, 'error'); return; }
+  state.catalogo = catR.data || [];
+  state.prazoPorCategoria = {};
+  (prazoR.data || []).forEach(c => { state.prazoPorCategoria[c.categoria] = c.prazo_reposicao_horas; });
 }
 
 // =====================================================================
@@ -1174,17 +1196,22 @@ function renderItensManual() {
   if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
   cont.innerHTML = itens.map(item => {
     const sel = state.manual.selecionados[item.id];
-    const qty = sel ? sel.qty : 1;
-    return `<div class="item-row ${sel ? 'selected' : ''}" onclick="toggleManual('${item.id}')">
-      <div class="item-check">${sel ? '✓' : ''}</div>
-      <div class="item-name">${escapeHtml(item.nome)}</div>
-      <div class="item-unit">${item.unidade}</div>
-      <div class="item-qty-wrap" onclick="event.stopPropagation()">
-        <button class="qty-btn" onclick="changeQtyManual('${item.id}',-1)">−</button>
-        <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQtyManual('${item.id}',this.value)">
-        <button class="qty-btn" onclick="changeQtyManual('${item.id}',1)">+</button>
-      </div>
-    </div>`;
+    const qty = sel ? sel.qty : (state.manual.qtdInputs[item.id] ?? 1);
+    return `
+      <div class="item-row ${sel ? 'selected' : ''}" id="mrow-${item.id}">
+        <div class="item-check">${sel ? '✓' : ''}</div>
+        <div class="item-name">${escapeHtml(item.nome)}</div>
+        <div class="item-unit">${item.unidade}</div>
+        <div class="item-actions-cell">
+          <div class="item-qty-wrap">
+            <button class="qty-btn" onclick="changeQtyManual('${item.id}',-1)">−</button>
+            <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" oninput="setQtyManual('${item.id}',this.value)" onclick="this.select()">
+            <button class="qty-btn" onclick="changeQtyManual('${item.id}',1)">+</button>
+          </div>
+          <button class="item-action add" onclick="adicionarManual('${item.id}')">+ Adicionar</button>
+          <button class="item-action remove" onclick="removerManual('${item.id}')">Remover</button>
+        </div>
+      </div>`;
   }).join('');
   atualizarManualCartBar();
 }
@@ -1210,8 +1237,8 @@ function atualizarCartSidebarComis() {
   } else if (aba === 'compra') {
     sels = Object.values(state.compra.selecionados);
     remover = (id) => toggleCompra(id);
-    botao = 'Enviar Solicitação';
-    actionFn = 'enviarCompraCommissary';
+    botao = 'Revisar e Enviar';
+    actionFn = 'abrirRevisaoCompraComis';
   } else {
     document.body.classList.remove('has-cart');
     fecharCartSidebar();
@@ -1247,28 +1274,46 @@ function atualizarCartSidebarComis() {
   btn.disabled = total === 0;
   btn.onclick = () => window[actionFn]();
   document.getElementById('cartFabBadge').textContent = total;
+
+  // Atualiza aviso considerando prazos dos itens no carrinho
+  if (aba === 'compra') atualizarAvisoCorte();
 }
 
 // Aliases para compat com chamadas existentes
 function atualizarManualCartBar() { atualizarCartSidebarComis(); }
 
-function toggleManual(itemId) {
-  if (state.manual.selecionados[itemId]) delete state.manual.selecionados[itemId];
-  else {
-    const item = state.catalogo.find(i => i.id === itemId);
-    state.manual.selecionados[itemId] = { item, qty: 1 };
-  }
+function adicionarManual(itemId) {
+  const input = document.querySelector(`#mrow-${itemId} .qty-input`);
+  const qty = input ? (parseFloat(input.value) || 1) : 1;
+  if (qty <= 0) { showToast('Quantidade inválida.', 'error'); return; }
+  const item = state.catalogo.find(i => i.id === itemId);
+  if (!item) return;
+  state.manual.selecionados[itemId] = { item, qty };
+  renderItensManual();
+}
+function removerManual(itemId) {
+  delete state.manual.selecionados[itemId];
   renderItensManual();
 }
 function changeQtyManual(itemId, delta) {
-  const s = state.manual.selecionados[itemId]; if (!s) return;
-  s.qty = Math.max(0.1, Math.round((s.qty + delta) * 10) / 10);
-  renderItensManual();
+  const input = document.querySelector(`#mrow-${itemId} .qty-input`);
+  if (!input) return;
+  const cur = parseFloat(input.value) || 1;
+  const novo = Math.max(0.1, Math.round((cur + delta) * 10) / 10);
+  input.value = novo;
+  state.manual.qtdInputs[itemId] = novo;
+  const sel = state.manual.selecionados[itemId];
+  if (sel) { sel.qty = novo; atualizarCartSidebarComis(); }
 }
 function setQtyManual(itemId, val) {
-  const s = state.manual.selecionados[itemId]; if (!s) return;
-  const v = parseFloat(val); s.qty = isNaN(v) || v <= 0 ? 1 : v;
+  const v = parseFloat(val);
+  if (isNaN(v) || v <= 0) return;
+  state.manual.qtdInputs[itemId] = v;
+  const sel = state.manual.selecionados[itemId];
+  if (sel) { sel.qty = v; atualizarCartSidebarComis(); }
 }
+// toggleManual alias — cart sidebar chama pra remover
+function toggleManual(itemId) { removerManual(itemId); }
 
 async function enviarManual() {
   const pdvId = document.getElementById('m-pdv').value;
@@ -1313,6 +1358,13 @@ async function enviarManual() {
 // =====================================================================
 // ABA COMPRA — Comissaria solicita compra para repor estoque
 // =====================================================================
+function prazoItemDias(item) {
+  const horas = item.prazo_reposicao_horas
+             ?? (state.prazoPorCategoria || {})[item.categoria]
+             ?? null;
+  if (!horas) return null;
+  return Math.max(1, Math.ceil(horas / 24));
+}
 function getCompetenciaCompra() {
   const agora = new Date();
   const corte = new Date(); corte.setHours(10, 0, 0, 0);
@@ -1320,20 +1372,50 @@ function getCompetenciaCompra() {
   if (agora >= corte) data.setDate(data.getDate() + 1);
   return data;
 }
+function isoParaData(iso) {
+  if (!iso) return null;
+  const [y,m,d] = iso.split('-').map(Number);
+  return new Date(y, m-1, d, 12, 0, 0, 0);
+}
+function calcularCompetenciaFinal(dataEntregaIso, itens) {
+  const entrega = isoParaData(dataEntregaIso);
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  if (!entrega || entrega <= hoje) return getCompetenciaCompra();
+  const prazos = itens.map(prazoItemDias).filter(p => p !== null && p !== undefined);
+  const prazoMax = prazos.length > 0 ? Math.max(...prazos) : 1;
+  const ideal = new Date(entrega);
+  ideal.setDate(ideal.getDate() - prazoMax);
+  return ideal < hoje ? hoje : ideal;
+}
 
 function atualizarAvisoCorte() {
+  const aviso = document.getElementById('c-avisoCorte');
+  if (!aviso) return;
+  const dataEntrega = document.getElementById('c-data-entrega')?.value;
+  const itensCompra = Object.values(state.compra?.selecionados || {}).map(s => s.item);
+  const entrega = isoParaData(dataEntrega);
+
+  if (entrega && entrega > new Date() && itensCompra.length > 0) {
+    const competencia = calcularCompetenciaFinal(dataEntrega, itensCompra);
+    const prazos = itensCompra.map(prazoItemDias).filter(Boolean);
+    const prazoTxt = prazos.length > 0 ? Math.max(...prazos) + ' dia(s)' : '1 dia';
+    aviso.className = 'aviso aviso-info';
+    aviso.textContent = `Entrega em ${entrega.toLocaleDateString('pt-BR')} · Prazo máx dos itens: ${prazoTxt} · Compra entra na lista do Gerente em ${competencia.toLocaleDateString('pt-BR')}.`;
+    return;
+  }
   const agora = new Date();
   const corte = new Date(); corte.setHours(10, 0, 0, 0);
-  const aviso = document.getElementById('c-avisoCorte');
+  const hojeStr = new Date().toLocaleDateString('pt-BR');
   if (agora < corte) {
     aviso.className = 'aviso aviso-success';
     const ms = corte - agora;
     const h = Math.floor(ms / 3600000);
     const m = Math.floor((ms % 3600000) / 60000);
-    aviso.textContent = `Solicitação entra na lista de COMPRAS de hoje. Corte em ${h}h${String(m).padStart(2,'0')}.`;
+    aviso.textContent = `Solicitação entra na lista de COMPRAS de hoje (${hojeStr}). Corte em ${h}h${String(m).padStart(2,'0')}.`;
   } else {
     aviso.className = 'aviso aviso-warn';
-    aviso.textContent = 'Após as 10h00 — solicitação entra na lista de COMPRAS de amanhã.';
+    const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
+    aviso.textContent = `Após as 10h00 — entra na lista de COMPRAS de amanhã (${amanha.toLocaleDateString('pt-BR')}).`;
   }
 }
 
@@ -1355,39 +1437,116 @@ function renderItensCompra() {
   if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
   cont.innerHTML = itens.map(item => {
     const sel = state.compra.selecionados[item.id];
-    const qty = sel ? sel.qty : 1;
-    return `<div class="item-row ${sel ? 'selected' : ''}" onclick="toggleCompra('${item.id}')">
-      <div class="item-check">${sel ? '✓' : ''}</div>
-      <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span style="font-size:11px;color:var(--muted);margin-left:8px">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
-      <div class="item-unit">${item.unidade}</div>
-      <div class="item-qty-wrap" onclick="event.stopPropagation()">
-        <button class="qty-btn" onclick="changeQtyCompra('${item.id}',-1)">−</button>
-        <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQtyCompra('${item.id}',this.value)">
-        <button class="qty-btn" onclick="changeQtyCompra('${item.id}',1)">+</button>
-      </div>
-    </div>`;
+    // Persiste qty digitado mesmo sem adicionar (state.compra.qtdInputs)
+    const qty = sel ? sel.qty : (state.compra.qtdInputs[item.id] ?? 1);
+    return `
+      <div class="item-row ${sel ? 'selected' : ''}" id="crow-${item.id}">
+        <div class="item-check">${sel ? '✓' : ''}</div>
+        <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+        <div class="item-unit">${item.unidade}</div>
+        <div class="item-actions-cell">
+          <div class="item-qty-wrap">
+            <button class="qty-btn" onclick="changeQtyCompra('${item.id}',-1)">−</button>
+            <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" oninput="setQtyCompra('${item.id}',this.value)" onclick="this.select()">
+            <button class="qty-btn" onclick="changeQtyCompra('${item.id}',1)">+</button>
+          </div>
+          <button class="item-action add" onclick="adicionarCompra('${item.id}')">+ Adicionar</button>
+          <button class="item-action remove" onclick="removerCompra('${item.id}')">Remover</button>
+        </div>
+      </div>`;
   }).join('');
   atualizarCompraCartBar();
 }
 
 function atualizarCompraCartBar() { atualizarCartSidebarComis(); }
 
-function toggleCompra(itemId) {
-  if (state.compra.selecionados[itemId]) delete state.compra.selecionados[itemId];
-  else {
-    const item = state.catalogo.find(i => i.id === itemId);
-    state.compra.selecionados[itemId] = { item, qty: 1 };
-  }
+function adicionarCompra(itemId) {
+  const input = document.querySelector(`#crow-${itemId} .qty-input`);
+  const qty = input ? (parseFloat(input.value) || 1) : 1;
+  if (qty <= 0) { showToast('Quantidade inválida.', 'error'); return; }
+  const item = state.catalogo.find(i => i.id === itemId);
+  if (!item) return;
+  state.compra.selecionados[itemId] = { item, qty };
+  renderItensCompra();
+}
+function removerCompra(itemId) {
+  delete state.compra.selecionados[itemId];
   renderItensCompra();
 }
 function changeQtyCompra(itemId, delta) {
-  const s = state.compra.selecionados[itemId]; if (!s) return;
-  s.qty = Math.max(0.1, Math.round((s.qty + delta) * 10) / 10);
-  renderItensCompra();
+  const input = document.querySelector(`#crow-${itemId} .qty-input`);
+  if (!input) return;
+  const cur = parseFloat(input.value) || 1;
+  const novo = Math.max(0.1, Math.round((cur + delta) * 10) / 10);
+  input.value = novo;
+  // Persiste input
+  state.compra.qtdInputs[itemId] = novo;
+  // Se já está no carrinho, atualiza qty
+  const sel = state.compra.selecionados[itemId];
+  if (sel) { sel.qty = novo; atualizarCartSidebarComis(); }
 }
 function setQtyCompra(itemId, val) {
-  const s = state.compra.selecionados[itemId]; if (!s) return;
-  const v = parseFloat(val); s.qty = isNaN(v) || v <= 0 ? 1 : v;
+  const v = parseFloat(val);
+  if (isNaN(v) || v <= 0) return;
+  state.compra.qtdInputs[itemId] = v;
+  const sel = state.compra.selecionados[itemId];
+  if (sel) { sel.qty = v; atualizarCartSidebarComis(); }
+}
+
+// toggleCompra alias — cart sidebar chama esse pra remover
+function toggleCompra(itemId) { removerCompra(itemId); }
+
+// Modal helpers (usados pelo Revisar e Enviar)
+function abrirModal(id) { document.getElementById(id).classList.add('open'); }
+function fecharModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Abre modal com resumo da compra e permite confirmar envio
+function abrirRevisaoCompraComis() {
+  const sel = Object.values(state.compra.selecionados);
+  if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
+  const dataEntrega = document.getElementById('c-data-entrega').value || null;
+  const obs = document.getElementById('c-obs').value.trim();
+  const itens = sel.map(s => s.item);
+  const competencia = calcularCompetenciaFinal(dataEntrega, itens);
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  const porCat = { proteina: [], laticinios: [], hortifruti: [], diversos: [] };
+  sel.forEach(s => porCat[s.item.categoria]?.push(s));
+
+  let html = '';
+  html += `<div class="aviso aviso-info" style="margin-bottom:16px">`;
+  html += `Entra na lista de compras do Gerente em <strong>${competencia.toLocaleDateString('pt-BR')}</strong>.`;
+  if (dataEntrega) html += ` Entrega desejada: <strong>${new Date(dataEntrega+'T12:00').toLocaleDateString('pt-BR')}</strong>.`;
+  html += `</div>`;
+
+  for (const cat of Object.keys(porCat)) {
+    if (porCat[cat].length === 0) continue;
+    html += `<div class="mb-3">
+      <div class="uppercase-label mb-2">${catLabels[cat]}</div>
+      <table class="table-simples" style="width:100%">
+        <thead><tr><th>Item</th><th style="text-align:right">Qtd</th><th>Unid.</th></tr></thead>
+        <tbody>
+        ${porCat[cat].map(s => `
+          <tr>
+            <td>${escapeHtml(s.item.nome)}</td>
+            <td style="text-align:right">${s.qty}</td>
+            <td>${s.item.unidade || ''}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+  if (obs) {
+    html += `<div class="mb-2"><span class="uppercase-label">Observação</span></div><div class="text-muted" style="font-size:13px">${escapeHtml(obs)}</div>`;
+  }
+  document.getElementById('revisaoCompraComisBody').innerHTML = html;
+  abrirModal('revisaoCompraComisModal');
+}
+
+async function confirmarEnvioCompraComis() {
+  const btn = document.getElementById('btnConfirmarEnvioCompraComis');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  try { await enviarCompraCommissary(); }
+  finally { btn.disabled = false; btn.textContent = 'Confirmar Envio'; fecharModal('revisaoCompraComisModal'); }
 }
 
 async function enviarCompraCommissary() {
@@ -1397,7 +1556,8 @@ async function enviarCompraCommissary() {
 
   const obs = document.getElementById('c-obs').value.trim();
   const dataEntrega = document.getElementById('c-data-entrega').value || null;
-  const competencia = isoDate(getCompetenciaCompra());
+  const itensDoCarrinho = sel.map(s => s.item);
+  const competencia = isoDate(calcularCompetenciaFinal(dataEntrega, itensDoCarrinho));
 
   const { data: solc, error } = await sb.from('solicitacoes_compra').insert({
     pdv_id: state.pdvComissariaId,
@@ -1423,6 +1583,7 @@ async function enviarCompraCommissary() {
 
   showToast('Solicitação de compra enviada para o Gerente de Compras.', 'success');
   state.compra.selecionados = {};
+  state.compra.qtdInputs = {};
   document.getElementById('c-obs').value = '';
   renderItensCompra();
 }

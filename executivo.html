@@ -157,7 +157,7 @@
     <div class="tab-content active" id="sub-compra">
       <div class="aviso aviso-info" id="avisoCorte">Carregando...</div>
       <div class="form-row col2">
-        <div class="field"><label class="field-label">Data de Entrega Desejada</label><input class="input" type="date" id="compra-data-entrega"></div>
+        <div class="field"><label class="field-label">Data de Entrega Desejada</label><input class="input" type="date" id="compra-data-entrega" onchange="atualizarAvisoCorte()"></div>
         <div class="field"><label class="field-label">Observação</label><input class="input" id="compra-obs" placeholder="Detalhe sobre este pedido..."></div>
       </div>
       <div class="cat-tabs" id="compra-cat-tabs">
@@ -492,9 +492,14 @@ function switchSub(sub) {
 }
 
 async function carregarCatalogo() {
-  const { data, error } = await sb.from('itens').select('*').eq('ativo', true).order('nome');
-  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-  state.catalogo = data || [];
+  const [catR, prazoR] = await Promise.all([
+    sb.from('itens').select('*').eq('ativo', true).order('nome'),
+    sb.from('configuracoes_categoria').select('categoria, prazo_reposicao_horas'),
+  ]);
+  if (catR.error) { showToast('Erro: ' + catR.error.message, 'error'); return; }
+  state.catalogo = catR.data || [];
+  state.prazoPorCategoria = {};
+  (prazoR.data || []).forEach(c => { state.prazoPorCategoria[c.categoria] = c.prazo_reposicao_horas; });
 }
 
 function setCat(modo, cat) {
@@ -580,6 +585,9 @@ function atualizarExecCartBar() {
   btn.disabled = total === 0;
 
   document.getElementById('cartFabBadge').textContent = total;
+
+  // Atualiza aviso considerando prazos dos itens no carrinho
+  if (modo === 'compra') atualizarAvisoCorte();
 }
 
 function enviarFromCart() {
@@ -605,6 +613,14 @@ function setQty(modo, itemId, val) {
   renderItens(modo);
 }
 
+// Prazo por item (horas → dias arredondando pra cima)
+function prazoItemDias(item) {
+  const horas = item.prazo_reposicao_horas
+             ?? (state.prazoPorCategoria || {})[item.categoria]
+             ?? null;
+  if (!horas) return null;
+  return Math.max(1, Math.ceil(horas / 24));
+}
 function getCompetenciaCompra() {
   const agora = new Date();
   const corte = new Date(); corte.setHours(10, 0, 0, 0);
@@ -612,20 +628,50 @@ function getCompetenciaCompra() {
   if (agora >= corte) data.setDate(data.getDate() + 1);
   return data;
 }
+function isoParaData(iso) {
+  if (!iso) return null;
+  const [y,m,d] = iso.split('-').map(Number);
+  return new Date(y, m-1, d, 12, 0, 0, 0);
+}
+function calcularCompetenciaFinal(dataEntregaIso, itens) {
+  const entrega = isoParaData(dataEntregaIso);
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  if (!entrega || entrega <= hoje) return getCompetenciaCompra();
+  const prazos = itens.map(prazoItemDias).filter(p => p !== null && p !== undefined);
+  const prazoMax = prazos.length > 0 ? Math.max(...prazos) : 1;
+  const ideal = new Date(entrega);
+  ideal.setDate(ideal.getDate() - prazoMax);
+  return ideal < hoje ? hoje : ideal;
+}
 
 function atualizarAvisoCorte() {
+  const dataEntrega = document.getElementById('compra-data-entrega')?.value;
+  const itensCompra = Object.values(state.selecionados?.compra || {}).map(s => s.item);
+  const aviso = document.getElementById('avisoCorte');
+  if (!aviso) return;
+  const entrega = isoParaData(dataEntrega);
+
+  if (entrega && entrega > new Date() && itensCompra.length > 0) {
+    const competencia = calcularCompetenciaFinal(dataEntrega, itensCompra);
+    const prazos = itensCompra.map(prazoItemDias).filter(Boolean);
+    const prazoTxt = prazos.length > 0 ? Math.max(...prazos) + ' dia(s)' : '1 dia';
+    aviso.className = 'aviso aviso-info';
+    aviso.textContent = `Entrega em ${entrega.toLocaleDateString('pt-BR')} · Prazo máx dos itens: ${prazoTxt} · Compra entra na lista do Gerente em ${competencia.toLocaleDateString('pt-BR')}.`;
+    return;
+  }
   const agora = new Date();
   const corte = new Date(); corte.setHours(10, 0, 0, 0);
-  const aviso = document.getElementById('avisoCorte');
+  const hojeStr = new Date().toLocaleDateString('pt-BR');
   if (agora < corte) {
     aviso.className = 'aviso aviso-success';
     const ms = corte - agora;
     const h = Math.floor(ms / 3600000);
     const m = Math.floor((ms % 3600000) / 60000);
-    aviso.textContent = `Solicitação entra na lista de COMPRAS de hoje. Corte em ${h}h${String(m).padStart(2,'0')}.`;
+    aviso.textContent = `Solicitação entra na lista de COMPRAS de hoje (${hojeStr}). Corte em ${h}h${String(m).padStart(2,'0')}.`;
   } else {
     aviso.className = 'aviso aviso-warn';
-    aviso.textContent = 'Após as 10h00 — entra na lista de COMPRAS de amanhã.';
+    const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
+    aviso.textContent = `Após as 10h00 — entra na lista de COMPRAS de amanhã (${amanha.toLocaleDateString('pt-BR')}).`;
   }
 }
 
@@ -638,7 +684,8 @@ async function enviar(modo) {
   const dataEntrega = document.getElementById(`${modo}-data-entrega`).value || null;
 
   if (modo === 'compra') {
-    const competencia = isoDate(getCompetenciaCompra());
+    const itensDoCarrinho = sel.map(s => s.item);
+    const competencia = isoDate(calcularCompetenciaFinal(dataEntrega, itensDoCarrinho));
     const { data: solc, error } = await sb.from('solicitacoes_compra').insert({
       pdv_id: pdvId, usuario_id: state.perfil.id,
       status: 'enviada',
