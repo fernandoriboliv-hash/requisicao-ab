@@ -54,6 +54,32 @@
     font-size: 11px; letter-spacing: 2px; color: var(--gold);
     text-transform: uppercase; font-weight: 500;
   }
+
+  /* Celular */
+  @media (max-width: 480px) {
+    .pdv-selector-bar { flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; }
+    .pdv-selector-bar .select { max-width: none !important; }
+    .item-row {
+      grid-template-columns: 22px 1fr auto;
+      grid-template-areas:
+        "check nome unit"
+        "check acts acts";
+      row-gap: 6px; padding: 12px; gap: 8px;
+    }
+    .item-row .item-check       { grid-area: check; }
+    .item-row .item-name        { grid-area: nome; font-size: 14px; }
+    .item-row .item-unit        { grid-area: unit; font-size: 11px; }
+    .item-actions-cell          {
+      grid-area: acts;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      flex-wrap: wrap;
+    }
+    .qty-btn { width: 34px; height: 34px; font-size: 18px; }
+    .qty-input {
+      width: 62px !important; font-size: 15px !important;
+      padding: 6px 4px !important; min-height: 34px !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -237,6 +263,7 @@
           <option value="amarelo">Só amarelo</option>
           <option value="verde">Só verde</option>
           <option value="pend">Só sem contagem</option>
+          <option value="sob_demanda">Só sob demanda</option>
         </select>
       </div>
       <div class="chk-filter-item chk-filter-search">
@@ -894,12 +921,14 @@ function showToast(msg, tipo='info') {
 // =====================================================================
 state.est = { itens: [], saldo: {}, consumo: {}, divergencias: [] };
 
-function classificarSemaforo(qtdAtual, mediaDiaria) {
+function classificarSemaforo(qtdAtual, mediaDiaria, prazoHoras, sobDemanda) {
+  if (sobDemanda) return 'sob_demanda';
   if (qtdAtual === null || qtdAtual === undefined || isNaN(qtdAtual)) return 'pend';
   if (!mediaDiaria || mediaDiaria <= 0) return qtdAtual > 0 ? 'verde' : 'vermelho';
-  const dias = qtdAtual / mediaDiaria;
-  if (dias >= 3) return 'verde';
-  if (dias >= 1) return 'amarelo';
+  const diasCobertura = qtdAtual / mediaDiaria;
+  const prazoDias = prazoHoras ? (prazoHoras / 24) : 3;
+  if (diasCobertura >= 2 * prazoDias) return 'verde';
+  if (diasCobertura >= prazoDias)     return 'amarelo';
   return 'vermelho';
 }
 
@@ -939,15 +968,17 @@ function renderNiveisEst() {
     const qtd = saldo && !saldo.sem_baseline && saldo.saldo_teorico !== null ? parseFloat(saldo.saldo_teorico) : null;
     const md = consumoDiarioItemEst(it);
     const dias = md > 0 && qtd !== null ? qtd / md : null;
-    return { it, qtd, md, dias, semaforo: classificarSemaforo(qtd, md), saldo };
+    const prazoHoras = saldo?.prazo_reposicao_horas ?? it.prazo_reposicao_horas ?? null;
+    const sobDemanda = saldo?.sob_demanda ?? it.sob_demanda ?? false;
+    return { it, qtd, md, dias, semaforo: classificarSemaforo(qtd, md, prazoHoras, sobDemanda), saldo, prazoHoras, sobDemanda };
   });
 
-  const cnt = { verde:0, amarelo:0, vermelho:0, pend:0 };
+  const cnt = { verde:0, amarelo:0, vermelho:0, pend:0, sob_demanda:0 };
   dados.forEach(d => cnt[d.semaforo]++);
   document.getElementById('nvVerde').textContent    = cnt.verde;
   document.getElementById('nvAmarelo').textContent  = cnt.amarelo;
   document.getElementById('nvVermelho').textContent = cnt.vermelho;
-  document.getElementById('nvPend').textContent     = cnt.pend;
+  document.getElementById('nvPend').textContent     = cnt.pend + cnt.sob_demanda;
 
   let filtrados = dados;
   if (catFilt === 'camara')  filtrados = filtrados.filter(d => d.it.categoria === 'proteina' || d.it.categoria === 'laticinios');
@@ -957,10 +988,10 @@ function renderNiveisEst() {
   document.getElementById('nvCount').textContent = `${filtrados.length} item(ns)`;
 
   if (filtrados.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item nesses filtros.</div>'; return; }
-  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3 };
+  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3, sob_demanda: 4 };
   filtrados.sort((a,b) => (ordem[a.semaforo] - ordem[b.semaforo]) || a.it.nome.localeCompare(b.it.nome));
-  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—' };
-  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○' };
+  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—', sob_demanda:'SOB DEMANDA' };
+  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○', sob_demanda:'◇' };
 
   cont.innerHTML = filtrados.map(d => {
     const it = d.it;

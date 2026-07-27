@@ -179,6 +179,7 @@
             <option value="amarelo">Só amarelo</option>
             <option value="verde">Só verde</option>
             <option value="pend">Só sem contagem</option>
+            <option value="sob_demanda">Só sob demanda</option>
           </select>
         </div>
         <div class="chk-filter-item chk-filter-search">
@@ -475,12 +476,14 @@ function showToast(msg, tipo='info') {
 // =====================================================================
 state.est = { itens: [], saldo: {}, consumo: {}, divergencias: [] };
 
-function classificarSemaforo(qtdAtual, mediaDiaria) {
+function classificarSemaforo(qtdAtual, mediaDiaria, prazoHoras, sobDemanda) {
+  if (sobDemanda) return 'sob_demanda';
   if (qtdAtual === null || qtdAtual === undefined || isNaN(qtdAtual)) return 'pend';
   if (!mediaDiaria || mediaDiaria <= 0) return qtdAtual > 0 ? 'verde' : 'vermelho';
-  const dias = qtdAtual / mediaDiaria;
-  if (dias >= 3) return 'verde';
-  if (dias >= 1) return 'amarelo';
+  const diasCobertura = qtdAtual / mediaDiaria;
+  const prazoDias = prazoHoras ? (prazoHoras / 24) : 3;
+  if (diasCobertura >= 2 * prazoDias) return 'verde';
+  if (diasCobertura >= prazoDias)     return 'amarelo';
   return 'vermelho';
 }
 function consumoDiarioMst(item) {
@@ -514,14 +517,16 @@ function renderNiveisMst() {
     const qtd = saldo && !saldo.sem_baseline && saldo.saldo_teorico !== null ? parseFloat(saldo.saldo_teorico) : null;
     const md = consumoDiarioMst(it);
     const dias = md > 0 && qtd !== null ? qtd / md : null;
-    return { it, qtd, md, dias, semaforo: classificarSemaforo(qtd, md), saldo };
+    const prazoHoras = saldo?.prazo_reposicao_horas ?? it.prazo_reposicao_horas ?? null;
+    const sobDemanda = saldo?.sob_demanda ?? it.sob_demanda ?? false;
+    return { it, qtd, md, dias, semaforo: classificarSemaforo(qtd, md, prazoHoras, sobDemanda), saldo, prazoHoras, sobDemanda };
   });
-  const cnt = { verde:0, amarelo:0, vermelho:0, pend:0 };
+  const cnt = { verde:0, amarelo:0, vermelho:0, pend:0, sob_demanda:0 };
   dados.forEach(d => cnt[d.semaforo]++);
   document.getElementById('nvVerde').textContent    = cnt.verde;
   document.getElementById('nvAmarelo').textContent  = cnt.amarelo;
   document.getElementById('nvVermelho').textContent = cnt.vermelho;
-  document.getElementById('nvPend').textContent     = cnt.pend;
+  document.getElementById('nvPend').textContent     = cnt.pend + cnt.sob_demanda;
   let filtrados = dados;
   if (catFilt === 'camara')  filtrados = filtrados.filter(d => d.it.categoria === 'proteina' || d.it.categoria === 'laticinios');
   else if (catFilt)          filtrados = filtrados.filter(d => d.it.categoria === catFilt);
@@ -529,10 +534,10 @@ function renderNiveisMst() {
   if (q) filtrados = filtrados.filter(d => d.it.nome.toLowerCase().includes(q));
   document.getElementById('nvCount').textContent = `${filtrados.length} item(ns)`;
   if (filtrados.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item nesses filtros.</div>'; return; }
-  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3 };
+  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3, sob_demanda: 4 };
   filtrados.sort((a,b) => (ordem[a.semaforo] - ordem[b.semaforo]) || a.it.nome.localeCompare(b.it.nome));
-  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—' };
-  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○' };
+  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—', sob_demanda:'SOB DEMANDA' };
+  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○', sob_demanda:'◇' };
   cont.innerHTML = filtrados.map(d => {
     const it = d.it;
     const qtdTxt = d.qtd !== null ? `${d.qtd.toFixed(1)}<small>${it.unidade||''}</small>` : '<span class="text-muted">— sem baseline</span>';

@@ -184,6 +184,60 @@
   .hist-card.is-rascunho { border-color: rgba(184,150,62,0.3); }
   .hist-actions { display: flex; gap: 6px; margin-top: 8px; }
   body { padding-bottom: 80px; }
+
+  /* Ajustes para celular (iPhone/Samsung) — foco em compra + requisição */
+  @media (max-width: 480px) {
+    .item-row {
+      grid-template-columns: 22px 1fr auto;
+      grid-template-areas:
+        "check nome unit"
+        "check acts acts"
+        "coment coment coment";
+      row-gap: 6px; padding: 12px; gap: 8px;
+    }
+    .item-row .item-check       { grid-area: check; }
+    .item-row .item-name        { grid-area: nome; font-size: 14px; }
+    .item-row .item-unit        { grid-area: unit; font-size: 11px; }
+    .item-row .item-actions-cell{
+      grid-area: acts;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      flex-wrap: wrap;
+    }
+    .item-qty-wrap {
+      background: rgba(255,255,255,0.04);
+      padding: 4px; border: 1px solid var(--border-subtle);
+    }
+    .qty-btn { width: 34px; height: 34px; font-size: 18px; }
+    .qty-input {
+      width: 62px !important; font-size: 15px !important;
+      padding: 6px 4px !important; min-height: 34px !important;
+    }
+    .item-action {
+      padding: 10px 14px !important; font-size: 13px !important; min-height: 40px;
+      flex: 1 1 auto;
+    }
+    .item-coment { grid-area: coment; }
+    .item-coment input { padding: 10px !important; font-size: 13px !important; }
+    .qty-alert { font-size: 10px; margin-left: 0; }
+
+    /* Item livre em coluna */
+    .livre-row { flex-direction: column; }
+    .livre-row > * { width: 100% !important; min-width: 0 !important; flex: none !important; }
+
+    /* Cart-bar celular */
+    .cart-bar { padding: 10px 12px; flex-wrap: wrap; gap: 8px; }
+    .cart-bar .cart-info { flex: 1 1 100%; text-align: center; }
+    .cart-bar .cart-actions { flex: 1 1 100%; display: flex; gap: 8px; }
+    .cart-bar .cart-actions .btn { flex: 1; }
+    .cart-count { font-size: 20px; }
+
+    /* Filtros da compra/req */
+    .form-row.col2 { grid-template-columns: 1fr !important; }
+
+    /* Histórico compacto */
+    .hist-card { padding: 12px 14px; }
+    .hist-card .head { flex-wrap: wrap; gap: 4px; }
+  }
 </style>
 </head>
 <body>
@@ -529,7 +583,7 @@ async function carregarNiveisEstoque() {
   state.estoqueCritico.clear();
   state.estoqueAmarelo.clear();
   const [saldoR, consumoR] = await Promise.all([
-    sb.from('v_estoque_saldo').select('item_id, saldo_teorico, sem_baseline'),
+    sb.from('v_estoque_saldo').select('item_id, saldo_teorico, sem_baseline, prazo_reposicao_horas, sob_demanda'),
     sb.from('v_estoque_consumo').select('item_id, saidas_30d'),
   ]);
   const mapConsumo30 = {};
@@ -537,15 +591,16 @@ async function carregarNiveisEstoque() {
   const mapMediaCat = {};
   state.catalogo.forEach(it => { mapMediaCat[it.id] = parseFloat(it.media_diaria) || 0; });
   (saldoR.data || []).forEach(s => {
+    if (s.sob_demanda) return;  // sob demanda não gera alerta
     if (s.sem_baseline || s.saldo_teorico === null) return;
     const qtd = parseFloat(s.saldo_teorico);
-    // Consumo médio: prioriza dinâmico (últimos 30d), fallback pro catálogo
     const md30 = mapConsumo30[s.item_id] || 0;
     const md = md30 > 0 ? md30 / 30 : (mapMediaCat[s.item_id] || 0);
     if (md <= 0) return;
     const dias = qtd / md;
-    if (dias < 1)      state.estoqueCritico.add(s.item_id);
-    else if (dias < 3) state.estoqueAmarelo.add(s.item_id);
+    const prazoDias = s.prazo_reposicao_horas ? (s.prazo_reposicao_horas / 24) : 3;
+    if (dias < prazoDias)          state.estoqueCritico.add(s.item_id);
+    else if (dias < 2 * prazoDias) state.estoqueAmarelo.add(s.item_id);
   });
 }
 

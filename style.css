@@ -556,6 +556,7 @@ main, .main {
 .chk-semaforo.amarelo  .dot, .chk-semaforo.amarelo  .txt { color: var(--orange); }
 .chk-semaforo.vermelho .dot, .chk-semaforo.vermelho .txt { color: var(--error); }
 .chk-semaforo.pend     .dot, .chk-semaforo.pend     .txt { color: var(--muted2); }
+.chk-semaforo.sob_demanda .dot, .chk-semaforo.sob_demanda .txt { color: var(--muted); }
 
 /* Linha de Nível (só leitura) */
 .nv-row {
@@ -569,6 +570,7 @@ main, .main {
 .nv-row.amarelo  { border-left-color: var(--orange); }
 .nv-row.vermelho { border-left-color: var(--error); background: rgba(224,82,82,0.04); }
 .nv-row.pend     { border-left-color: var(--muted2); background: rgba(255,255,255,0.02); }
+.nv-row.sob_demanda { border-left-color: var(--muted); background: rgba(255,255,255,0.01); opacity: 0.75; }
 .nv-qty {
   font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 300; text-align: right;
 }
@@ -807,4 +809,63 @@ main, .main {
 }
 @media (max-width: 500px) {
   .stats-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================== CELULAR (≤480px iPhone/Samsung) ============================== */
+@media (max-width: 480px) {
+  /* Cabeçalho compacto */
+  .top-title { font-size: 17px !important; letter-spacing: 0.3px !important; }
+  .top-sub { display: none !important; }
+  .top-bar > .top-bar-hero,
+  .top-bar > div:first-child:not(.sidebar-toggle) {
+    margin: 8px !important; padding: 10px 12px !important;
+  }
+  .top-bar .sidebar-toggle { margin: 8px 0 0 8px !important; padding: 6px 10px !important; font-size: 16px !important; }
+
+  /* Área principal com padding mínimo pra caber conteúdo */
+  .main.full { padding: 4px 8px 100px !important; }
+
+  /* Filtros em coluna única */
+  .filters-bar {
+    flex-direction: column !important; align-items: stretch !important;
+  }
+  .filters-bar .btn, .filters-bar .input, .filters-bar .select { width: 100%; max-width: none !important; }
+
+  /* Botões maiores pra dedo */
+  .btn, .btn-sm { padding: 12px 16px !important; font-size: 14px !important; min-height: 44px; }
+  .btn-sm { padding: 10px 14px !important; font-size: 13px !important; }
+  .cat-btn { padding: 12px 14px !important; font-size: 11px !important; min-height: 44px; }
+
+  /* Cart-bar / save-bar cheia largura */
+  .cart-bar, .chk-save-bar {
+    padding: 10px 12px !important;
+    flex-direction: row; flex-wrap: wrap; gap: 8px !important;
+  }
+  .cart-bar .btn, .chk-save-bar .btn {
+    flex: 1 1 40%; min-width: 0;
+  }
+
+  /* Inputs numéricos maiores */
+  input[type=number], .qty-input {
+    font-size: 16px !important; padding: 10px !important; min-height: 44px !important;
+  }
+
+  /* Categoria pills menores */
+  .cat-tabs { gap: 4px !important; }
+
+  /* Sidebar ocupa quase tudo em mobile */
+  .sidebar { width: 84vw !important; max-width: 300px !important; }
+
+  /* Sections mais compactas */
+  .section-title { font-size: 11px !important; padding: 10px 4px !important; }
+  .aviso { padding: 10px 12px !important; font-size: 12px !important; line-height: 1.4; }
+  .stat-card { padding: 12px 14px !important; }
+  .stat-val { font-size: 24px !important; }
+
+  /* Modais em tela cheia */
+  .modal { width: 100vw !important; max-width: 100vw !important; height: 100vh !important; max-height: 100vh !important; border: none; }
+  .modal-header { padding: 14px 16px !important; font-size: 16px !important; }
+  .modal-body { padding: 14px 16px !important; }
+  .modal-footer { padding: 12px 16px !important; flex-wrap: wrap; }
+  .modal-footer .btn { flex: 1 1 100%; }
 }

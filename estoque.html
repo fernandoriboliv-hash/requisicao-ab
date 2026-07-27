@@ -214,6 +214,44 @@
   .chk-row.amarelo  { border-left-color: var(--orange); }
   .chk-row.vermelho { border-left-color: var(--error); background: rgba(224,82,82,0.04); }
   .chk-row.pend     { border-left-color: var(--muted2); background: rgba(255,255,255,0.02); }
+  .chk-row.sob_demanda { border-left-color: var(--muted); background: rgba(255,255,255,0.01); opacity: 0.7; }
+
+  /* Linhas do modal Gerar Lista */
+  .gl-row {
+    display: grid; grid-template-columns: 24px 1fr auto 130px 32px;
+    align-items: center; gap: 10px;
+    padding: 10px 12px; margin-bottom: 4px;
+    background: var(--surface); border: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--muted2);
+  }
+  .gl-row.vermelho { border-left-color: var(--error); }
+  .gl-row.amarelo  { border-left-color: var(--orange); }
+  .gl-dot { font-size: 14px; text-align: center; }
+  .gl-dot.vermelho { color: var(--error); }
+  .gl-dot.amarelo  { color: var(--orange); }
+  .gl-nome { font-size: 13px; }
+  .gl-nome small { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .gl-qty { display: flex; align-items: center; gap: 6px; }
+  .gl-suggest { text-align: right; min-width: 130px; }
+  .btn-remove-lista {
+    background: transparent; border: 1px solid rgba(224,82,82,0.3);
+    color: rgba(224,82,82,0.75); font-family: inherit;
+    padding: 4px 8px; cursor: pointer; font-size: 11px;
+    transition: all 0.15s;
+  }
+  .btn-remove-lista:hover { background: rgba(224,82,82,0.15); color: #ff8888; }
+  @media (max-width: 900px) {
+    .gl-row {
+      grid-template-columns: 20px 1fr 32px;
+      grid-template-areas: "dot nome del" "dot qty  sugg";
+      row-gap: 6px;
+    }
+    .gl-row .gl-dot     { grid-area: dot; }
+    .gl-row .gl-nome    { grid-area: nome; }
+    .gl-row .gl-qty     { grid-area: qty; }
+    .gl-row .gl-suggest { grid-area: sugg; }
+    .gl-row .btn-remove-lista { grid-area: del; }
+  }
 
   .chk-semaforo {
     display: flex; flex-direction: column; align-items: center;
@@ -593,6 +631,7 @@
           <option value="amarelo">Só amarelo</option>
           <option value="verde">Só verde</option>
           <option value="pend">Só pendentes</option>
+          <option value="sob_demanda">Só sob demanda</option>
         </select>
       </div>
       <div class="chk-filter-item chk-filter-search">
@@ -611,8 +650,37 @@
     <div class="section-title">
       <span>Itens de Inventário</span>
       <span id="chkCount" class="text-muted" style="font-size:12px"></span>
+      <button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="abrirGerarLista()">
+        📋 Gerar Lista de Compras
+      </button>
     </div>
     <div id="chkContainer"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- Modal: Gerar Lista de Compras -->
+  <div class="modal-overlay" id="gerarListaModal">
+    <div class="modal" style="width:760px">
+      <div class="modal-header">
+        <span>Lista de Compras — Itens críticos e a repor</span>
+        <button class="modal-close" onclick="fecharGerarLista()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="aviso aviso-info">
+          Itens em vermelho + amarelo do último checklist. Ajuste as quantidades ou remova itens que não precisa comprar agora.
+          A quantidade sugerida é o que falta para atingir cobertura de 2× o prazo de reposição.
+        </div>
+        <div id="glContainer"><div class="empty-text">Carregando...</div></div>
+        <div style="margin-top:16px">
+          <label class="field-label" style="font-size:11px;color:var(--muted)">Observação (opcional)</label>
+          <input class="input" id="gl-obs" placeholder="Ex: reposição de câmara — chegar antes de sexta">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span id="gl-info" class="text-muted" style="font-size:12px;flex:1;align-self:center"></span>
+        <button class="btn btn-outline" onclick="fecharGerarLista()">Cancelar</button>
+        <button class="btn btn-primary" onclick="enviarListaCompras()">Enviar para aprovação</button>
+      </div>
+    </div>
   </div>
 
   <!-- ========================================================== -->
@@ -1594,14 +1662,22 @@ function exportarRelatorioS() {
 // Semáforo por dias de cobertura:
 //   Verde ≥ 3 dias  |  Amarelo 1–3 dias  |  Vermelho < 1 dia  |  Pend = não contado
 // Cobertura = qtdAtual / mediaDiaria (dias que o estoque atual dura no consumo médio)
-function classificarSemaforo(qtdAtual, mediaDiaria) {
+// Semáforo por prazo de reposição:
+//   Vermelho:  cobertura < prazo (não chega a tempo repor)
+//   Amarelo:   prazo ≤ cobertura < 2× prazo
+//   Verde:     cobertura ≥ 2× prazo
+// Item "sob demanda" → 'sob_demanda' (não classifica).
+// Sem prazo (ex: secos): usa fallback 3 dias pra tratar como antes.
+function classificarSemaforo(qtdAtual, mediaDiaria, prazoHoras, sobDemanda) {
+  if (sobDemanda) return 'sob_demanda';
   if (qtdAtual === null || qtdAtual === undefined || isNaN(qtdAtual)) return 'pend';
   if (!mediaDiaria || mediaDiaria <= 0) {
     return qtdAtual > 0 ? 'verde' : 'vermelho';
   }
-  const dias = qtdAtual / mediaDiaria;
-  if (dias >= 3) return 'verde';
-  if (dias >= 1) return 'amarelo';
+  const diasCobertura = qtdAtual / mediaDiaria;
+  const prazoDias = prazoHoras ? (prazoHoras / 24) : 3; // fallback 3 dias
+  if (diasCobertura >= 2 * prazoDias) return 'verde';
+  if (diasCobertura >= prazoDias)     return 'amarelo';
   return 'vermelho';
 }
 
@@ -1676,18 +1752,20 @@ function renderChecklist() {
     const md = consumoDiarioItem(it);
     const dias = md > 0 && qtdAtual !== null && qtdAtual !== undefined
       ? qtdAtual / md : null;
-    const semaforo = classificarSemaforo(qtdAtual, md);
     const saldo = state.chk.saldo?.[it.id] || null;
-    return { it, qtdAtual, qtdSalva, md, dias, semaforo, contagem, saldo };
+    const prazoHoras = saldo?.prazo_reposicao_horas ?? it.prazo_reposicao_horas ?? null;
+    const sobDemanda = saldo?.sob_demanda ?? it.sob_demanda ?? false;
+    const semaforo = classificarSemaforo(qtdAtual, md, prazoHoras, sobDemanda);
+    return { it, qtdAtual, qtdSalva, md, dias, semaforo, contagem, saldo, prazoHoras, sobDemanda };
   });
 
   // Contadores globais (não filtrados)
-  const cnt = { verde: 0, amarelo: 0, vermelho: 0, pend: 0 };
+  const cnt = { verde: 0, amarelo: 0, vermelho: 0, pend: 0, sob_demanda: 0 };
   dados.forEach(d => cnt[d.semaforo]++);
   document.getElementById('chkVerde').textContent    = cnt.verde;
   document.getElementById('chkAmarelo').textContent  = cnt.amarelo;
   document.getElementById('chkVermelho').textContent = cnt.vermelho;
-  document.getElementById('chkPend').textContent     = cnt.pend;
+  document.getElementById('chkPend').textContent     = cnt.pend + cnt.sob_demanda;
 
   // Filtros
   let filtrados = dados;
@@ -1705,12 +1783,12 @@ function renderChecklist() {
     return;
   }
 
-  // Ordena: pend primeiro, depois vermelho → amarelo → verde
-  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3 };
+  // Ordena: pend primeiro, depois vermelho → amarelo → verde → sob_demanda no fim
+  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3, sob_demanda: 4 };
   filtrados.sort((a,b) => (ordem[a.semaforo] - ordem[b.semaforo]) || a.it.nome.localeCompare(b.it.nome));
 
-  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—' };
-  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○' };
+  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—', sob_demanda:'SOB DEMANDA' };
+  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○', sob_demanda:'◇' };
 
   cont.innerHTML = filtrados.map(d => {
     const it = d.it;
@@ -1776,17 +1854,20 @@ function setChkQty(itemId, val) {
   const row = document.getElementById(`chkrow-${itemId}`);
   if (row) {
     const md = consumoDiarioItem(it);
-    const sem = classificarSemaforo(v, md);
-    row.classList.remove('verde','amarelo','vermelho','pend');
+    const saldo = state.chk.saldo?.[itemId];
+    const prazoHoras = saldo?.prazo_reposicao_horas ?? it.prazo_reposicao_horas ?? null;
+    const sobDemanda = saldo?.sob_demanda ?? it.sob_demanda ?? false;
+    const sem = classificarSemaforo(v, md, prazoHoras, sobDemanda);
+    row.classList.remove('verde','amarelo','vermelho','pend','sob_demanda');
     row.classList.add(sem);
     const sf = row.querySelector('.chk-semaforo');
     if (sf) {
-      sf.classList.remove('verde','amarelo','vermelho','pend');
+      sf.classList.remove('verde','amarelo','vermelho','pend','sob_demanda');
       sf.classList.add(sem);
       const dot = sf.querySelector('.dot');
       const txt = sf.querySelector('.txt');
-      const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—' };
-      const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○' };
+      const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—', sob_demanda:'SOB DEMANDA' };
+      const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○', sob_demanda:'◇' };
       if (dot) dot.textContent = semDot[sem];
       if (txt) txt.textContent = semLabel[sem];
     }
@@ -1807,19 +1888,22 @@ function setChkQty(itemId, val) {
 }
 
 function atualizarContadoresChk() {
-  const cnt = { verde: 0, amarelo: 0, vermelho: 0, pend: 0 };
+  const cnt = { verde: 0, amarelo: 0, vermelho: 0, pend: 0, sob_demanda: 0 };
   state.chk.itens.forEach(it => {
     const dirtyQty = state.chk.dirty[it.id];
     const contagem = state.chk.contagens[it.id];
     const qtdSalva = contagem ? parseFloat(contagem.quantidade_atual) : null;
     const qtdAtual = dirtyQty !== undefined ? dirtyQty : qtdSalva;
     const md = consumoDiarioItem(it);
-    cnt[classificarSemaforo(qtdAtual, md)]++;
+    const saldo = state.chk.saldo?.[it.id];
+    const prazoHoras = saldo?.prazo_reposicao_horas ?? it.prazo_reposicao_horas ?? null;
+    const sobDemanda = saldo?.sob_demanda ?? it.sob_demanda ?? false;
+    cnt[classificarSemaforo(qtdAtual, md, prazoHoras, sobDemanda)]++;
   });
   document.getElementById('chkVerde').textContent    = cnt.verde;
   document.getElementById('chkAmarelo').textContent  = cnt.amarelo;
   document.getElementById('chkVermelho').textContent = cnt.vermelho;
-  document.getElementById('chkPend').textContent     = cnt.pend;
+  document.getElementById('chkPend').textContent     = cnt.pend + cnt.sob_demanda;
 }
 
 function atualizarSaveBar() {
@@ -1944,8 +2028,10 @@ function renderNiveis() {
       ? parseFloat(saldo.saldo_teorico) : null;
     const md = consumoDiarioItem(it);
     const dias = md > 0 && qtd !== null ? qtd / md : null;
-    const semaforo = classificarSemaforo(qtd, md);
-    return { it, qtd, md, dias, semaforo, saldo };
+    const prazoHoras = saldo?.prazo_reposicao_horas ?? it.prazo_reposicao_horas ?? null;
+    const sobDemanda = saldo?.sob_demanda ?? it.sob_demanda ?? false;
+    const semaforo = classificarSemaforo(qtd, md, prazoHoras, sobDemanda);
+    return { it, qtd, md, dias, semaforo, saldo, prazoHoras, sobDemanda };
   });
 
   // Contadores globais
@@ -1971,11 +2057,11 @@ function renderNiveis() {
     return;
   }
 
-  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3 };
+  const ordem = { pend: 0, vermelho: 1, amarelo: 2, verde: 3, sob_demanda: 4 };
   filtrados.sort((a,b) => (ordem[a.semaforo] - ordem[b.semaforo]) || a.it.nome.localeCompare(b.it.nome));
 
-  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—' };
-  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○' };
+  const semLabel = { verde:'OK', amarelo:'REPOR', vermelho:'CRÍTICO', pend:'—', sob_demanda:'SOB DEMANDA' };
+  const semDot   = { verde:'●', amarelo:'●', vermelho:'●', pend:'○', sob_demanda:'◇' };
 
   cont.innerHTML = filtrados.map(d => {
     const it = d.it;
@@ -2140,6 +2226,132 @@ async function atualizarBadgeChecklist() {
   } else {
     badge.textContent = '';
   }
+}
+
+// =====================================================================
+// GERAR LISTA DE COMPRAS a partir do Checklist
+// =====================================================================
+// Fluxo: Comissaria clica Gerar Lista → modal com itens vermelho+amarelo
+// (respeita sob_demanda) → edita/remove → envia como solicitacao_compra
+// com pdv_id da Comissaria e status='enviada'. Cai na fila do Gerente.
+let listaCompras = [];   // [{ item_id, item_nome, item_categoria, item_unidade, qty_sugerida, qty_final }]
+
+function abrirGerarLista() {
+  if (!state.chk.itens || state.chk.itens.length === 0) {
+    showToast('Carregue o Checklist primeiro.', 'error');
+    return;
+  }
+  listaCompras = [];
+  // Monta lista com itens vermelho + amarelo (respeita sob_demanda)
+  state.chk.itens.forEach(it => {
+    const dirtyQty = state.chk.dirty[it.id];
+    const contagem = state.chk.contagens[it.id];
+    const qtdSalva = contagem ? parseFloat(contagem.quantidade_atual) : null;
+    const qtdAtual = dirtyQty !== undefined ? dirtyQty : qtdSalva;
+    const md = consumoDiarioItem(it);
+    const saldo = state.chk.saldo?.[it.id];
+    const prazoHoras = saldo?.prazo_reposicao_horas ?? it.prazo_reposicao_horas ?? null;
+    const sobDemanda = saldo?.sob_demanda ?? it.sob_demanda ?? false;
+    if (sobDemanda) return;
+    const sem = classificarSemaforo(qtdAtual, md, prazoHoras, sobDemanda);
+    if (sem !== 'vermelho' && sem !== 'amarelo') return;
+    // Sugestão de compra: alcançar 2× o prazo de reposição em dias
+    const prazoDias = prazoHoras ? (prazoHoras / 24) : 3;
+    const alvo = md * 2 * prazoDias;
+    const cur = qtdAtual !== null && qtdAtual !== undefined ? qtdAtual : 0;
+    const sugerida = Math.max(0.1, alvo - cur);
+    listaCompras.push({
+      item_id: it.id,
+      item_nome: it.nome,
+      item_categoria: it.categoria,
+      item_unidade: it.unidade,
+      fornecedor: it.fornecedor_principal || '',
+      semaforo: sem,
+      qty_sugerida: Number(sugerida.toFixed(2)),
+      qty_final: Number(sugerida.toFixed(2)),
+    });
+  });
+  renderGerarLista();
+  document.getElementById('gl-obs').value = '';
+  document.getElementById('gerarListaModal').classList.add('open');
+}
+
+function fecharGerarLista() {
+  document.getElementById('gerarListaModal').classList.remove('open');
+}
+
+function renderGerarLista() {
+  const cont = document.getElementById('glContainer');
+  const info = document.getElementById('gl-info');
+  if (listaCompras.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item em vermelho ou amarelo — nada a comprar!</div>';
+    info.textContent = '';
+    return;
+  }
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  cont.innerHTML = listaCompras.map((r, i) => `
+    <div class="gl-row ${r.semaforo}">
+      <div class="gl-dot ${r.semaforo}">●</div>
+      <div class="gl-nome">
+        <div>${escapeHtml(r.item_nome)}<span class="cat-pill cat-${r.item_categoria}" style="font-size:9px;margin-left:6px">${catLabels[r.item_categoria]||''}</span></div>
+        ${r.fornecedor ? `<small class="text-muted">${escapeHtml(r.fornecedor)}</small>` : ''}
+      </div>
+      <div class="gl-qty">
+        <input class="input" type="number" min="0.1" step="0.1" value="${r.qty_final}"
+          onchange="atualizarQtyLista(${i}, this.value)" onclick="this.select()" style="width:90px;text-align:right">
+        <span class="text-muted" style="font-size:12px">${r.item_unidade||''}</span>
+      </div>
+      <div class="gl-suggest text-muted" style="font-size:11px">
+        Sugerido: ${r.qty_sugerida} ${r.item_unidade||''}
+      </div>
+      <button class="btn-remove-lista" onclick="removerItemLista_gl(${i})" title="Remover">✕</button>
+    </div>
+  `).join('');
+  info.textContent = `${listaCompras.length} item(ns) na lista`;
+}
+
+function atualizarQtyLista(idx, val) {
+  const v = parseFloat(val);
+  if (isNaN(v) || v <= 0) return;
+  listaCompras[idx].qty_final = v;
+}
+
+function removerItemLista_gl(idx) {
+  listaCompras.splice(idx, 1);
+  renderGerarLista();
+}
+
+async function enviarListaCompras() {
+  if (listaCompras.length === 0) {
+    showToast('Lista vazia — nada a enviar.', 'error');
+    return;
+  }
+  if (!state.pdvComissariaId) {
+    showToast('PDV Comissaria não configurado no banco.', 'error');
+    return;
+  }
+  const obs = document.getElementById('gl-obs').value.trim() || null;
+  const { data: sol, error } = await sb.from('solicitacoes_compra').insert({
+    pdv_id: state.pdvComissariaId,
+    usuario_id: state.perfil.id,
+    status: 'enviada',
+    data_competencia: new Date().toISOString().slice(0,10),
+    observacao: obs || 'Lista gerada pelo Checklist do Estoque',
+  }).select('id').single();
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  const itensPayload = listaCompras.map(r => ({
+    solicitacao_id: sol.id,
+    item_id: r.item_id,
+    item_nome: r.item_nome,
+    item_categoria: r.item_categoria,
+    item_unidade: r.item_unidade,
+    quantidade_solicitada: r.qty_final,
+  }));
+  const { error: ei } = await sb.from('solicitacao_compra_itens').insert(itensPayload);
+  if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
+  showToast(`Lista de compras enviada — ${listaCompras.length} item(ns) aguardando aprovação.`, 'success');
+  fecharGerarLista();
+  listaCompras = [];
 }
 
 async function logout() { await sb.auth.signOut(); window.location.href = 'index.html'; }
