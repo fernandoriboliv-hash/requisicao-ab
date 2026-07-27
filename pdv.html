@@ -949,16 +949,17 @@ function atualizarAvisoCorte() {
   // Modo regra 10h (sem entrega ou entrega hoje)
   const agora = new Date();
   const corte = new Date(); corte.setHours(10, 0, 0, 0);
+  const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
   if (agora < corte) {
     aviso.className = 'aviso aviso-success';
     const ms = corte - agora;
     const h = Math.floor(ms / 3600000);
     const m = Math.floor((ms % 3600000) / 60000);
-    txt.textContent = `Entrega prevista para hoje. Corte de pedidos em ${h}h${String(m).padStart(2,'0')}.`;
+    txt.textContent = `Entrega prevista para amanhã (${amanha.toLocaleDateString('pt-BR')}). Corte de pedidos em ${h}h${String(m).padStart(2,'0')}.`;
   } else {
     aviso.className = 'aviso aviso-warn';
-    const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
-    txt.textContent = `Após as 10h00 — entrega prevista para amanhã (${amanha.toLocaleDateString('pt-BR')}).`;
+    const depois = new Date(); depois.setDate(depois.getDate() + 2);
+    txt.textContent = `Após as 10h00 — entrega prevista para ${depois.toLocaleDateString('pt-BR')}.`;
   }
 }
 
