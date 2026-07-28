@@ -417,6 +417,69 @@
   }
   .chk-save-bar.visible { display: flex; }
   .chk-save-bar .dirty-count { color: var(--gold); }
+
+  /* ============================================================
+     MOBILE / TABLET LEGIBILIDADE — Comissaria
+     Fontes maiores e em negrito para destacar no fundo escuro
+     ============================================================ */
+  @media (max-width: 900px) {
+    /* Nomes de itens — todas as listagens */
+    .item-name       { font-size: 16px; font-weight: 500; }
+    .chk-nome        { font-size: 16px; font-weight: 500; }
+    .nv-nome         { font-size: 16px; font-weight: 500; }
+    .dv-nome         { font-size: 16px; font-weight: 500; }
+    .gl-nome         { font-size: 15px; font-weight: 500; }
+
+    /* Unidades e metadados */
+    .item-unit       { font-size: 13px; font-weight: 500; }
+    .chk-meta        { font-size: 13px; }
+    .chk-meta strong { font-weight: 600; }
+    .chk-history-mini{ font-size: 12px; }
+    .chk-teorico     { font-size: 12px; }
+    .chk-nome .badge-cat { font-size: 10px; }
+
+    /* Inputs */
+    .qty-input       { font-size: 16px; padding: 8px; }
+    .chk-qty-input   { font-size: 17px !important; }
+
+    /* Botões de ação (adicionar / remover) */
+    .item-action     { font-size: 13px; padding: 8px 16px; }
+
+    /* Carrinho lateral (drawer no mobile) */
+    .cart-sidebar-item              { font-size: 14px; }
+    .cart-sidebar-item .cs-name     { font-weight: 500; }
+    .cart-sidebar-item .cs-name .cs-cat { font-size: 11px; }
+    .cart-sidebar-item .cs-qty      { font-size: 15px; }
+    .cart-sidebar-head .title       { font-size: 22px; }
+    .cart-sidebar-head .subtitle    { font-size: 12px; }
+
+    /* Cards de resumo (semáforo) */
+    .chk-summary .val { font-size: 34px; }
+    .chk-summary .lbl { font-size: 11px; }
+
+    /* Semáforo (dot + txt) */
+    .chk-semaforo    { font-size: 24px; }
+    .chk-semaforo .txt { font-size: 10px; font-weight: 600; }
+
+    /* Divergências — número teórico/contado */
+    .dv-num          { font-size: 22px; }
+    .dv-diff         { font-size: 14px; font-weight: 600; }
+
+    /* Níveis (visão só-leitura) */
+    .nv-qty          { font-size: 24px; }
+    .nv-cob          { font-size: 13px; }
+    .nv-cob strong   { font-weight: 600; }
+  }
+
+  @media (max-width: 500px) {
+    .item-name       { font-size: 17px; }
+    .chk-nome        { font-size: 17px; }
+    .nv-nome         { font-size: 17px; }
+    .dv-nome         { font-size: 17px; }
+    .gl-nome         { font-size: 16px; }
+    .cart-sidebar-item { font-size: 15px; }
+    .cart-sidebar-item .cs-qty { font-size: 16px; }
+  }
 </style>
 </head>
 <body>
