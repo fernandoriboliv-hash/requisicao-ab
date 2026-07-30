@@ -1567,24 +1567,34 @@ function renderCatalogoTable() {
   const comPreco = lista.filter(i => state.precosMap && state.precosMap[i.id]).length;
   document.getElementById('catCount').textContent = `${lista.length} itens · ${comPreco} com preço`;
   cont.innerHTML = `<table class="data-table">
-    <thead><tr><th>Nome</th><th>Categoria</th><th>Unid.</th><th>Fornecedor</th><th class="center">Inventário</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
+    <thead><tr><th>Nome</th><th>Categoria</th><th>Unid.</th><th>Fornecedor</th><th class="center">Inventário</th><th class="center" title="Aparece por padrão no checklist de contagem da Comissaria">No checklist?</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
     <tbody>${lista.map(it => {
       const p = state.precosMap ? state.precosMap[it.id] : null;
       const precoTxt = p
         ? `R$ ${parseFloat(p.preco_unitario).toFixed(2).replace('.',',')} <small class="text-muted">${new Date(p.atualizado_em).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</small>`
         : `<span class="text-muted">sem preço</span>`;
+      const noChk = it.no_checklist_estoque === true;
       return `<tr>
       <td>${escapeHtml(it.nome)}</td>
       <td><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
       <td>${it.unidade}</td>
       <td class="text-muted">${escapeHtml(p?.fornecedor || it.fornecedor_principal||'—')}</td>
       <td class="center">${it.inventario ? '<span class="text-green">Sim</span>' : '<span class="text-muted">—</span>'}</td>
+      <td class="center"><input type="checkbox" ${noChk?'checked':''} onchange="toggleNoChecklist('${it.id}',this.checked)" title="Marcar/desmarcar do checklist da Comissaria"></td>
       <td>${precoTxt} <button class="btn btn-sm btn-outline" style="margin-left:6px" onclick="editarPreco('${it.id}')">${p ? '✎' : '+ Definir'}</button></td>
       <td class="center num">${it.media_diaria ? parseFloat(it.media_diaria).toFixed(1) : '—'}</td>
       <td><span class="badge ${it.ativo?'badge-green':'badge-muted'}">${it.ativo?'Ativo':'Inativo'}</span></td>
       <td class="center"><button class="btn btn-sm ${it.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoItem('${it.id}',${it.ativo})">${it.ativo?'Desativar':'Ativar'}</button></td>
     </tr>`;
     }).join('')}</tbody></table>`;
+}
+
+async function toggleNoChecklist(id, val) {
+  const { error } = await sb.from('itens').update({ no_checklist_estoque: val }).eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  const it = state.catalogo.find(x => x.id === id);
+  if (it) it.no_checklist_estoque = val;
+  showToast(val ? 'Item incluído no checklist' : 'Item removido do checklist', 'success');
 }
 
 async function salvarItem() {

@@ -674,20 +674,21 @@
   <!-- ========================================================== -->
   <div class="tab-content" id="tab-manual">
     <div class="aviso aviso-info">
-      Cadastre uma requisição em nome de outro PDV — usado quando alguém vem pessoalmente buscar item da comissaria.
-      O sistema registra a transferência para alocar custo no PDV correto.
+      <b>Registre requisições feitas por PDVs que ainda não usam o sistema</b> — quem pediu por planilha, WhatsApp,
+      verbal ou veio buscar pessoalmente no balcão. Ao registrar aqui, o item é debitado do estoque da Comissaria
+      e alocado ao PDV correto (não deixa de registrar, senão o saldo do sistema fica errado).
     </div>
 
     <div class="form-row col2">
       <div class="field">
-        <label class="field-label">PDV de Destino</label>
+        <label class="field-label">Em nome de qual PDV?</label>
         <select class="select" id="m-pdv">
-          <option value="">Selecione o PDV...</option>
+          <option value="">Selecione o PDV que fez o pedido...</option>
         </select>
       </div>
       <div class="field">
-        <label class="field-label">Observação (opcional)</label>
-        <input class="input" id="m-obs" placeholder="Ex.: retirada balcão por João">
+        <label class="field-label">Como recebeu o pedido (opcional)</label>
+        <input class="input" id="m-obs" placeholder="Ex.: planilha, WhatsApp Ana, retirada balcão">
       </div>
     </div>
 
@@ -788,6 +789,10 @@
         <label>Buscar</label>
         <input class="input" type="text" id="chk-search" placeholder="Nome do item..." oninput="renderChecklist()">
       </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;gap:8px">
+      <button class="btn btn-sm btn-outline" onclick="abrirModalItemAvulso()">+ Adicionar item avulso</button>
     </div>
 
     <div class="chk-summary" id="chkSummary">
@@ -1030,6 +1035,28 @@
   </div>
 </div>
 
+<!-- Modal: adicionar item avulso ao checklist -->
+<div class="modal-overlay" id="itemAvulsoModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>Adicionar Item Avulso ao Checklist</span>
+      <button class="modal-close" onclick="fecharModal('itemAvulsoModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--muted);font-size:13px;margin:0 0 12px">
+        Use quando um item que <b>não está</b> no checklist do dia apareceu no estoque
+        e você precisa contar. Ele aparece só nessa contagem — não vira permanente.
+      </p>
+      <input class="input" id="itemAvulsoSearch" placeholder="Buscar item por nome..."
+             oninput="renderItemAvulsoLista()" style="margin-bottom:12px">
+      <div id="itemAvulsoLista" style="max-height:400px;overflow-y:auto"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('itemAvulsoModal')">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-stack" id="toasts"></div>
 
 <script>
@@ -1048,7 +1075,7 @@ const state = {
   // Compra Comissaria
   compra: { cat: 'proteina', search: '', selecionados: {}, qtdInputs: {} },
   // Checklist
-  chk: { itens: [], contagens: {}, dirty: {}, historico: {} },
+  chk: { itens: [], contagens: {}, dirty: {}, historico: {}, itensAvulsos: new Set() },
 };
 
 window.addEventListener('load', async () => {
@@ -2058,7 +2085,7 @@ async function carregarChecklist() {
   const comId = state.pdvComissariaId;
   const [ itensR, csR, histR, saldoR, consumoR ] = await Promise.all([
     sb.from('itens')
-      .select('id, nome, categoria, unidade, media_diaria, fornecedor_principal, inventario, ativo')
+      .select('id, nome, categoria, unidade, media_diaria, fornecedor_principal, inventario, ativo, no_checklist_estoque')
       .eq('ativo', true).eq('inventario', true)
       .order('categoria').order('nome'),
     sb.from('contagens_estoque').select('*').eq('data_contagem', data).eq('pdv_id', comId),
@@ -2136,6 +2163,12 @@ function renderChecklist() {
 
   // Filtros
   let filtrados = dados;
+  // Só itens marcados pra checklist OU adicionados avulso hoje
+  if (!state.chk.itensAvulsos) state.chk.itensAvulsos = new Set();
+  filtrados = filtrados.filter(d =>
+    d.it.no_checklist_estoque === true ||
+    state.chk.itensAvulsos.has(d.it.id)
+  );
   if (catFilt === 'camara')       filtrados = filtrados.filter(d => d.it.categoria === 'proteina' || d.it.categoria === 'laticinios');
   else if (catFilt)               filtrados = filtrados.filter(d => d.it.categoria === catFilt);
   if (stFilt) filtrados = filtrados.filter(d => d.semaforo === stFilt);
@@ -2286,6 +2319,52 @@ function descartarChecklist() {
   state.chk.dirty = {};
   renderChecklist();
   atualizarSaveBar();
+}
+
+// ---------- Item avulso: adiciona item que NÃO está no checklist padrão pra contar hoje ----------
+function abrirModalItemAvulso() {
+  document.getElementById('itemAvulsoSearch').value = '';
+  renderItemAvulsoLista();
+  abrirModal('itemAvulsoModal');
+}
+
+function renderItemAvulsoLista() {
+  const cont = document.getElementById('itemAvulsoLista');
+  const q = (document.getElementById('itemAvulsoSearch').value || '').toLowerCase().trim();
+  if (!state.chk.itensAvulsos) state.chk.itensAvulsos = new Set();
+  // Só itens que NÃO estão já no checklist padrão nem foram adicionados nesta sessão
+  let lista = (state.chk.itens || []).filter(it =>
+    !it.no_checklist_estoque &&
+    !state.chk.itensAvulsos.has(it.id)
+  );
+  if (q) lista = lista.filter(it =>
+    it.nome.toLowerCase().includes(q) ||
+    (it.fornecedor_principal || '').toLowerCase().includes(q)
+  );
+  if (lista.length === 0) {
+    cont.innerHTML = q
+      ? '<div class="empty-text">Nenhum item encontrado.</div>'
+      : '<div class="empty-text">Todos os itens do inventário já estão disponíveis pra contagem.</div>';
+    return;
+  }
+  const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  cont.innerHTML = lista.slice(0, 100).map(it => `
+    <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--border-subtle)">
+      <div>
+        <div style="font-weight:600">${escapeHtml(it.nome)}</div>
+        <div style="font-size:11px;color:var(--muted)">${catLabels[it.categoria]||it.categoria} · ${it.unidade}${it.fornecedor_principal ? ' · ' + escapeHtml(it.fornecedor_principal) : ''}</div>
+      </div>
+      <button class="btn btn-sm btn-primary" onclick="adicionarItemAvulso('${it.id}')">Adicionar</button>
+    </div>`).join('') + (lista.length > 100 ? `<div class="text-muted" style="text-align:center;padding:8px;font-size:11px">${lista.length - 100} outros itens — refine a busca</div>` : '');
+}
+
+function adicionarItemAvulso(itemId) {
+  if (!state.chk.itensAvulsos) state.chk.itensAvulsos = new Set();
+  state.chk.itensAvulsos.add(itemId);
+  const it = state.chk.itens.find(x => x.id === itemId);
+  showToast(`"${it?.nome || 'Item'}" adicionado à contagem de hoje.`, 'success');
+  renderItemAvulsoLista();
+  renderChecklist();
 }
 
 async function salvarChecklist() {
