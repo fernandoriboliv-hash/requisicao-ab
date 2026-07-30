@@ -2055,19 +2055,21 @@ async function carregarChecklist() {
   const seteDias = new Date();
   seteDias.setDate(seteDias.getDate() - 7);
 
+  const comId = state.pdvComissariaId;
   const [ itensR, csR, histR, saldoR, consumoR ] = await Promise.all([
     sb.from('itens')
       .select('id, nome, categoria, unidade, media_diaria, fornecedor_principal, inventario, ativo')
       .eq('ativo', true).eq('inventario', true)
       .order('categoria').order('nome'),
-    sb.from('contagens_estoque').select('*').eq('data_contagem', data),
+    sb.from('contagens_estoque').select('*').eq('data_contagem', data).eq('pdv_id', comId),
     sb.from('contagens_estoque')
       .select('item_id, data_contagem, quantidade_atual')
+      .eq('pdv_id', comId)
       .gte('data_contagem', isoDate(seteDias))
       .lte('data_contagem', data)
       .order('data_contagem', { ascending: false }),
-    sb.from('v_estoque_saldo').select('*'),
-    sb.from('v_estoque_consumo').select('*'),
+    sb.from('v_estoque_saldo').select('*').eq('pdv_id', comId),
+    sb.from('v_estoque_consumo_comissaria').select('*'),
   ]);
 
   state.chk.itens = itensR.data || [];
@@ -2290,6 +2292,7 @@ async function salvarChecklist() {
   const dirty = state.chk.dirty;
   const ids = Object.keys(dirty);
   if (ids.length === 0) { showToast('Nada a salvar.', 'info'); return; }
+  if (!state.pdvComissariaId) { showToast('PDV "Comissaria" não encontrado no banco.', 'error'); return; }
   const data = document.getElementById('chk-data').value || isoDate(new Date());
 
   const rows = ids
@@ -2297,6 +2300,7 @@ async function salvarChecklist() {
     .map(id => ({
       data_contagem: data,
       item_id: id,
+      pdv_id: state.pdvComissariaId,
       quantidade_atual: dirty[id],
       contado_por: state.perfil.id,
     }));
@@ -2322,6 +2326,7 @@ async function salvarChecklist() {
       divergencias.push({
         data_contagem: data,
         item_id: row.item_id,
+        pdv_id: state.pdvComissariaId,
         qtd_teorica: teorico,
         qtd_contada: contado,
         diff: Number(diff.toFixed(3)),
@@ -2333,7 +2338,7 @@ async function salvarChecklist() {
   }
 
   const { error } = await sb.from('contagens_estoque')
-    .upsert(rows, { onConflict: 'data_contagem,item_id' });
+    .upsert(rows, { onConflict: 'data_contagem,item_id,pdv_id' });
   if (error) { showToast('Erro ao salvar: ' + error.message, 'error'); return; }
 
   let msgExtra = '';
@@ -2360,13 +2365,14 @@ async function carregarNiveis() {
   const cont = document.getElementById('nvContainer');
   cont.innerHTML = '<div class="loading-text">Carregando...</div>';
 
+  const comId = state.pdvComissariaId;
   const [ itensR, saldoR, consumoR ] = await Promise.all([
     sb.from('itens')
       .select('id, nome, categoria, unidade, media_diaria, fornecedor_principal, inventario, ativo')
       .eq('ativo', true).eq('inventario', true)
       .order('categoria').order('nome'),
-    sb.from('v_estoque_saldo').select('*'),
-    sb.from('v_estoque_consumo').select('*'),
+    sb.from('v_estoque_saldo').select('*').eq('pdv_id', comId),
+    sb.from('v_estoque_consumo_comissaria').select('*'),
   ]);
 
   state.chk.nvItens = itensR.data || [];
@@ -2472,6 +2478,7 @@ async function carregarDivergencias() {
   cont.innerHTML = '<div class="loading-text">Carregando...</div>';
   const { data, error } = await sb.from('divergencias_estoque')
     .select('*, itens(nome, categoria, unidade, fornecedor_principal)')
+    .eq('pdv_id', state.pdvComissariaId)
     .order('data_contagem', { ascending: false })
     .order('diff_pct', { ascending: false });
   if (error) {
@@ -2559,7 +2566,8 @@ async function atualizarBadgeDivergencias() {
   if (!badge) return;
   const { count } = await sb.from('divergencias_estoque')
     .select('*', { count: 'exact', head: true })
-    .eq('status', 'pendente');
+    .eq('status', 'pendente')
+    .eq('pdv_id', state.pdvComissariaId);
   if (count && count > 0) {
     badge.textContent = String(count);
     badge.style.background = 'rgba(224,82,82,0.7)';
@@ -2575,7 +2583,8 @@ async function atualizarBadgeChecklist() {
   const hoje = isoDate(new Date());
   const { count } = await sb.from('contagens_estoque')
     .select('*', { count: 'exact', head: true })
-    .eq('data_contagem', hoje);
+    .eq('data_contagem', hoje)
+    .eq('pdv_id', state.pdvComissariaId);
   // Compara com total de itens de inventário
   const { count: totInv } = await sb.from('itens')
     .select('*', { count: 'exact', head: true })
