@@ -420,32 +420,82 @@
 
   /* ============================================================
      MOBILE / TABLET LEGIBILIDADE — Comissaria
-     Fontes maiores e em negrito para destacar no fundo escuro
+     Negrito somente no nome do item; botões condensados só ícone
      ============================================================ */
-  @media (max-width: 900px) {
-    /* Nomes de itens — todas as listagens */
-    .item-name       { font-size: 16px; font-weight: 500; }
-    .chk-nome        { font-size: 16px; font-weight: 500; }
-    .nv-nome         { font-size: 16px; font-weight: 500; }
-    .dv-nome         { font-size: 16px; font-weight: 500; }
-    .gl-nome         { font-size: 15px; font-weight: 500; }
 
-    /* Unidades e metadados */
-    .item-unit       { font-size: 13px; font-weight: 500; }
+  /* Fornecedor no nome do item — aparece só no desktop, muted */
+  .item-name .forn {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--muted);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  @media (max-width: 900px) {
+    /* Suprime nome do fornecedor no mobile */
+    .item-name .forn { display: none; }
+
+    /* Nomes de itens em negrito (única coisa em negrito) */
+    .item-name       { font-size: 16px; font-weight: 600; }
+    .chk-nome        { font-size: 16px; font-weight: 600; }
+    .nv-nome         { font-size: 16px; font-weight: 600; }
+    .dv-nome         { font-size: 16px; font-weight: 600; }
+    .gl-nome         { font-size: 15px; font-weight: 600; }
+
+    /* Demais textos: só aumenta um pouco, sem negrito */
+    .item-unit       { font-size: 13px; }
     .chk-meta        { font-size: 13px; }
-    .chk-meta strong { font-weight: 600; }
     .chk-history-mini{ font-size: 12px; }
     .chk-teorico     { font-size: 12px; }
-    .chk-nome .badge-cat { font-size: 10px; }
 
-    /* Inputs */
+    /* Inputs — mantém confortáveis pro toque */
     .qty-input       { font-size: 16px; padding: 8px; }
     .chk-qty-input   { font-size: 17px !important; }
 
-    /* Botões de ação (adicionar / remover) */
-    .item-action     { font-size: 13px; padding: 8px 16px; }
+    /* Botão "+ Adicionar" vira só "+" no mobile */
+    .item-action.add {
+      font-size: 0;
+      padding: 8px 12px;
+      min-width: 40px;
+      line-height: 1;
+    }
+    .item-action.add::before {
+      content: "+";
+      font-size: 22px;
+      font-weight: 400;
+      line-height: 1;
+    }
+    /* Botão "Remover" vira "×" */
+    .item-action.remove {
+      font-size: 0;
+      padding: 8px 12px;
+      min-width: 40px;
+      line-height: 1;
+    }
+    .item-action.remove::before {
+      content: "×";
+      font-size: 22px;
+      font-weight: 400;
+      line-height: 1;
+    }
+    /* Layout do item-actions em coluna quando linha está selecionada
+       (evita qty + botão remover estourarem lateralmente) */
+    .item-row .item-actions-cell { gap: 8px; }
+    .item-row.selected {
+      grid-template-columns: 22px 1fr auto;
+    }
+    .item-row.selected .item-actions-cell {
+      grid-column: 1 / -1;
+      justify-content: flex-end;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      margin-top: 4px;
+    }
 
-    /* Carrinho lateral (drawer no mobile) */
+    /* Carrinho lateral (drawer) */
     .cart-sidebar-item              { font-size: 14px; }
     .cart-sidebar-item .cs-name     { font-weight: 500; }
     .cart-sidebar-item .cs-name .cs-cat { font-size: 11px; }
@@ -457,18 +507,23 @@
     .chk-summary .val { font-size: 34px; }
     .chk-summary .lbl { font-size: 11px; }
 
-    /* Semáforo (dot + txt) */
+    /* Semáforo */
     .chk-semaforo    { font-size: 24px; }
-    .chk-semaforo .txt { font-size: 10px; font-weight: 600; }
+    .chk-semaforo .txt { font-size: 10px; }
 
-    /* Divergências — número teórico/contado */
+    /* Divergências */
     .dv-num          { font-size: 22px; }
-    .dv-diff         { font-size: 14px; font-weight: 600; }
+    .dv-diff         { font-size: 14px; }
 
-    /* Níveis (visão só-leitura) */
+    /* Níveis */
     .nv-qty          { font-size: 24px; }
     .nv-cob          { font-size: 13px; }
-    .nv-cob strong   { font-weight: 600; }
+
+    /* Evita overflow horizontal (cart FAB e botões cortados) */
+    html, body { overflow-x: hidden; }
+    .main-with-sidebar { max-width: 100vw; overflow-x: hidden; }
+    .item-row { min-width: 0; }
+    .item-name { min-width: 0; word-break: break-word; }
   }
 
   @media (max-width: 500px) {
