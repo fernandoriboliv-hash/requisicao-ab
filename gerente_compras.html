@@ -183,8 +183,7 @@
 
     <div class="nav-item" onclick="goTab('compras',this)"><span class="nav-icon">$</span> Solicitações Compra</div>
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
-    <div class="nav-item" onclick="goTab('catalogo',this)"><span class="nav-icon">◎</span> Catálogo</div>
-    <div class="nav-item" onclick="goTab('precos',this)"><span class="nav-icon">¤</span> Preços</div>
+    <div class="nav-item" onclick="goTab('catalogo',this)"><span class="nav-icon">◎</span> Catálogo &amp; Preços</div>
     <div class="nav-item" onclick="goTab('pendentes',this)">
       <span class="nav-icon">⚠</span> Itens Pendentes
       <span class="nav-badge" id="badgePendentes"></span>
@@ -570,26 +569,6 @@
   </div>
 
   <!-- ====================== PREÇOS ====================== -->
-  <div class="tab-content" id="tab-precos">
-    <div class="main full">
-      <div class="aviso aviso-info">
-        Atualize preços conforme nota fiscal recebida do comprador. O sistema mantém histórico — apenas o preço com flag "vigente" é usado para cálculo de food cost.
-      </div>
-      <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-        <input class="input" id="precos-busca" placeholder="Buscar item..." oninput="renderPrecos()">
-        <select class="select" id="precos-cat-filtro" onchange="renderPrecos()" style="max-width:180px">
-          <option value="">Todas as categorias</option>
-          <option value="proteina">Proteína</option>
-          <option value="laticinios">Laticínios</option>
-          <option value="hortifruti">Hortifruti</option>
-          <option value="diversos">Diversos</option>
-        </select>
-        <span class="text-muted" id="precos-stats" style="font-size:12px;margin-left:auto"></span>
-      </div>
-      <div id="precosContainer"><div class="loading-text">Carregando...</div></div>
-    </div>
-  </div>
-
   <!-- ====================== ITENS PENDENTES ====================== -->
   <div class="tab-content" id="tab-pendentes">
     <div class="main full">
@@ -695,8 +674,7 @@ const tabTitles = {
   niveis:       ['Consultar Estoque', 'Saldo teórico atual dos itens de câmara'],
   divergencias: ['Divergências de Estoque', 'Diferenças entre contagem física e saldo teórico'],
   relatorios:   ['Relatórios', 'Visibilidade quantitativa por PDV/período/categoria'],
-  catalogo:     ['Catálogo', 'Itens disponíveis para solicitação'],
-  precos:       ['Preços', 'Atualização de preços vigentes'],
+  catalogo:     ['Catálogo & Preços', 'Itens do catálogo com preço, fornecedor e disponibilidade'],
   pendentes:    ['Itens Pendentes', 'Itens livres aguardando decisão'],
 };
 
@@ -821,7 +799,6 @@ async function carregarCatalogoEPrecos() {
   state.catalogo = itens || [];
   state.precosMap = {};
   (precos || []).forEach(p => { state.precosMap[p.item_id] = p; });
-  document.getElementById('catCount').textContent = state.catalogo.length;
 }
 
 function goTab(tab, el) {
@@ -839,7 +816,6 @@ function goTab(tab, el) {
   if (tab === 'compras')     carregarHistoricoCompras();
   if (tab === 'requisicoes') carregarHistoricoReqs();
   if (tab === 'catalogo')    renderCatalogoTable();
-  if (tab === 'precos')      renderPrecos();
   if (tab === 'pendentes')   carregarPendentes();
   if (tab === 'niveis')      carregarNiveisGer();
   if (tab === 'divergencias') carregarDivergencias();
@@ -1588,18 +1564,27 @@ function renderCatalogoTable() {
   const cont = document.getElementById('catalogoContainer');
   if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
   const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
+  const comPreco = lista.filter(i => state.precosMap && state.precosMap[i.id]).length;
+  document.getElementById('catCount').textContent = `${lista.length} itens · ${comPreco} com preço`;
   cont.innerHTML = `<table class="data-table">
-    <thead><tr><th>Nome</th><th>Categoria</th><th>Unid.</th><th>Fornecedor</th><th class="center">Inventário</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
-    <tbody>${lista.map(it => `<tr>
+    <thead><tr><th>Nome</th><th>Categoria</th><th>Unid.</th><th>Fornecedor</th><th class="center">Inventário</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
+    <tbody>${lista.map(it => {
+      const p = state.precosMap ? state.precosMap[it.id] : null;
+      const precoTxt = p
+        ? `R$ ${parseFloat(p.preco_unitario).toFixed(2).replace('.',',')} <small class="text-muted">${new Date(p.atualizado_em).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</small>`
+        : `<span class="text-muted">sem preço</span>`;
+      return `<tr>
       <td>${escapeHtml(it.nome)}</td>
       <td><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
       <td>${it.unidade}</td>
-      <td class="text-muted">${escapeHtml(it.fornecedor_principal||'—')}</td>
+      <td class="text-muted">${escapeHtml(p?.fornecedor || it.fornecedor_principal||'—')}</td>
       <td class="center">${it.inventario ? '<span class="text-green">Sim</span>' : '<span class="text-muted">—</span>'}</td>
+      <td>${precoTxt} <button class="btn btn-sm btn-outline" style="margin-left:6px" onclick="editarPreco('${it.id}')">${p ? '✎' : '+ Definir'}</button></td>
       <td class="center num">${it.media_diaria ? parseFloat(it.media_diaria).toFixed(1) : '—'}</td>
       <td><span class="badge ${it.ativo?'badge-green':'badge-muted'}">${it.ativo?'Ativo':'Inativo'}</span></td>
       <td class="center"><button class="btn btn-sm ${it.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoItem('${it.id}',${it.ativo})">${it.ativo?'Desativar':'Ativar'}</button></td>
-    </tr>`).join('')}</tbody></table>`;
+    </tr>`;
+    }).join('')}</tbody></table>`;
 }
 
 async function salvarItem() {
