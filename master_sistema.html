@@ -94,7 +94,7 @@
             <select class="select" id="u-perfil" onchange="togglePdvField()">
               <option value="pdv">PDV (cozinheiro)</option>
               <option value="estoque">Estoque (Comissaria)</option>
-              <option value="executivo">Executivo (chefes)</option>
+              <option value="executivo">Chef</option>
               <option value="gerente_compras">Gerente de Compras</option>
               <option value="master_sistema">Master de Sistema</option>
             </select>
@@ -119,7 +119,7 @@
           <option value="">Todos os perfis</option>
           <option value="master_sistema">Master de Sistema</option>
           <option value="gerente_compras">Gerente de Compras</option>
-          <option value="executivo">Executivo</option>
+          <option value="executivo">Chef</option>
           <option value="pdv">PDV</option>
           <option value="estoque">Estoque</option>
         </select>
@@ -391,7 +391,7 @@ function renderUsuarios() {
   if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum usuário.</div>'; return; }
   const labelPerfil = {
     master_sistema: 'Master Sistema', gerente_compras: 'Gerente Compras',
-    executivo: 'Executivo', pdv: 'PDV', estoque: 'Estoque'
+    executivo: 'Chef', pdv: 'PDV', estoque: 'Estoque'
   };
   cont.innerHTML = `<table class="data-table">
     <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>PDV</th><th>Status</th><th class="center">Ações</th></tr></thead>
