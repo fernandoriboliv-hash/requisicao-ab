@@ -115,8 +115,25 @@
   }
   .add-item-row:hover { border-color: var(--border-subtle); }
   .add-item-check { width: 18px; text-align: center; color: var(--gold); font-size: 11px; }
-  .add-item-name { font-size: 13px; }
-  .add-item-name .forn { font-size: 10px; color: var(--muted); margin-left: 8px; }
+  .add-item-name { font-size: 13px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .add-item-name .forn {
+    font-size: 10px; color: var(--gold);
+    background: rgba(184,150,62,0.10);
+    border: 1px solid rgba(184,150,62,0.45);
+    padding: 2px 7px; letter-spacing: 0.5px; text-transform: uppercase;
+    font-weight: 500; white-space: nowrap;
+  }
+  .subgroup-head {
+    margin: 16px 0 6px 0; padding: 7px 12px;
+    background: rgba(184,150,62,0.08);
+    border-left: 3px solid var(--gold);
+    color: var(--gold);
+    font-family: 'Cormorant Garamond', 'Cambria', serif;
+    font-size: 15px; letter-spacing: 2px; text-transform: uppercase;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .subgroup-head:first-child { margin-top: 0; }
+  .subgroup-head .count { font-size: 10px; color: var(--muted); font-family: 'DM Sans', sans-serif; letter-spacing: 1px; }
   .add-item-unit { font-size: 11px; color: var(--muted); width: 45px; text-align: center; }
   .add-item-qty-wrap { display: flex; align-items: center; gap: 6px; }
   .add-qty-btn {
@@ -1809,6 +1826,36 @@ function setCatReqCreate(cat) {
   renderItensReqCreate();
 }
 
+// Agrupamento por sub-categoria (espelha planilhas atuais)
+const CATS_COM_SUBGRUPO_RC = new Set(['proteina', 'laticinios']);
+const ORDEM_SUBGRUPO_RC = {
+  proteina: ['PEIXES E FRUTOS DO MAR', 'FRANGO', 'AVES', 'EMBUTIDOS', 'BOVINO/CORDEIRO/SUÍNO'],
+  laticinios: [
+    'SERRA DAS ANTAS','CAPRIL DO BOSQUE','QUEIJO DE BUFALA','IOGURTE - ATILATTE',
+    'CREME DE LEITE E NATA','RIMA','QUEIJOS','FRIOS E EMBUTIDOS','MANTEIGA',
+    'QUEIJOS VEGANOS','OVOS PASTEURIZADOS','SALGADOS','OUTROS'
+  ],
+};
+
+function renderItemRowRC(item) {
+  const sel = state.reqNew.selecionados[item.id];
+  const qty = sel ? sel.qty : 1;
+  return `
+    <div class="add-item-row" id="rcrow-${item.id}" style="${sel ? 'border-color:var(--gold);background:rgba(184,150,62,0.06)' : ''}">
+      <div class="add-item-check">${sel ? '✓' : ''}</div>
+      <div class="add-item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+      <div class="add-item-unit">${item.unidade || '—'}</div>
+      <div class="add-item-qty-wrap">
+        <button class="add-qty-btn" onclick="changeQtyRC('${item.id}',-1)">−</button>
+        <input class="add-qty-input" type="number" min="0.1" step="0.1" value="${qty}" onclick="this.select()" oninput="setQtyRC('${item.id}',this.value)">
+        <button class="add-qty-btn" onclick="changeQtyRC('${item.id}',1)">+</button>
+        ${sel
+          ? `<button class="add-item-btn" style="background:transparent;border-color:var(--border-subtle);color:var(--muted)" onclick="removerItemRC('${item.id}')">Remover</button>`
+          : `<button class="add-item-btn" onclick="adicionarItemRC('${item.id}')">+ Adicionar</button>`}
+      </div>
+    </div>`;
+}
+
 function renderItensReqCreate() {
   const cont = document.getElementById('rc-items');
   if (!cont) return;
@@ -1816,30 +1863,37 @@ function renderItensReqCreate() {
     cont.innerHTML = '<div class="loading-text">Carregando catálogo...</div>'; return;
   }
   const q = (document.getElementById('rc-search').value || '').toLowerCase();
+  const cat = state.reqNew.cat;
   const itens = state.catalogo.filter(i =>
-    i.ativo && i.categoria === state.reqNew.cat &&
+    i.ativo && i.categoria === cat &&
     (!q || i.nome.toLowerCase().includes(q) || (i.fornecedor_principal||'').toLowerCase().includes(q))
   );
   if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item nesta categoria.</div>'; return; }
   itens.sort((a,b) => a.nome.localeCompare(b.nome));
-  cont.innerHTML = itens.map(item => {
-    const sel = state.reqNew.selecionados[item.id];
-    const qty = sel ? sel.qty : 1;
-    return `
-      <div class="add-item-row" id="rcrow-${item.id}" style="${sel ? 'border-color:var(--gold);background:rgba(184,150,62,0.06)' : ''}">
-        <div class="add-item-check">${sel ? '✓' : ''}</div>
-        <div class="add-item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
-        <div class="add-item-unit">${item.unidade || '—'}</div>
-        <div class="add-item-qty-wrap">
-          <button class="add-qty-btn" onclick="changeQtyRC('${item.id}',-1)">−</button>
-          <input class="add-qty-input" type="number" min="0.1" step="0.1" value="${qty}" onclick="this.select()" oninput="setQtyRC('${item.id}',this.value)">
-          <button class="add-qty-btn" onclick="changeQtyRC('${item.id}',1)">+</button>
-          ${sel
-            ? `<button class="add-item-btn" style="background:transparent;border-color:var(--border-subtle);color:var(--muted)" onclick="removerItemRC('${item.id}')">Remover</button>`
-            : `<button class="add-item-btn" onclick="adicionarItemRC('${item.id}')">+ Adicionar</button>`}
-        </div>
-      </div>`;
-  }).join('');
+
+  if (!CATS_COM_SUBGRUPO_RC.has(cat)) {
+    cont.innerHTML = itens.map(item => renderItemRowRC(item)).join('');
+    return;
+  }
+
+  const grupos = {};
+  itens.forEach(it => {
+    const g = (it.subcategoria && String(it.subcategoria).trim()) || 'OUTROS';
+    if (!grupos[g]) grupos[g] = [];
+    grupos[g].push(it);
+  });
+  const ordemPref = ORDEM_SUBGRUPO_RC[cat] || [];
+  const chaves = [
+    ...ordemPref.filter(g => grupos[g]),
+    ...Object.keys(grupos).filter(g => !ordemPref.includes(g)).sort(),
+  ];
+  cont.innerHTML = chaves.map(g => `
+    <div class="subgroup-head">
+      <span>${escapeHtml(g)}</span>
+      <span class="count">${grupos[g].length} ${grupos[g].length === 1 ? 'item' : 'itens'}</span>
+    </div>
+    ${grupos[g].map(item => renderItemRowRC(item)).join('')}
+  `).join('');
 }
 
 function changeQtyRC(itemId, delta) {

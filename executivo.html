@@ -35,8 +35,26 @@
     display: flex; align-items: center; justify-content: center;
   }
   .item-row.selected .item-check { background: var(--gold); border-color: var(--gold); color: #0F1117; }
-  .item-name { font-size: 14px; }
+  .item-name { font-size: 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .item-name .forn {
+    font-size: 11px; color: var(--gold);
+    background: rgba(184,150,62,0.10);
+    border: 1px solid rgba(184,150,62,0.45);
+    padding: 2px 8px; letter-spacing: 0.5px; text-transform: uppercase;
+    font-weight: 500; white-space: nowrap;
+  }
   .item-unit { font-size: 12px; color: var(--muted); width: 50px; text-align: center; }
+  .subgroup-head {
+    margin: 18px 0 8px 0; padding: 8px 14px;
+    background: rgba(184,150,62,0.08);
+    border-left: 3px solid var(--gold);
+    color: var(--gold);
+    font-family: 'Cormorant Garamond', 'Cambria', serif;
+    font-size: 16px; letter-spacing: 2px; text-transform: uppercase;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .subgroup-head:first-child { margin-top: 0; }
+  .subgroup-head .count { font-size: 11px; color: var(--muted); font-family: 'DM Sans', sans-serif; letter-spacing: 1px; }
   .item-qty-wrap { display: none; align-items: center; gap: 6px; }
   .item-row.selected .item-qty-wrap { display: flex; }
   .qty-btn { width: 26px; height: 26px; background: rgba(255,255,255,0.08); border: none; color: var(--text); font-size: 16px; cursor: pointer; }
@@ -512,29 +530,69 @@ function setCat(modo, cat) {
   renderItens(modo);
 }
 
+// Agrupamento por sub-categoria (espelha planilhas atuais da Comissaria)
+const CATS_COM_SUBGRUPO_EXEC = new Set(['proteina', 'laticinios']);
+const ORDEM_SUBGRUPO_EXEC = {
+  proteina: ['PEIXES E FRUTOS DO MAR', 'FRANGO', 'AVES', 'EMBUTIDOS', 'BOVINO/CORDEIRO/SUÍNO'],
+  laticinios: [
+    'SERRA DAS ANTAS','CAPRIL DO BOSQUE','QUEIJO DE BUFALA','IOGURTE - ATILATTE',
+    'CREME DE LEITE E NATA','RIMA','QUEIJOS','FRIOS E EMBUTIDOS','MANTEIGA',
+    'QUEIJOS VEGANOS','OVOS PASTEURIZADOS','SALGADOS','OUTROS'
+  ],
+};
+
+function renderExecItemRow(item, modo) {
+  const sel = state.selecionados[modo][item.id];
+  const qty = sel ? sel.qty : 1;
+  const media = item.media_diaria || 0;
+  const alerta = sel && media > 0 && qty > media * 3
+    ? `<span class="text-orange" style="font-size:11px">⚠ ${(qty/media).toFixed(1)}× média</span>` : '';
+  return `<div class="item-row ${sel?'selected':''}" onclick="toggleItem('${modo}','${item.id}')">
+    <div class="item-check">${sel?'✓':''}</div>
+    <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''} ${alerta}</div>
+    <div class="item-unit">${item.unidade}</div>
+    <div class="item-qty-wrap" onclick="event.stopPropagation()">
+      <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',-1)">−</button>
+      <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQty('${modo}','${item.id}',this.value)">
+      <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',1)">+</button>
+    </div>
+  </div>`;
+}
+
 function renderItens(modo) {
   const cat = state.catAtual[modo];
   const q = (document.getElementById(`${modo}-search`).value || '').toLowerCase();
-  const itens = state.catalogo.filter(i => i.categoria === cat && (!q || i.nome.toLowerCase().includes(q)));
+  const itens = state.catalogo.filter(i =>
+    i.categoria === cat && (!q || i.nome.toLowerCase().includes(q) ||
+      (i.fornecedor_principal || '').toLowerCase().includes(q))
+  );
   const cont = document.getElementById(`${modo}-items`);
-  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
-  cont.innerHTML = itens.map(item => {
-    const sel = state.selecionados[modo][item.id];
-    const qty = sel ? sel.qty : 1;
-    const media = item.media_diaria || 0;
-    const alerta = sel && media > 0 && qty > media * 3
-      ? `<span class="text-orange" style="font-size:11px">⚠ ${(qty/media).toFixed(1)}× média</span>` : '';
-    return `<div class="item-row ${sel?'selected':''}" onclick="toggleItem('${modo}','${item.id}')">
-      <div class="item-check">${sel?'✓':''}</div>
-      <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span style="font-size:11px;color:var(--muted);margin-left:8px">${escapeHtml(item.fornecedor_principal)}</span>` : ''} ${alerta}</div>
-      <div class="item-unit">${item.unidade}</div>
-      <div class="item-qty-wrap" onclick="event.stopPropagation()">
-        <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',-1)">−</button>
-        <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQty('${modo}','${item.id}',this.value)">
-        <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',1)">+</button>
-      </div>
-    </div>`;
-  }).join('');
+  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarExecCartBar(); return; }
+
+  if (!CATS_COM_SUBGRUPO_EXEC.has(cat)) {
+    cont.innerHTML = itens.map(item => renderExecItemRow(item, modo)).join('');
+    atualizarExecCartBar();
+    return;
+  }
+
+  const grupos = {};
+  itens.forEach(it => {
+    const g = (it.subcategoria && String(it.subcategoria).trim()) || 'OUTROS';
+    if (!grupos[g]) grupos[g] = [];
+    grupos[g].push(it);
+  });
+  const ordemPref = ORDEM_SUBGRUPO_EXEC[cat] || [];
+  const chaves = [
+    ...ordemPref.filter(g => grupos[g]),
+    ...Object.keys(grupos).filter(g => !ordemPref.includes(g)).sort(),
+  ];
+  cont.innerHTML = chaves.map(g => `
+    <div class="subgroup-head">
+      <span>${escapeHtml(g)}</span>
+      <span class="count">${grupos[g].length} ${grupos[g].length === 1 ? 'item' : 'itens'}</span>
+    </div>
+    ${grupos[g].map(item => renderExecItemRow(item, modo)).join('')}
+  `).join('');
   atualizarExecCartBar();
 }
 

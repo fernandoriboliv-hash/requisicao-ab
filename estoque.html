@@ -50,17 +50,43 @@
     padding: 6px 8px; text-align: center; outline: none;
   }
   .qty-entrega:focus { border-color: rgba(184,150,62,0.4); }
-  .motivo-input {
-    width: 100%; max-width: 280px;
-    background: rgba(224,82,82,0.06); border: 1px solid rgba(224,82,82,0.2);
-    color: var(--text); font-family: inherit; font-size: 12px;
-    padding: 6px 8px; outline: none; display: none;
+  /* Divergência de requisição: motivos pré-definidos + observação opcional */
+  .motivo-wrap {
+    display: none; flex-direction: column; gap: 6px; max-width: 340px;
   }
-  .motivo-input.visible { display: block; }
-  .motivo-input.pulse {
-    animation: motivoPulse 0.6s ease 0s 2;
+  .motivo-wrap.visible { display: flex; }
+  .motivo-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+  .motivo-btn {
+    background: rgba(224,82,82,0.06);
+    border: 1px solid rgba(224,82,82,0.3);
+    color: var(--text);
+    font-family: inherit; font-size: 11px;
+    padding: 6px 10px; cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
+  }
+  .motivo-btn:hover {
+    background: rgba(224,82,82,0.14);
+    border-color: rgba(224,82,82,0.55);
+  }
+  .motivo-btn.selected {
+    background: var(--c-proteina);
     border-color: var(--c-proteina);
-    box-shadow: 0 0 0 2px rgba(224,82,82,0.15);
+    color: #FFFFFF;
+    font-weight: 500;
+  }
+  .motivo-obs {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-subtle);
+    color: var(--text);
+    font-family: inherit; font-size: 11px;
+    padding: 5px 8px; outline: none;
+  }
+  .motivo-obs::placeholder { color: var(--muted2); font-style: italic; }
+  .motivo-wrap.pulse .motivo-btns {
+    animation: motivoPulse 0.6s ease 0s 2;
   }
   @keyframes motivoPulse {
     0%, 100% { transform: scale(1); }
@@ -423,20 +449,38 @@
      Negrito somente no nome do item; botões condensados só ícone
      ============================================================ */
 
-  /* Fornecedor no nome do item — aparece só no desktop, muted */
+  /* Fornecedor — badge dourado visível em todas as telas (mobile e desktop) */
   .item-name .forn {
-    display: block;
-    margin-top: 2px;
+    display: inline-block;
+    margin-top: 4px;
     font-size: 11px;
-    font-weight: 400;
-    color: var(--muted);
-    text-transform: none;
-    letter-spacing: 0;
+    font-weight: 500;
+    color: var(--gold);
+    background: rgba(184,150,62,0.10);
+    border: 1px solid rgba(184,150,62,0.45);
+    padding: 2px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
   }
 
+  /* Cabeçalho de sub-grupo (fornecedor/sub-categoria) — segue formato da planilha */
+  .subgroup-head {
+    margin: 18px 0 8px 0; padding: 8px 14px;
+    background: rgba(184,150,62,0.08);
+    border-left: 3px solid var(--gold);
+    color: var(--gold);
+    font-family: 'Cormorant Garamond', 'Cambria', serif;
+    font-size: 16px; letter-spacing: 2px; text-transform: uppercase;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .subgroup-head:first-child { margin-top: 0; }
+  .subgroup-head .count { font-size: 11px; color: var(--muted); font-family: 'DM Sans', sans-serif; letter-spacing: 1px; }
+
   @media (max-width: 900px) {
-    /* Suprime nome do fornecedor no mobile */
-    .item-name .forn { display: none; }
+    /* Fornecedor mobile: badge um pouco menor */
+    .item-name .forn { font-size: 10px; padding: 1px 6px; }
+    .subgroup-head { font-size: 14px; letter-spacing: 1.5px; padding: 6px 10px; }
 
     /* Nomes de itens em negrito (única coisa em negrito) */
     .item-name       { font-size: 16px; font-weight: 600; }
@@ -1251,7 +1295,16 @@ function renderFila() {
           </td>
           <td>${entregue && it.divergencia
             ? `<span class="text-error" style="font-size:12px">⚠ ${escapeHtml(it.motivo_divergencia || 'Divergência')}</span>`
-            : (!entregue ? `<input class="motivo-input" placeholder="Motivo da divergência..." id="mot-${r.id}-${idx}">` : '—')}
+            : (!entregue ? `
+              <div class="motivo-wrap" id="motw-${r.id}-${idx}">
+                <div class="motivo-btns">
+                  <button type="button" class="motivo-btn" data-motivo="Estoque Zerado" onclick="setMotivo('${r.id}',${idx},'Estoque Zerado')">Estoque Zerado</button>
+                  <button type="button" class="motivo-btn" data-motivo="Quantidade Insuficiente" onclick="setMotivo('${r.id}',${idx},'Quantidade Insuficiente')">Quantidade Insuficiente</button>
+                  <button type="button" class="motivo-btn" data-motivo="Ajuste de Peso" onclick="setMotivo('${r.id}',${idx},'Ajuste de Peso')">Ajuste de Peso</button>
+                </div>
+                <input class="motivo-obs" type="text" placeholder="Observação (opcional)..." id="motobs-${r.id}-${idx}">
+                <input type="hidden" id="mot-${r.id}-${idx}" value="">
+              </div>` : '—')}
           </td>
         </tr>`;
     }).join('');
@@ -1289,10 +1342,20 @@ function toggleDetail(id) {
 }
 
 function checkDiv(reqId, idx, solic, val) {
-  const motInput = document.getElementById(`mot-${reqId}-${idx}`);
-  if (!motInput) return;
-  if (parseFloat(val) !== parseFloat(solic)) motInput.classList.add('visible');
-  else motInput.classList.remove('visible');
+  const wrap = document.getElementById(`motw-${reqId}-${idx}`);
+  if (!wrap) return;
+  if (parseFloat(val) !== parseFloat(solic)) wrap.classList.add('visible');
+  else wrap.classList.remove('visible');
+}
+
+function setMotivo(reqId, idx, motivo) {
+  const wrap = document.getElementById(`motw-${reqId}-${idx}`);
+  if (!wrap) return;
+  wrap.querySelectorAll('.motivo-btn').forEach(b => b.classList.remove('selected'));
+  const btn = wrap.querySelector(`[data-motivo="${motivo}"]`);
+  if (btn) btn.classList.add('selected');
+  const hidden = document.getElementById(`mot-${reqId}-${idx}`);
+  if (hidden) hidden.value = motivo;
 }
 
 async function marcarSeparacao(id) {
@@ -1306,21 +1369,21 @@ async function registrarEntrega(reqId) {
   if (!req) return;
   const itens = req.requisicao_itens || [];
 
-  // Validar divergências antes de submeter: toda divergência precisa de motivo.
+  // Validar divergências antes de submeter: toda divergência precisa de motivo pré-definido.
   for (let idx = 0; idx < itens.length; idx++) {
     const it = itens[idx];
     const qeEl = document.getElementById(`qe-${reqId}-${idx}`);
     const motEl = document.getElementById(`mot-${reqId}-${idx}`);
+    const wrapEl = document.getElementById(`motw-${reqId}-${idx}`);
     const qEntregue = qeEl ? parseFloat(qeEl.value) : parseFloat(it.quantidade_solicitada);
     const divergencia = qEntregue !== parseFloat(it.quantidade_solicitada);
     const motivo = motEl?.value.trim() || '';
     if (divergencia && !motivo) {
-      showToast(`Informe o motivo da divergência para "${it.item_nome}".`, 'error');
-      if (motEl) {
-        motEl.classList.add('visible', 'pulse');
-        motEl.focus();
-        motEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => motEl.classList.remove('pulse'), 1500);
+      showToast(`Selecione o motivo da divergência para "${it.item_nome}".`, 'error');
+      if (wrapEl) {
+        wrapEl.classList.add('visible', 'pulse');
+        wrapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => wrapEl.classList.remove('pulse'), 1500);
       }
       return;
     }
@@ -1331,13 +1394,16 @@ async function registrarEntrega(reqId) {
     const it = itens[idx];
     const qeEl = document.getElementById(`qe-${reqId}-${idx}`);
     const motEl = document.getElementById(`mot-${reqId}-${idx}`);
+    const obsEl = document.getElementById(`motobs-${reqId}-${idx}`);
     const qEntregue = qeEl ? parseFloat(qeEl.value) : parseFloat(it.quantidade_solicitada);
-    const motivo = motEl?.value.trim() || null;
+    const motivoBase = motEl?.value.trim() || '';
+    const obs = obsEl?.value.trim() || '';
+    const motivoFinal = motivoBase + (obs ? ' — ' + obs : '');
     const divergencia = qEntregue !== parseFloat(it.quantidade_solicitada);
     await sb.from('requisicao_itens').update({
       quantidade_entregue: qEntregue,
       divergencia,
-      motivo_divergencia: divergencia ? motivo : null,
+      motivo_divergencia: divergencia ? motivoFinal : null,
     }).eq('id', it.id);
   }
   await sb.from('requisicoes').update({
@@ -1375,31 +1441,71 @@ function setCatManual(cat) {
   renderItensManual();
 }
 
+// Agrupamento por sub-categoria (espelha planilhas atuais da Comissaria)
+const CATS_COM_SUBGRUPO_EST = new Set(['proteina', 'laticinios']);
+const ORDEM_SUBGRUPO_EST = {
+  proteina: ['PEIXES E FRUTOS DO MAR', 'FRANGO', 'AVES', 'EMBUTIDOS', 'BOVINO/CORDEIRO/SUÍNO'],
+  laticinios: [
+    'SERRA DAS ANTAS','CAPRIL DO BOSQUE','QUEIJO DE BUFALA','IOGURTE - ATILATTE',
+    'CREME DE LEITE E NATA','RIMA','QUEIJOS','FRIOS E EMBUTIDOS','MANTEIGA',
+    'QUEIJOS VEGANOS','OVOS PASTEURIZADOS','SALGADOS','OUTROS'
+  ],
+};
+
+function renderItemRowManual(item) {
+  const sel = state.manual.selecionados[item.id];
+  const qty = sel ? sel.qty : (state.manual.qtdInputs[item.id] ?? 1);
+  return `
+    <div class="item-row ${sel ? 'selected' : ''}" id="mrow-${item.id}">
+      <div class="item-check">${sel ? '✓' : ''}</div>
+      <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+      <div class="item-unit">${item.unidade}</div>
+      <div class="item-actions-cell">
+        <div class="item-qty-wrap">
+          <button class="qty-btn" onclick="changeQtyManual('${item.id}',-1)">−</button>
+          <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" oninput="setQtyManual('${item.id}',this.value)" onclick="this.select()">
+          <button class="qty-btn" onclick="changeQtyManual('${item.id}',1)">+</button>
+        </div>
+        <button class="item-action add" onclick="adicionarManual('${item.id}')">+ Adicionar</button>
+        <button class="item-action remove" onclick="removerManual('${item.id}')">Remover</button>
+      </div>
+    </div>`;
+}
+
 function renderItensManual() {
   const cat = state.manual.cat;
   const q = (document.getElementById('m-search').value || '').toLowerCase();
-  const itens = state.catalogo.filter(i => i.categoria === cat && (!q || i.nome.toLowerCase().includes(q)));
+  const itens = state.catalogo.filter(i =>
+    i.categoria === cat &&
+    (!q || i.nome.toLowerCase().includes(q) || (i.fornecedor_principal || '').toLowerCase().includes(q))
+  );
   const cont = document.getElementById('m-items');
-  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
-  cont.innerHTML = itens.map(item => {
-    const sel = state.manual.selecionados[item.id];
-    const qty = sel ? sel.qty : (state.manual.qtdInputs[item.id] ?? 1);
-    return `
-      <div class="item-row ${sel ? 'selected' : ''}" id="mrow-${item.id}">
-        <div class="item-check">${sel ? '✓' : ''}</div>
-        <div class="item-name">${escapeHtml(item.nome)}</div>
-        <div class="item-unit">${item.unidade}</div>
-        <div class="item-actions-cell">
-          <div class="item-qty-wrap">
-            <button class="qty-btn" onclick="changeQtyManual('${item.id}',-1)">−</button>
-            <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" oninput="setQtyManual('${item.id}',this.value)" onclick="this.select()">
-            <button class="qty-btn" onclick="changeQtyManual('${item.id}',1)">+</button>
-          </div>
-          <button class="item-action add" onclick="adicionarManual('${item.id}')">+ Adicionar</button>
-          <button class="item-action remove" onclick="removerManual('${item.id}')">Remover</button>
-        </div>
-      </div>`;
-  }).join('');
+  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarManualCartBar(); return; }
+
+  if (!CATS_COM_SUBGRUPO_EST.has(cat)) {
+    cont.innerHTML = itens.map(item => renderItemRowManual(item)).join('');
+    atualizarManualCartBar();
+    return;
+  }
+
+  const grupos = {};
+  itens.forEach(it => {
+    const g = (it.subcategoria && String(it.subcategoria).trim()) || 'OUTROS';
+    if (!grupos[g]) grupos[g] = [];
+    grupos[g].push(it);
+  });
+  const ordemPref = ORDEM_SUBGRUPO_EST[cat] || [];
+  const chaves = [
+    ...ordemPref.filter(g => grupos[g]),
+    ...Object.keys(grupos).filter(g => !ordemPref.includes(g)).sort(),
+  ];
+  cont.innerHTML = chaves.map(g => `
+    <div class="subgroup-head">
+      <span>${escapeHtml(g)}</span>
+      <span class="count">${grupos[g].length} ${grupos[g].length === 1 ? 'item' : 'itens'}</span>
+    </div>
+    ${grupos[g].map(item => renderItemRowManual(item)).join('')}
+  `).join('');
   atualizarManualCartBar();
 }
 
@@ -1612,32 +1718,60 @@ function setCatCompra(cat) {
   renderItensCompra();
 }
 
+function renderItemRowCompra(item) {
+  const sel = state.compra.selecionados[item.id];
+  const qty = sel ? sel.qty : (state.compra.qtdInputs[item.id] ?? 1);
+  return `
+    <div class="item-row ${sel ? 'selected' : ''}" id="crow-${item.id}">
+      <div class="item-check">${sel ? '✓' : ''}</div>
+      <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+      <div class="item-unit">${item.unidade}</div>
+      <div class="item-actions-cell">
+        <div class="item-qty-wrap">
+          <button class="qty-btn" onclick="changeQtyCompra('${item.id}',-1)">−</button>
+          <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" oninput="setQtyCompra('${item.id}',this.value)" onclick="this.select()">
+          <button class="qty-btn" onclick="changeQtyCompra('${item.id}',1)">+</button>
+        </div>
+        <button class="item-action add" onclick="adicionarCompra('${item.id}')">+ Adicionar</button>
+        <button class="item-action remove" onclick="removerCompra('${item.id}')">Remover</button>
+      </div>
+    </div>`;
+}
+
 function renderItensCompra() {
   const cat = state.compra.cat;
   const q = (document.getElementById('c-search').value || '').toLowerCase();
-  const itens = state.catalogo.filter(i => i.categoria === cat && (!q || i.nome.toLowerCase().includes(q)));
+  const itens = state.catalogo.filter(i =>
+    i.categoria === cat &&
+    (!q || i.nome.toLowerCase().includes(q) || (i.fornecedor_principal || '').toLowerCase().includes(q))
+  );
   const cont = document.getElementById('c-items');
-  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
-  cont.innerHTML = itens.map(item => {
-    const sel = state.compra.selecionados[item.id];
-    // Persiste qty digitado mesmo sem adicionar (state.compra.qtdInputs)
-    const qty = sel ? sel.qty : (state.compra.qtdInputs[item.id] ?? 1);
-    return `
-      <div class="item-row ${sel ? 'selected' : ''}" id="crow-${item.id}">
-        <div class="item-check">${sel ? '✓' : ''}</div>
-        <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
-        <div class="item-unit">${item.unidade}</div>
-        <div class="item-actions-cell">
-          <div class="item-qty-wrap">
-            <button class="qty-btn" onclick="changeQtyCompra('${item.id}',-1)">−</button>
-            <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" oninput="setQtyCompra('${item.id}',this.value)" onclick="this.select()">
-            <button class="qty-btn" onclick="changeQtyCompra('${item.id}',1)">+</button>
-          </div>
-          <button class="item-action add" onclick="adicionarCompra('${item.id}')">+ Adicionar</button>
-          <button class="item-action remove" onclick="removerCompra('${item.id}')">Remover</button>
-        </div>
-      </div>`;
-  }).join('');
+  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarCompraCartBar(); return; }
+
+  if (!CATS_COM_SUBGRUPO_EST.has(cat)) {
+    cont.innerHTML = itens.map(item => renderItemRowCompra(item)).join('');
+    atualizarCompraCartBar();
+    return;
+  }
+
+  const grupos = {};
+  itens.forEach(it => {
+    const g = (it.subcategoria && String(it.subcategoria).trim()) || 'OUTROS';
+    if (!grupos[g]) grupos[g] = [];
+    grupos[g].push(it);
+  });
+  const ordemPref = ORDEM_SUBGRUPO_EST[cat] || [];
+  const chaves = [
+    ...ordemPref.filter(g => grupos[g]),
+    ...Object.keys(grupos).filter(g => !ordemPref.includes(g)).sort(),
+  ];
+  cont.innerHTML = chaves.map(g => `
+    <div class="subgroup-head">
+      <span>${escapeHtml(g)}</span>
+      <span class="count">${grupos[g].length} ${grupos[g].length === 1 ? 'item' : 'itens'}</span>
+    </div>
+    ${grupos[g].map(item => renderItemRowCompra(item)).join('')}
+  `).join('');
   atualizarCompraCartBar();
 }
 

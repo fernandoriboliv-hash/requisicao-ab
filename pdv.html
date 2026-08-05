@@ -57,9 +57,37 @@
     display: flex; align-items: center; justify-content: center;
   }
   .item-row.selected .item-check { background: var(--gold); border-color: var(--gold); color: #0F1117; }
-  .item-name { font-size: 14px; }
-  .item-name .forn { font-size: 11px; color: var(--muted); margin-left: 8px; }
+  .item-name { font-size: 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .item-name .forn {
+    font-size: 11px;
+    color: var(--gold);
+    background: rgba(184,150,62,0.10);
+    border: 1px solid rgba(184,150,62,0.45);
+    padding: 2px 8px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-weight: 500;
+    white-space: nowrap;
+  }
   .item-unit { font-size: 12px; color: var(--muted); width: 50px; text-align: center; }
+
+  /* Cabeçalho de sub-grupo (fornecedor ou sub-categoria) dentro da lista */
+  .subgroup-head {
+    margin: 18px 0 8px 0;
+    padding: 8px 14px;
+    background: rgba(184,150,62,0.08);
+    border-left: 3px solid var(--gold);
+    color: var(--gold);
+    font-family: 'Cormorant Garamond', 'Cambria', serif;
+    font-size: 16px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .subgroup-head:first-child { margin-top: 0; }
+  .subgroup-head .count { font-size: 11px; color: var(--muted); font-family: 'DM Sans', sans-serif; letter-spacing: 1px; }
   /* Qty sempre visível — usuário define a quantidade ANTES de clicar Adicionar */
   .item-qty-wrap { display: flex; align-items: center; gap: 6px; }
 
@@ -619,6 +647,54 @@ async function carregarNiveisEstoque() {
   });
 }
 
+// Categorias que usam agrupamento por sub-categoria (espelhando planilhas atuais da Comissaria)
+const CATS_COM_SUBGRUPO = new Set(['proteina', 'laticinios']);
+
+// Ordem preferida de exibição dos sub-grupos (pra ficar igual à planilha)
+const ORDEM_SUBGRUPO = {
+  proteina: ['PEIXES E FRUTOS DO MAR', 'FRANGO', 'AVES', 'EMBUTIDOS', 'BOVINO/CORDEIRO/SUÍNO'],
+  laticinios: [
+    'SERRA DAS ANTAS','CAPRIL DO BOSQUE','QUEIJO DE BUFALA','IOGURTE - ATILATTE',
+    'CREME DE LEITE E NATA','RIMA','QUEIJOS','FRIOS E EMBUTIDOS','MANTEIGA',
+    'QUEIJOS VEGANOS','OVOS PASTEURIZADOS','SALGADOS','OUTROS'
+  ],
+};
+
+function renderItemRow(item, aba) {
+  const sel = state.selecionados[aba][item.id];
+  const qty = sel ? sel.qty : 1;
+  const com = sel ? (sel.comentario || '') : '';
+  const alerta = sel && item.media_diaria > 0 && qty > item.media_diaria * 3
+    ? `<span class="qty-alert">⚠ ${(qty / item.media_diaria).toFixed(1)}× a média histórica</span>` : '';
+  let estoqueBadge = '';
+  if (aba === 'req') {
+    if (state.estoqueCritico.has(item.id)) {
+      estoqueBadge = ` <span class="est-badge est-red" title="Estoque crítico na Comissaria — considere compra externa">⚠ estoque crítico</span>`;
+    } else if (state.estoqueAmarelo.has(item.id)) {
+      estoqueBadge = ` <span class="est-badge est-yellow" title="Estoque baixo na Comissaria">⚠ estoque baixo</span>`;
+    }
+  }
+  return `
+    <div class="item-row ${sel ? 'selected' : ''}" id="row-${aba}-${item.id}">
+      <div class="item-check">${sel ? '✓' : ''}</div>
+      <div class="item-name">${escapeHtml(item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+      <div class="item-unit">${item.unidade}</div>
+      <div class="item-actions-cell">
+        <div class="item-qty-wrap">
+          <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',-1)">−</button>
+          <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQty('${aba}','${item.id}',this.value)" onclick="this.select()">
+          <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',1)">+</button>
+        </div>
+        ${alerta}
+        <button class="item-action add" onclick="adicionarItem('${aba}','${item.id}')">+ Adicionar</button>
+        <button class="item-action remove" onclick="removerItem('${aba}','${item.id}')">Remover</button>
+      </div>
+      <div class="item-coment">
+        <input placeholder="Comentário sobre este item (opcional)..." value="${escapeHtml(com)}" onchange="setComentario('${aba}','${item.id}',this.value)">
+      </div>
+    </div>`;
+}
+
 function renderItens(aba) {
   const cat = state.catAtual[aba];
   const q = (document.getElementById(`${aba}-search`).value || '').toLowerCase();
@@ -634,41 +710,34 @@ function renderItens(aba) {
     return;
   }
 
-  cont.innerHTML = itens.map(item => {
-    const sel = state.selecionados[aba][item.id];
-    const qty = sel ? sel.qty : 1;
-    const com = sel ? (sel.comentario || '') : '';
-    const alerta = sel && item.media_diaria > 0 && qty > item.media_diaria * 3
-      ? `<span class="qty-alert">⚠ ${(qty / item.media_diaria).toFixed(1)}× a média histórica</span>` : '';
-    // Alerta de estoque crítico (só na aba requisição — Comissaria fornece).
-    let estoqueBadge = '';
-    if (aba === 'req') {
-      if (state.estoqueCritico.has(item.id)) {
-        estoqueBadge = ` <span class="est-badge est-red" title="Estoque crítico na Comissaria — considere compra externa">⚠ estoque crítico</span>`;
-      } else if (state.estoqueAmarelo.has(item.id)) {
-        estoqueBadge = ` <span class="est-badge est-yellow" title="Estoque baixo na Comissaria">⚠ estoque baixo</span>`;
-      }
-    }
-    return `
-      <div class="item-row ${sel ? 'selected' : ''}" id="row-${aba}-${item.id}">
-        <div class="item-check">${sel ? '✓' : ''}</div>
-        <div class="item-name">${escapeHtml(item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
-        <div class="item-unit">${item.unidade}</div>
-        <div class="item-actions-cell">
-          <div class="item-qty-wrap">
-            <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',-1)">−</button>
-            <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQty('${aba}','${item.id}',this.value)" onclick="this.select()">
-            <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',1)">+</button>
-          </div>
-          ${alerta}
-          <button class="item-action add" onclick="adicionarItem('${aba}','${item.id}')">+ Adicionar</button>
-          <button class="item-action remove" onclick="removerItem('${aba}','${item.id}')">Remover</button>
-        </div>
-        <div class="item-coment">
-          <input placeholder="Comentário sobre este item (opcional)..." value="${escapeHtml(com)}" onchange="setComentario('${aba}','${item.id}',this.value)">
-        </div>
-      </div>`;
-  }).join('');
+  // Categorias sem sub-grupo: layout linear (hortifruti, diversos)
+  if (!CATS_COM_SUBGRUPO.has(cat)) {
+    cont.innerHTML = itens.map(item => renderItemRow(item, aba)).join('');
+    return;
+  }
+
+  // Categorias com sub-grupo: agrupa por item.subcategoria (fallback: "OUTROS")
+  const grupos = {};
+  itens.forEach(it => {
+    const g = (it.subcategoria && String(it.subcategoria).trim()) || 'OUTROS';
+    if (!grupos[g]) grupos[g] = [];
+    grupos[g].push(it);
+  });
+
+  // Ordena por ordem preferida; quaisquer novos grupos vão no fim
+  const ordemPref = ORDEM_SUBGRUPO[cat] || [];
+  const chavesOrdenadas = [
+    ...ordemPref.filter(g => grupos[g]),
+    ...Object.keys(grupos).filter(g => !ordemPref.includes(g)).sort(),
+  ];
+
+  cont.innerHTML = chavesOrdenadas.map(g => `
+    <div class="subgroup-head">
+      <span>${escapeHtml(g)}</span>
+      <span class="count">${grupos[g].length} ${grupos[g].length === 1 ? 'item' : 'itens'}</span>
+    </div>
+    ${grupos[g].map(item => renderItemRow(item, aba)).join('')}
+  `).join('');
 }
 
 function setCat(aba, cat) {
