@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recebimento — Rosewood A&B</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+  /* Card de PO aguardando chegada */
+  .po-card {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    margin-bottom: 12px;
+  }
+  .po-card.hoje    { border-left: 3px solid var(--orange); }
+  .po-card.atraso  { border-left: 3px solid var(--error); }
+  .po-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 18px; flex-wrap: wrap;
+  }
+  .po-numero {
+    font-family: 'Courier New', monospace; font-size: 15px;
+    color: var(--gold); letter-spacing: 1px;
+  }
+  .po-forn { font-size: 15px; flex: 1; min-width: 150px; }
+  .po-info { font-size: 12px; color: var(--muted); }
+
+  /* Linha de conferência — o equivalente ao marca-texto na lista impressa */
+  .conf-linha {
+    display: grid; grid-template-columns: 44px 1fr 110px 130px;
+    align-items: center; gap: 12px;
+    padding: 12px 14px; border-bottom: 1px solid var(--border-subtle);
+  }
+  .conf-linha:last-child { border-bottom: none; }
+  .conf-linha.ok        { background: rgba(76,175,125,0.07); }
+  .conf-linha.divergente{ background: rgba(224,82,82,0.07); }
+
+  /* Caixa grande — precisa funcionar com a mão ocupada, na doca */
+  .conf-check {
+    width: 34px; height: 34px; cursor: pointer;
+    border: 2px solid var(--muted2); background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: transparent; transition: all 0.12s;
+  }
+  .conf-check:hover { border-color: var(--gold); }
+  .conf-check.on {
+    background: var(--green); border-color: var(--green); color: #0F1117;
+  }
+  .conf-nome { font-size: 15px; }
+  .conf-pedido { font-size: 12px; color: var(--muted); }
+  .conf-qtd-wrap { display: flex; align-items: center; gap: 6px; }
+  .conf-qtd {
+    width: 76px; text-align: center;
+    background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle);
+    color: var(--text); font-family: inherit; font-size: 15px;
+    padding: 8px 4px; outline: none;
+  }
+  .conf-qtd:focus { border-color: rgba(184,150,62,0.5); }
+  .conf-qtd.difere { border-color: var(--error); color: var(--error); }
+
+  .conf-motivo {
+    grid-column: 2 / -1; margin-top: 8px;
+    display: none;
+  }
+  .conf-motivo.show { display: block; }
+  .conf-motivo input {
+    width: 100%; background: rgba(224,82,82,0.06);
+    border: 1px solid rgba(224,82,82,0.3); color: var(--text);
+    font-family: inherit; font-size: 13px; padding: 8px 10px; outline: none;
+  }
+
+  /* Bloco da nota fiscal — a regra de aceite do hotel */
+  .nf-box {
+    background: var(--panel); border: 1px solid var(--gold);
+    padding: 16px 18px; margin: 16px 0;
+  }
+  .nf-linha {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 8px 0; font-size: 14px;
+  }
+  .nf-linha + .nf-linha { border-top: 1px solid var(--border-subtle); }
+  .nf-valor { font-variant-numeric: tabular-nums; font-size: 16px; }
+  .nf-veredito {
+    margin-top: 12px; padding: 12px 14px; text-align: center;
+    font-size: 14px; letter-spacing: 0.5px;
+  }
+  .nf-veredito.bate    { background: rgba(76,175,125,0.15); color: var(--green); }
+  .nf-veredito.difere  { background: rgba(224,82,82,0.15);  color: var(--error); }
+  .nf-veredito.pendente{ background: rgba(255,255,255,0.05); color: var(--muted); }
+
+  .prazo-pill { display:inline-block; padding:2px 10px; font-size:11px; letter-spacing:0.5px; }
+  .prazo-hoje   { background: rgba(224,140,62,0.15); color: var(--orange); }
+  .prazo-atraso { background: rgba(224,82,82,0.15);  color: var(--error); }
+  .prazo-futuro { background: rgba(255,255,255,0.06); color: var(--muted); }
+
+  .flag-off {
+    background: rgba(224,140,62,0.1); border: 1px solid var(--orange);
+    padding: 10px 14px; font-size: 12px; color: var(--orange); margin-bottom: 16px;
+  }
+
+  body { padding-bottom: 80px; }
+
+  @media (max-width: 700px) {
+    .conf-linha {
+      grid-template-columns: 44px 1fr;
+      grid-template-areas: "check nome" "check qtd" "motivo motivo";
+      row-gap: 8px;
+    }
+    .conf-check   { grid-area: check; }
+    .conf-nome-wrap { grid-area: nome; }
+    .conf-qtd-wrap  { grid-area: qtd; }
+    .conf-motivo    { grid-area: motivo; grid-column: 1 / -1; }
+    .conf-qtd { width: 90px; font-size: 16px; padding: 10px 4px; }
+    .conf-check { width: 40px; height: 40px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="name">Rosewood</div>
+    <div class="sub">A&amp;B · Recebimento</div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-item active" onclick="goTab('chegar',this)">
+      <span class="nav-icon">▼</span> A Receber
+      <span class="nav-badge" id="badgeChegar"></span>
+    </div>
+    <div class="nav-item" onclick="goTab('recebidos',this)"><span class="nav-icon">✓</span> Recebidos</div>
+    <div class="nav-item" onclick="goTab('divergencias',this)">
+      <span class="nav-icon">△</span> Divergências
+      <span class="nav-badge" id="badgeDiv"></span>
+    </div>
+  </div>
+  <div class="sidebar-foot">
+    <div class="name" id="userName">—</div>
+    <button class="logout-btn" onclick="logout()">Sair do sistema</button>
+  </div>
+</nav>
+
+<div class="sidebar-overlay" id="sbOverlay" onclick="toggleSidebar()"></div>
+
+<div class="main-with-sidebar">
+  <div class="top-bar">
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Abrir menu">☰</button>
+    <div class="top-bar-hero">
+      <div class="top-title" id="topTitle">A Receber</div>
+      <div class="top-sub" id="topSub">Pedidos com entrega prevista</div>
+    </div>
+  </div>
+
+  <!-- ================= A RECEBER ================= -->
+  <div class="tab-content active" id="tab-chegar">
+    <div class="main full">
+      <div id="avisoFlag"></div>
+
+      <div class="stats-grid mb-3">
+        <div class="stat-card"><div class="stat-label">Atrasados</div><div class="stat-val error" id="stAtraso">—</div><div class="stat-sub">passou da data</div></div>
+        <div class="stat-card"><div class="stat-label">Hoje</div><div class="stat-val" id="stHoje">—</div><div class="stat-sub">chegam hoje</div></div>
+        <div class="stat-card"><div class="stat-label">Próximos dias</div><div class="stat-val" id="stFuturo">—</div><div class="stat-sub">a caminho</div></div>
+      </div>
+
+      <div class="section-title"><span>Pedidos aguardando chegada</span></div>
+      <div id="chegarContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ================= RECEBIDOS ================= -->
+  <div class="tab-content" id="tab-recebidos">
+    <div class="main full">
+      <div class="filters-bar mb-3" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label class="field-label" style="margin:0">De</label>
+        <input class="input" type="date" id="r-de" style="max-width:160px">
+        <label class="field-label" style="margin:0">Até</label>
+        <input class="input" type="date" id="r-ate" style="max-width:160px">
+        <button class="btn btn-sm btn-primary" onclick="carregarRecebidos()">Buscar</button>
+      </div>
+      <div id="recebidosContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ================= DIVERGÊNCIAS ================= -->
+  <div class="tab-content" id="tab-divergencias">
+    <div class="main full">
+      <div class="aviso aviso-info">
+        Recebimentos aceitos com ressalva ou recusados. O Comprador usa esta lista
+        para cobrar o fornecedor.
+      </div>
+      <div id="divContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: conferência ============ -->
+<div class="modal-overlay" id="confModal">
+  <div class="modal" style="width:820px">
+    <div class="modal-header">
+      <span id="confTitle">Conferir recebimento</span>
+      <button class="modal-close" onclick="fecharModal('confModal')">✕</button>
+    </div>
+    <div class="modal-body" id="confBody"><div class="loading-text">Carregando...</div></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('confModal')">Voltar</button>
+      <button class="btn btn-danger" id="btnRecusar" onclick="finalizar('recusado')">Recusar carga</button>
+      <button class="btn btn-primary" id="btnAceitar" onclick="finalizar('aceito')">Aceitar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const state = {
+  user: null, perfil: null,
+  ordens: [],
+  config: {},
+  conf: null,       // { ordem, itens: [{...}] } — conferência em andamento
+  salvando: false,
+};
+
+// =====================================================================
+// INIT
+// =====================================================================
+window.addEventListener('load', async () => {
+  instalarAvisoConexao();
+
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { window.location.href = 'index.html'; return; }
+  state.user = user;
+
+  const { data: perfil } = await sb.from('usuarios')
+    .select('id, perfil, nome').eq('auth_uid', user.id).single();
+
+  const permitidos = ['recebimento', 'estoque', 'gerente_compras', 'master_sistema'];
+  if (!perfil || !permitidos.includes(perfil.perfil)) {
+    window.location.href = 'index.html'; return;
+  }
+  state.perfil = perfil;
+  document.getElementById('userName').textContent = perfil.nome || '—';
+
+  const hoje = new Date(), semanaAtras = new Date(); semanaAtras.setDate(hoje.getDate() - 7);
+  document.getElementById('r-de').value  = isoDate(semanaAtras);
+  document.getElementById('r-ate').value = isoDate(hoje);
+
+  await carregarConfig();
+  await carregarAChegar();
+});
+
+async function carregarConfig() {
+  const { data } = await sb.from('configuracoes_sistema').select('chave, valor');
+  (data || []).forEach(c => state.config[c.chave] = c.valor);
+
+  // Deixa explícito que o estoque não está sendo alterado durante os testes
+  const ligado = state.config.entrada_automatica_estoque === 'true';
+  document.getElementById('avisoFlag').innerHTML = ligado ? '' : `
+    <div class="flag-off">
+      <strong>Modo teste.</strong> Os recebimentos são registrados normalmente, mas ainda
+      não somam no saldo de estoque da Comissaria. O Gerente liga essa opção quando o
+      processo estiver validado.
+    </div>`;
+}
+
+// =====================================================================
+// A RECEBER
+// =====================================================================
+async function carregarAChegar() {
+  const cont = document.getElementById('chegarContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+
+  const { data, error } = await sb.from('ordens_compra')
+    .select('*, fornecedores(nome, telefone, contato_nome), ordem_compra_itens(*), recebimentos(id, status)')
+    .in('status', ['enviada', 'confirmada', 'recebida_parcial'])
+    .order('data_entrega_prevista', { ascending: true, nullsFirst: false });
+
+  if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + escapeHtml(error.message) + '</div>'; return; }
+  state.ordens = data || [];
+  renderAChegar();
+  await atualizarBadgeDivergencias();
+}
+
+function diasAte(o) {
+  if (!o.data_entrega_prevista) return null;
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const prev = new Date(o.data_entrega_prevista + 'T00:00:00');
+  return Math.round((prev - hoje) / 86400000);
+}
+
+function renderAChegar() {
+  const cont = document.getElementById('chegarContainer');
+
+  let atraso = 0, hoje = 0, futuro = 0;
+  state.ordens.forEach(o => {
+    const d = diasAte(o);
+    if (d === null) futuro++;
+    else if (d < 0) atraso++;
+    else if (d === 0) hoje++;
+    else futuro++;
+  });
+  document.getElementById('stAtraso').textContent = atraso;
+  document.getElementById('stHoje').textContent   = hoje;
+  document.getElementById('stFuturo').textContent = futuro;
+  setBadge('badgeChegar', atraso + hoje);
+
+  if (!state.ordens.length) {
+    cont.innerHTML = '<div class="empty-text">Nenhum pedido aguardando chegada.</div>';
+    return;
+  }
+
+  cont.innerHTML = state.ordens.map(o => {
+    const d = diasAte(o);
+    const cls = d === null ? '' : (d < 0 ? 'atraso' : (d === 0 ? 'hoje' : ''));
+    const pill = d === null ? '<span class="prazo-pill prazo-futuro">sem data</span>'
+      : d < 0  ? `<span class="prazo-pill prazo-atraso">${-d}d de atraso</span>`
+      : d === 0 ? '<span class="prazo-pill prazo-hoje">chega hoje</span>'
+      : `<span class="prazo-pill prazo-futuro">em ${d}d</span>`;
+
+    const nItens = (o.ordem_compra_itens || []).length;
+    const parcial = o.status === 'recebida_parcial';
+
+    return `
+      <div class="po-card ${cls}">
+        <div class="po-head">
+          <span class="po-numero">${fmtPO(o.numero)}</span>
+          <span class="po-forn">${escapeHtml(o.fornecedores?.nome || '—')}</span>
+          <span class="po-info">${nItens} item(ns) · ${fmtMoeda(o.valor_total)}</span>
+          <span class="po-info">${o.data_entrega_prevista ? ptDate(o.data_entrega_prevista) : ''}</span>
+          ${pill}
+          ${parcial ? '<span class="badge">recebida parcial</span>' : ''}
+          <button class="btn btn-sm btn-primary" onclick="abrirConferencia('${o.id}')">Conferir chegada</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// =====================================================================
+// CONFERÊNCIA
+// =====================================================================
+async function abrirConferencia(ordemId) {
+  const { data: ordem, error } = await sb.from('ordens_compra')
+    .select('*, fornecedores(nome, contato_nome, telefone), ordem_compra_itens(*)')
+    .eq('id', ordemId).single();
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+  const itens = (ordem.ordem_compra_itens || []).sort((a, b) => a.item_nome.localeCompare(b.item_nome));
+  state.conf = {
+    ordem,
+    itens: itens.map(i => ({
+      ordem_item_id: i.id,
+      item_id: i.item_id,
+      nome: i.item_nome,
+      unidade: i.item_unidade,
+      pedida: parseFloat(i.quantidade) || 0,
+      recebida: parseFloat(i.quantidade) || 0,   // começa igual ao pedido
+      conferido: false,
+      motivo: '',
+    })),
+  };
+
+  document.getElementById('confTitle').textContent =
+    'Conferir ' + fmtPO(ordem.numero) + ' — ' + (ordem.fornecedores?.nome || '');
+  renderConferencia();
+  abrirModal('confModal');
+}
+
+function renderConferencia() {
+  const { ordem, itens } = state.conf;
+  const tol = parseFloat(state.config.tolerancia_valor_nf_pct || '2');
+
+  const linhas = itens.map((it, i) => {
+    const difere = Math.abs(it.recebida - it.pedida) > 0.0001;
+    const cls = !it.conferido ? '' : (difere ? 'divergente' : 'ok');
+    return `
+      <div class="conf-linha ${cls}" id="linha-${i}">
+        <div class="conf-check ${it.conferido ? 'on' : ''}" onclick="toggleConferido(${i})" title="Marcar como conferido">✓</div>
+        <div class="conf-nome-wrap">
+          <div class="conf-nome">${escapeHtml(it.nome)}</div>
+          <div class="conf-pedido">pedido: ${fmtQtd(it.pedida)} ${escapeHtml(it.unidade || '')}</div>
+        </div>
+        <div class="conf-qtd-wrap">
+          <input class="conf-qtd ${difere ? 'difere' : ''}" type="number" step="0.001" min="0"
+                 value="${it.recebida}" id="qtd-${i}" oninput="mudarQtd(${i}, this.value)">
+          <span class="conf-pedido">${escapeHtml(it.unidade || '')}</span>
+        </div>
+        <div></div>
+        <div class="conf-motivo ${difere ? 'show' : ''}" id="mot-${i}">
+          <input type="text" placeholder="O que houve? (faltou, veio errado, qualidade...)"
+                 value="${escapeAttr(it.motivo)}" oninput="mudarMotivo(${i}, this.value)">
+        </div>
+      </div>`;
+  }).join('');
+
+  const nConf = itens.filter(i => i.conferido).length;
+  const nDiv  = itens.filter(i => Math.abs(i.recebida - i.pedida) > 0.0001).length;
+
+  document.getElementById('confBody').innerHTML = `
+    <div class="aviso aviso-info">
+      Marque <strong>✓</strong> em cada item conferido — é o mesmo que riscar na lista impressa.
+      Ajuste a quantidade se veio diferente do pedido.
+    </div>
+
+    <div class="section-title">
+      <span>Itens (${nConf}/${itens.length} conferidos${nDiv ? ' · ' + nDiv + ' com diferença' : ''})</span>
+      <button class="btn btn-sm btn-secondary" onclick="marcarTodos()">Marcar todos</button>
+    </div>
+    <div style="border:1px solid var(--border-subtle)">${linhas}</div>
+
+    <div class="nf-box">
+      <div class="field-label" style="color:var(--gold)">NOTA FISCAL</div>
+      <div class="form-row col2 mt-2">
+        <div>
+          <label class="field-label">Número da NF</label>
+          <input class="input" id="nf-num" placeholder="Ex.: 123456" oninput="recalcularNF()">
+        </div>
+        <div>
+          <label class="field-label">Valor da NF (R$)</label>
+          <input class="input" id="nf-valor" type="number" step="0.01" min="0"
+                 placeholder="0,00" oninput="recalcularNF()">
+        </div>
+      </div>
+      <div class="nf-linha">
+        <span class="text-muted">Valor do pedido (PO)</span>
+        <span class="nf-valor">${fmtMoeda(ordem.valor_total)}</span>
+      </div>
+      <div class="nf-linha">
+        <span class="text-muted">Valor da nota fiscal</span>
+        <span class="nf-valor" id="nf-echo">—</span>
+      </div>
+      <div class="nf-veredito pendente" id="nf-veredito">
+        Informe o valor da NF para conferir contra o pedido
+      </div>
+      <div class="text-muted mt-2" style="font-size:11px">
+        Tolerância configurada: ${tol}%
+      </div>
+    </div>
+
+    <label class="field-label">Observação do recebimento</label>
+    <input class="input" id="rec-obs" placeholder="opcional — nota geral sobre a entrega">`;
+}
+
+function toggleConferido(i) {
+  state.conf.itens[i].conferido = !state.conf.itens[i].conferido;
+  renderConferencia();
+}
+
+function marcarTodos() {
+  const todos = state.conf.itens.every(i => i.conferido);
+  state.conf.itens.forEach(i => i.conferido = !todos);
+  renderConferencia();
+}
+
+function mudarQtd(i, v) {
+  const it = state.conf.itens[i];
+  it.recebida = parseFloat(v);
+  if (isNaN(it.recebida)) it.recebida = 0;
+
+  const difere = Math.abs(it.recebida - it.pedida) > 0.0001;
+  const inp = document.getElementById('qtd-' + i);
+  const mot = document.getElementById('mot-' + i);
+  const linha = document.getElementById('linha-' + i);
+  if (inp) inp.classList.toggle('difere', difere);
+  if (mot) mot.classList.toggle('show', difere);
+  if (linha) {
+    linha.classList.toggle('divergente', it.conferido && difere);
+    linha.classList.toggle('ok', it.conferido && !difere);
+  }
+}
+
+function mudarMotivo(i, v) { state.conf.itens[i].motivo = v; }
+
+function recalcularNF() {
+  const tol = parseFloat(state.config.tolerancia_valor_nf_pct || '2');
+  const valorPO = parseFloat(state.conf.ordem.valor_total) || 0;
+  const valorNF = parseFloat(document.getElementById('nf-valor').value);
+  const echo = document.getElementById('nf-echo');
+  const ver  = document.getElementById('nf-veredito');
+
+  if (isNaN(valorNF) || valorNF <= 0) {
+    echo.textContent = '—';
+    ver.className = 'nf-veredito pendente';
+    ver.textContent = 'Informe o valor da NF para conferir contra o pedido';
+    return;
+  }
+
+  echo.textContent = fmtMoeda(valorNF);
+  const dif = valorNF - valorPO;
+  const pct = valorPO > 0 ? Math.abs(dif) / valorPO * 100 : 100;
+
+  if (pct <= tol) {
+    ver.className = 'nf-veredito bate';
+    ver.textContent = '✓ Nota fiscal confere com o pedido' +
+      (Math.abs(dif) > 0.01 ? ` (diferença de ${fmtMoeda(Math.abs(dif))}, dentro da tolerância)` : '');
+  } else {
+    ver.className = 'nf-veredito difere';
+    ver.textContent = `✕ NF ${dif > 0 ? 'acima' : 'abaixo'} do pedido em ${fmtMoeda(Math.abs(dif))} (${pct.toFixed(1)}%) — não aceitar sem autorização`;
+  }
+}
+
+async function finalizar(decisao) {
+  if (state.salvando) return;
+  const { ordem, itens } = state.conf;
+
+  const naoConferidos = itens.filter(i => !i.conferido).length;
+  if (decisao === 'aceito' && naoConferidos > 0) {
+    if (!confirm(`${naoConferidos} item(ns) não foram marcados como conferidos. Aceitar mesmo assim?`)) return;
+  }
+
+  // Divergência de quantidade exige motivo
+  const semMotivo = itens.filter(i => Math.abs(i.recebida - i.pedida) > 0.0001 && !i.motivo.trim());
+  if (semMotivo.length) {
+    showToast(`Escreva o que houve com "${semMotivo[0].nome}".`, 'error');
+    return;
+  }
+
+  const nfNum   = document.getElementById('nf-num').value.trim();
+  const nfValor = parseFloat(document.getElementById('nf-valor').value);
+  const obs     = document.getElementById('rec-obs').value.trim();
+
+  if (decisao === 'aceito' && (!nfNum || isNaN(nfValor))) {
+    showToast('Informe número e valor da nota fiscal para aceitar.', 'error');
+    return;
+  }
+
+  const tol = parseFloat(state.config.tolerancia_valor_nf_pct || '2');
+  const valorPO = parseFloat(ordem.valor_total) || 0;
+  const confere = !isNaN(nfValor) && valorPO > 0
+    ? (Math.abs(nfValor - valorPO) / valorPO * 100) <= tol
+    : null;
+
+  if (decisao === 'aceito' && confere === false) {
+    if (!confirm('O valor da NF não bate com o pedido. Registrar como aceito COM DIVERGÊNCIA?')) return;
+  }
+
+  const temDivergencia = itens.some(i => Math.abs(i.recebida - i.pedida) > 0.0001) || confere === false;
+  const statusFinal = decisao === 'recusado' ? 'recusado'
+    : (temDivergencia ? 'aceito_com_divergencia' : 'aceito');
+
+  state.salvando = true;
+  const btnA = document.getElementById('btnAceitar'), btnR = document.getElementById('btnRecusar');
+  btnA.disabled = btnR.disabled = true;
+
+  try {
+    const { data: rec, error } = await inserirIdempotente(sb, 'recebimentos', {
+      ordem_id: ordem.id,
+      status: statusFinal,
+      data_recebimento: isoDate(new Date()),
+      nota_fiscal_numero: nfNum || null,
+      nota_fiscal_valor: isNaN(nfValor) ? null : nfValor,
+      valor_po: valorPO,
+      valor_confere: confere,
+      divergencia: obs || null,
+      conferido_por: state.perfil.id,
+      conferido_em: new Date().toISOString(),
+      estoque_atualizado: false,
+    }, 'rec-' + ordem.id);
+
+    if (error) {
+      if (ehEnvioDuplicado(error)) { showToast('Este recebimento já foi registrado.', 'info'); fecharModal('confModal'); return; }
+      showToast('Erro: ' + error.message, 'error'); return;
+    }
+
+    const linhas = itens.map(i => ({
+      recebimento_id: rec.id,
+      ordem_item_id: i.ordem_item_id,
+      item_id: i.item_id,
+      item_nome: i.nome,
+      item_unidade: i.unidade,
+      quantidade_pedida: i.pedida,
+      quantidade_recebida: i.recebida,
+      conferido: i.conferido,
+      divergencia: Math.abs(i.recebida - i.pedida) > 0.0001,
+      motivo_divergencia: i.motivo.trim() || null,
+    }));
+    const { error: ei } = await sb.from('recebimento_itens').insert(linhas);
+    if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
+
+    // Entrada de estoque só acontece com a flag ligada — durante os testes fica desligada
+    const flagLigada = state.config.entrada_automatica_estoque === 'true';
+    if (flagLigada && decisao !== 'recusado') {
+      const entradas = itens
+        .filter(i => i.recebida > 0)
+        .map(i => ({
+          item_id: i.item_id,
+          item_nome: i.nome,
+          quantidade: i.recebida,
+          unidade: i.unidade,
+          origem: 'recebimento',
+          recebimento_id: rec.id,
+          data_entrada: isoDate(new Date()),
+          registrado_por: state.perfil.id,
+        }));
+      if (entradas.length) {
+        const { error: ee } = await sb.from('entradas_estoque').insert(entradas);
+        if (!ee) await sb.from('recebimentos').update({ estoque_atualizado: true }).eq('id', rec.id);
+      }
+    }
+
+    // Atualiza o status da PO
+    const tudoCompleto = itens.every(i => i.recebida >= i.pedida - 0.0001);
+    const novoStatus = decisao === 'recusado' ? 'enviada' : (tudoCompleto ? 'recebida' : 'recebida_parcial');
+    await sb.from('ordens_compra').update({ status: novoStatus }).eq('id', ordem.id);
+
+    resetTokenCarrinho('rec-' + ordem.id);
+    showToast(decisao === 'recusado' ? 'Carga recusada e registrada.'
+      : (temDivergencia ? 'Recebido com divergência.' : 'Recebimento aceito.'), 'success');
+    fecharModal('confModal');
+    await carregarAChegar();
+  } finally {
+    state.salvando = false;
+    btnA.disabled = btnR.disabled = false;
+  }
+}
+
+// =====================================================================
+// RECEBIDOS
+// =====================================================================
+async function carregarRecebidos() {
+  const cont = document.getElementById('recebidosContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const de = document.getElementById('r-de').value, ate = document.getElementById('r-ate').value;
+
+  const { data, error } = await sb.from('recebimentos')
+    .select('*, ordens_compra(numero, valor_total, fornecedores(nome)), recebimento_itens(id, divergencia)')
+    .gte('data_recebimento', de).lte('data_recebimento', ate)
+    .order('data_recebimento', { ascending: false });
+
+  if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + escapeHtml(error.message) + '</div>'; return; }
+  if (!data?.length) { cont.innerHTML = '<div class="empty-text">Nenhum recebimento no período.</div>'; return; }
+
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr><th>Data</th><th>PO</th><th>Fornecedor</th><th>NF</th>
+      <th class="num right">Valor NF</th><th class="center">NF confere</th><th>Status</th><th class="center">Estoque</th></tr></thead>
+    <tbody>${data.map(r => `
+      <tr>
+        <td>${ptDate(r.data_recebimento)}</td>
+        <td class="po-numero">${fmtPO(r.ordens_compra?.numero)}</td>
+        <td>${escapeHtml(r.ordens_compra?.fornecedores?.nome || '—')}</td>
+        <td>${escapeHtml(r.nota_fiscal_numero || '—')}</td>
+        <td class="num right">${r.nota_fiscal_valor != null ? fmtMoeda(r.nota_fiscal_valor) : '—'}</td>
+        <td class="center">${r.valor_confere === true ? '<span class="text-muted">✓</span>'
+          : r.valor_confere === false ? '<span class="text-error">✕</span>' : '—'}</td>
+        <td><span class="badge">${labelStatus(r.status)}</span></td>
+        <td class="center">${r.estoque_atualizado ? '✓' : '<span class="text-muted">—</span>'}</td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+
+// =====================================================================
+// DIVERGÊNCIAS
+// =====================================================================
+async function carregarDivergencias() {
+  const cont = document.getElementById('divContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+
+  const { data, error } = await sb.from('recebimentos')
+    .select('*, ordens_compra(numero, fornecedores(nome)), recebimento_itens(*)')
+    .in('status', ['aceito_com_divergencia', 'recusado'])
+    .order('data_recebimento', { ascending: false }).limit(100);
+
+  if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + escapeHtml(error.message) + '</div>'; return; }
+  if (!data?.length) { cont.innerHTML = '<div class="empty-text">Nenhuma divergência registrada.</div>'; return; }
+
+  cont.innerHTML = data.map(r => {
+    const itensDiv = (r.recebimento_itens || []).filter(i => i.divergencia);
+    return `
+      <div class="po-card">
+        <div class="po-head">
+          <span class="po-numero">${fmtPO(r.ordens_compra?.numero)}</span>
+          <span class="po-forn">${escapeHtml(r.ordens_compra?.fornecedores?.nome || '—')}</span>
+          <span class="po-info">${ptDate(r.data_recebimento)}</span>
+          <span class="badge">${labelStatus(r.status)}</span>
+        </div>
+        <div style="padding:0 18px 16px">
+          ${r.valor_confere === false ? `<div class="aviso aviso-warn">
+            NF ${escapeHtml(r.nota_fiscal_numero || '')} = ${fmtMoeda(r.nota_fiscal_valor)}
+            · pedido = ${fmtMoeda(r.valor_po)}</div>` : ''}
+          ${r.divergencia ? `<div class="obs-box">${escapeHtml(r.divergencia)}</div>` : ''}
+          ${itensDiv.length ? `<table class="data-table mt-2">
+            <thead><tr><th>Item</th><th class="num">Pedido</th><th class="num">Recebido</th><th>Motivo</th></tr></thead>
+            <tbody>${itensDiv.map(i => `<tr>
+              <td>${escapeHtml(i.item_nome)}</td>
+              <td class="num">${fmtQtd(i.quantidade_pedida)} ${escapeHtml(i.item_unidade || '')}</td>
+              <td class="num text-error">${fmtQtd(i.quantidade_recebida)} ${escapeHtml(i.item_unidade || '')}</td>
+              <td>${escapeHtml(i.motivo_divergencia || '—')}</td>
+            </tr>`).join('')}</tbody></table>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function atualizarBadgeDivergencias() {
+  const { count } = await sb.from('recebimentos')
+    .select('*', { count: 'exact', head: true })
+    .in('status', ['aceito_com_divergencia', 'recusado']);
+  setBadge('badgeDiv', count || 0);
+}
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+const TITULOS = {
+  chegar:       ['A Receber', 'Pedidos com entrega prevista'],
+  recebidos:    ['Recebidos', 'Histórico de conferências'],
+  divergencias: ['Divergências', 'Entregas com problema'],
+};
+
+function goTab(tab, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (el) el.classList.add('active');
+  const [t, s] = TITULOS[tab] || ['', ''];
+  document.getElementById('topTitle').textContent = t;
+  document.getElementById('topSub').textContent = s;
+  if (tab === 'recebidos')    carregarRecebidos();
+  if (tab === 'divergencias') carregarDivergencias();
+  if (window.innerWidth <= 900) fecharSidebar();
+}
+
+function labelStatus(s) {
+  return ({ em_conferencia:'Em conferência', aceito:'Aceito',
+            aceito_com_divergencia:'Aceito c/ divergência', recusado:'Recusado' })[s] || s;
+}
+
+function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.getElementById('sbOverlay').classList.toggle('open');
+}
+function fecharSidebar() {
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('sbOverlay').classList.remove('open');
+}
+function abrirModal(id) { document.getElementById(id).classList.add('open'); }
+function fecharModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function setBadge(id, n) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = n > 0 ? n : '';
+  el.style.display = n > 0 ? '' : 'none';
+}
+
+function fmtPO(n)    { return n ? 'PO-' + String(n).padStart(5, '0') : '—'; }
+function fmtMoeda(v) { return 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtQtd(v)   { const n = parseFloat(v) || 0; return n % 1 === 0 ? String(n) : n.toFixed(3).replace(/0+$/, '').replace(/\.$/, ''); }
+function isoDate(d)  { return new Date(d).toISOString().slice(0, 10); }
+function ptDate(s)   { return s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—'; }
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+function showToast(msg, tipo = 'info', duration = 4000) {
+  const stack = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast ' + tipo;
+  t.textContent = msg;
+  stack.appendChild(t);
+  setTimeout(() => t.remove(), duration);
+}
+
+async function logout() { await sb.auth.signOut(); window.location.href = 'index.html'; }
+</script>
+</body>
+</html>

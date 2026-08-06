@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comprador — Rosewood A&B</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+  /* Bloco de um fornecedor na fila de aprovados */
+  .forn-bloco {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    margin-bottom: 14px;
+  }
+  .forn-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px; cursor: pointer;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .forn-head:hover { background: rgba(255,255,255,0.02); }
+  .forn-nome { font-size: 15px; color: var(--gold); letter-spacing: 0.5px; flex: 1; }
+  .forn-meta { font-size: 12px; color: var(--muted); }
+  .forn-valor { font-size: 15px; font-variant-numeric: tabular-nums; color: var(--text); }
+  .forn-body { display: none; padding: 14px 18px; }
+  .forn-body.open { display: block; }
+  .forn-sem-email { font-size: 11px; color: var(--orange); }
+
+  /* Semáforo de prazo das POs */
+  .prazo-pill {
+    display: inline-block; padding: 2px 10px; font-size: 11px;
+    letter-spacing: 0.5px; white-space: nowrap;
+  }
+  .prazo-ok      { background: rgba(76,175,125,0.15); color: var(--green); }
+  .prazo-hoje    { background: rgba(224,140,62,0.15); color: var(--orange); }
+  .prazo-atraso  { background: rgba(224,82,82,0.15);  color: var(--error); }
+  .prazo-neutro  { background: rgba(255,255,255,0.06); color: var(--muted); }
+
+  /* Prévia do e-mail que a compradora envia */
+  .email-preview {
+    background: var(--bg); border: 1px solid var(--border-subtle);
+    padding: 16px; font-family: 'Courier New', monospace; font-size: 12px;
+    line-height: 1.6; white-space: pre-wrap; color: var(--text);
+    max-height: 380px; overflow-y: auto;
+  }
+  .email-campo {
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 6px 0; border-bottom: 1px solid var(--border-subtle);
+    font-size: 12px;
+  }
+  .email-campo b { color: var(--muted); min-width: 62px; font-weight: 500; }
+
+  .po-num {
+    font-family: 'Courier New', monospace; font-size: 13px;
+    color: var(--gold); letter-spacing: 1px;
+  }
+  .linha-origem { font-size: 11px; color: var(--muted); font-style: italic; }
+
+  body { padding-bottom: 60px; }
+
+  @media (max-width: 600px) {
+    .forn-head { flex-wrap: wrap; gap: 6px; }
+    .forn-nome { flex: 1 1 100%; }
+    .email-preview { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="name">Rosewood</div>
+    <div class="sub">A&amp;B · Comprador</div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-item active" onclick="goTab('fila',this)">
+      <span class="nav-icon">$</span> A Comprar
+      <span class="nav-badge" id="badgeFila"></span>
+    </div>
+    <div class="nav-item" onclick="goTab('ordens',this)">
+      <span class="nav-icon">▤</span> Ordens de Compra
+      <span class="nav-badge" id="badgeAtraso"></span>
+    </div>
+    <div class="nav-item" onclick="goTab('fornecedores',this)"><span class="nav-icon">◎</span> Fornecedores</div>
+    <div class="nav-item" onclick="goTab('historico',this)"><span class="nav-icon">▣</span> Histórico</div>
+    <div class="nav-item" onclick="abrirConfigPedido()"><span class="nav-icon">≡</span> Textos do Pedido</div>
+  </div>
+  <div class="sidebar-foot">
+    <div class="name" id="userName">—</div>
+    <button class="logout-btn" onclick="logout()">Sair do sistema</button>
+  </div>
+</nav>
+
+<div class="sidebar-overlay" id="sbOverlay" onclick="toggleSidebar()"></div>
+
+<div class="main-with-sidebar">
+  <div class="top-bar">
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Abrir menu">☰</button>
+    <div class="top-bar-hero">
+      <div class="top-title" id="topTitle">A Comprar</div>
+      <div class="top-sub" id="topSub">Solicitações aprovadas, agrupadas por fornecedor</div>
+    </div>
+  </div>
+
+  <!-- ================= A COMPRAR ================= -->
+  <div class="tab-content active" id="tab-fila">
+    <div class="main full">
+      <div class="stats-grid mb-3">
+        <div class="stat-card"><div class="stat-label">Fornecedores</div><div class="stat-val" id="stForn">—</div><div class="stat-sub">com item a comprar</div></div>
+        <div class="stat-card"><div class="stat-label">Itens</div><div class="stat-val" id="stItens">—</div><div class="stat-sub">aprovados sem PO</div></div>
+        <div class="stat-card"><div class="stat-label">Valor estimado</div><div class="stat-val" id="stValor">—</div><div class="stat-sub">preço de referência</div></div>
+      </div>
+
+      <div class="filters-bar mb-3" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label class="field-label" style="margin:0">Data de competência</label>
+        <input class="input" type="date" id="f-data" onchange="carregarFila()" style="max-width:180px">
+        <button class="btn btn-sm btn-secondary" onclick="carregarFila()">Atualizar</button>
+      </div>
+
+      <div class="section-title"><span>Aprovados aguardando ordem de compra</span></div>
+      <div id="filaContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ================= ORDENS DE COMPRA ================= -->
+  <div class="tab-content" id="tab-ordens">
+    <div class="main full">
+      <div class="filters-bar mb-3" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select class="select" id="o-status" onchange="carregarOrdens()" style="max-width:200px">
+          <option value="abertas">Em aberto</option>
+          <option value="">Todas</option>
+          <option value="rascunho">Rascunho</option>
+          <option value="enviada">Enviada</option>
+          <option value="confirmada">Confirmada</option>
+          <option value="recebida_parcial">Recebida parcial</option>
+          <option value="recebida">Recebida</option>
+          <option value="cancelada">Cancelada</option>
+        </select>
+        <input class="input" id="o-busca" placeholder="Buscar por nº da PO ou fornecedor..." oninput="renderOrdens()">
+      </div>
+      <div class="section-title"><span>Ordens de compra (<span id="oCount">0</span>)</span></div>
+      <div id="ordensContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ================= FORNECEDORES ================= -->
+  <div class="tab-content" id="tab-fornecedores">
+    <div class="main full">
+      <div class="section-title">
+        <span>Fornecedores (<span id="fCount">0</span>)</span>
+        <button class="btn btn-sm btn-gold" onclick="abrirFornecedor()">+ Novo Fornecedor</button>
+      </div>
+      <div class="aviso aviso-info">
+        Cadastro de referência. O <strong>prazo de entrega</strong> calcula a data prevista da PO
+        e a <strong>condição de pagamento</strong> sai no texto do pedido.
+        O e-mail fica registrado para consulta — o sistema não envia mensagens.
+      </div>
+      <input class="input mb-3" id="f-busca" placeholder="Buscar fornecedor..." oninput="renderFornecedores()">
+      <div id="fornContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ================= HISTÓRICO ================= -->
+  <div class="tab-content" id="tab-historico">
+    <div class="main full">
+      <div class="filters-bar mb-3" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label class="field-label" style="margin:0">De</label>
+        <input class="input" type="date" id="h-de" style="max-width:160px">
+        <label class="field-label" style="margin:0">Até</label>
+        <input class="input" type="date" id="h-ate" style="max-width:160px">
+        <select class="select" id="h-forn" style="max-width:240px"><option value="">Todos os fornecedores</option></select>
+        <button class="btn btn-sm btn-primary" onclick="carregarHistorico()">Buscar</button>
+        <button class="btn btn-sm btn-outline" onclick="exportarHistorico()">⤓ Exportar CSV</button>
+      </div>
+      <div id="histContainer"><div class="empty-text">Escolha o período e clique em Buscar.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: gerar ordem de compra ============ -->
+<div class="modal-overlay" id="poModal">
+  <div class="modal" style="width:760px">
+    <div class="modal-header">
+      <span id="poModalTitle">Gerar Ordem de Compra</span>
+      <button class="modal-close" onclick="fecharModal('poModal')">✕</button>
+    </div>
+    <div class="modal-body" id="poModalBody"><div class="loading-text">Carregando...</div></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('poModal')">Voltar</button>
+      <button class="btn btn-primary" id="btnGerarPO" onclick="gerarPO()">Gerar PO</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: exportar pedido ============ -->
+<div class="modal-overlay" id="emailModal">
+  <div class="modal" style="width:820px">
+    <div class="modal-header">
+      <span id="emailModalTitle">Exportar pedido</span>
+      <button class="modal-close" onclick="fecharModal('emailModal')">✕</button>
+    </div>
+    <div class="modal-body" id="emailModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('emailModal')">Fechar</button>
+      <button class="btn btn-secondary" onclick="copiarPedido('texto')">Copiar como texto</button>
+      <button class="btn btn-gold" onclick="copiarPedido('tabela')">Copiar com tabela</button>
+      <button class="btn btn-primary" id="btnMarcarEnviada" onclick="marcarEnviada()">Já enviei — marcar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: fornecedor ============ -->
+<div class="modal-overlay" id="fornModal">
+  <div class="modal" style="width:600px">
+    <div class="modal-header">
+      <span id="fornModalTitle">Novo Fornecedor</span>
+      <button class="modal-close" onclick="fecharModal('fornModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="fm-id">
+      <div class="form-row col2">
+        <div><label class="field-label">Nome *</label><input class="input" id="fm-nome" placeholder="Ex.: MAR DIRETO"></div>
+        <div><label class="field-label">CNPJ</label><input class="input" id="fm-cnpj" placeholder="00.000.000/0000-00"></div>
+      </div>
+      <div class="form-row col2">
+        <div><label class="field-label">E-mail principal</label><input class="input" id="fm-email" type="email" placeholder="pedidos@fornecedor.com.br"></div>
+        <div><label class="field-label">E-mail secundário</label><input class="input" id="fm-email2" type="email" placeholder="opcional"></div>
+      </div>
+      <div class="form-row col2">
+        <div><label class="field-label">Contato</label><input class="input" id="fm-contato" placeholder="Nome de quem atende"></div>
+        <div><label class="field-label">Telefone</label><input class="input" id="fm-tel" placeholder="(11) 90000-0000"></div>
+      </div>
+      <div class="form-row col2">
+        <div><label class="field-label">Prazo de entrega (dias)</label><input class="input" id="fm-prazo" type="number" min="0" value="1"></div>
+        <div><label class="field-label">Condição de pagamento</label><input class="input" id="fm-pgto" placeholder="Ex.: 28 dias"></div>
+      </div>
+      <label class="field-label">Observação</label>
+      <input class="input" id="fm-obs" placeholder="opcional">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('fornModal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarFornecedor()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: textos fixos do pedido ============ -->
+<div class="modal-overlay" id="cfgModal">
+  <div class="modal" style="width:720px">
+    <div class="modal-header">
+      <span>Textos do Pedido</span>
+      <button class="modal-close" onclick="fecharModal('cfgModal')">✕</button>
+    </div>
+    <div class="modal-body" id="cfgBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('cfgModal')">Cancelar</button>
+      <button class="btn btn-secondary" onclick="previewPedido()">Ver prévia</button>
+      <button class="btn btn-primary" id="btnSalvarCfg" onclick="salvarConfigPedido()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const state = {
+  user: null, perfil: null,
+  fornecedores: [],
+  precos: {},          // itemId -> preco_unitario vigente
+  fila: [],            // itens aprovados sem PO
+  ordens: [],
+  config: {},
+  poAtual: null,       // fornecedor selecionado no modal
+  emailAtual: null,    // { ordemId, texto, destino, copia }
+  enviando: false,
+};
+
+// =====================================================================
+// INIT
+// =====================================================================
+window.addEventListener('load', async () => {
+  instalarAvisoConexao();
+
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { window.location.href = 'index.html'; return; }
+  state.user = user;
+
+  const { data: perfil } = await sb.from('usuarios')
+    .select('id, perfil, nome').eq('auth_uid', user.id).single();
+
+  // Gerente e master também entram (para acompanhar e testar)
+  const permitidos = ['comprador', 'gerente_compras', 'master_sistema'];
+  if (!perfil || !permitidos.includes(perfil.perfil)) {
+    window.location.href = 'index.html'; return;
+  }
+  state.perfil = perfil;
+  document.getElementById('userName').textContent = perfil.nome || '—';
+
+  document.getElementById('f-data').value = isoDate(new Date());
+  const hoje = new Date(), mesPassado = new Date(); mesPassado.setDate(hoje.getDate() - 30);
+  document.getElementById('h-de').value  = isoDate(mesPassado);
+  document.getElementById('h-ate').value = isoDate(hoje);
+
+  await carregarConfig();
+  await carregarFornecedores();
+  await carregarPrecos();
+  await carregarFila();
+  await carregarOrdens();
+});
+
+async function carregarConfig() {
+  const { data } = await sb.from('configuracoes_sistema').select('chave, valor');
+  (data || []).forEach(c => state.config[c.chave] = c.valor);
+}
+
+async function carregarPrecos() {
+  const { data } = await sb.from('precos').select('item_id, preco_unitario, vigente').eq('vigente', true);
+  (data || []).forEach(p => state.precos[p.item_id] = parseFloat(p.preco_unitario) || 0);
+}
+
+// =====================================================================
+// FILA — aprovados ainda sem ordem de compra
+// =====================================================================
+async function carregarFila() {
+  const cont = document.getElementById('filaContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const data = document.getElementById('f-data').value;
+
+  // Itens de solicitações aprovadas que ainda não foram para nenhuma PO
+  const { data: itens, error } = await sb.from('solicitacao_compra_itens')
+    .select(`id, item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada,
+             comentario, ordem_compra_id,
+             solicitacoes_compra!inner(id, status, data_competencia, pdv_id, pdvs(nome)),
+             itens(fornecedor_principal)`)
+    .eq('solicitacoes_compra.status', 'aprovada')
+    .eq('solicitacoes_compra.data_competencia', data)
+    .is('ordem_compra_id', null);
+
+  if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + escapeHtml(error.message) + '</div>'; return; }
+
+  state.fila = itens || [];
+  renderFila();
+}
+
+// Agrupa a fila por fornecedor e, dentro dele, consolida item repetido de PDVs diferentes
+function agruparFilaPorFornecedor() {
+  const grupos = {};
+  state.fila.forEach(it => {
+    const forn = (it.itens?.fornecedor_principal || '').trim() || 'SEM FORNECEDOR';
+    grupos[forn] ||= { fornecedor: forn, linhas: {}, ids: [] };
+    const g = grupos[forn];
+    g.ids.push(it.id);
+
+    const chave = it.item_id || it.item_nome;
+    if (!g.linhas[chave]) {
+      g.linhas[chave] = {
+        item_id: it.item_id, nome: it.item_nome,
+        categoria: it.item_categoria, unidade: it.item_unidade,
+        qtd: 0, preco: state.precos[it.item_id] || 0,
+        pdvs: [], itemIds: [],
+      };
+    }
+    const l = g.linhas[chave];
+    l.qtd += parseFloat(it.quantidade_solicitada) || 0;
+    l.itemIds.push(it.id);
+    const pdv = it.solicitacoes_compra?.pdvs?.nome;
+    if (pdv && !l.pdvs.includes(pdv)) l.pdvs.push(pdv);
+  });
+
+  return Object.values(grupos).map(g => {
+    const linhas = Object.values(g.linhas).sort((a, b) => a.nome.localeCompare(b.nome));
+    const valor = linhas.reduce((s, l) => s + l.qtd * l.preco, 0);
+    return { ...g, linhas, valor };
+  }).sort((a, b) => b.valor - a.valor);
+}
+
+function renderFila() {
+  const grupos = agruparFilaPorFornecedor();
+  const cont = document.getElementById('filaContainer');
+
+  const totalItens = grupos.reduce((s, g) => s + g.linhas.length, 0);
+  const totalValor = grupos.reduce((s, g) => s + g.valor, 0);
+  document.getElementById('stForn').textContent  = grupos.length;
+  document.getElementById('stItens').textContent = totalItens;
+  document.getElementById('stValor').textContent = fmtMoeda(totalValor);
+  setBadge('badgeFila', grupos.length);
+
+  if (!grupos.length) {
+    cont.innerHTML = '<div class="empty-text">Nenhuma solicitação aprovada aguardando ordem de compra nesta data.</div>';
+    return;
+  }
+
+  cont.innerHTML = grupos.map((g, gi) => {
+    const f = state.fornecedores.find(x => x.nome === g.fornecedor);
+    const semCadastro = !f;
+    const linhas = g.linhas.map(l => `
+      <tr>
+        <td>${escapeHtml(l.nome)}
+          ${l.pdvs.length ? `<br><span class="linha-origem">${escapeHtml(l.pdvs.join(' · '))}</span>` : ''}
+        </td>
+        <td class="num">${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}</td>
+        <td class="num">${l.preco ? fmtMoeda(l.preco) : '<span class="text-muted">sem preço</span>'}</td>
+        <td class="num right">${l.preco ? fmtMoeda(l.qtd * l.preco) : '—'}</td>
+      </tr>`).join('');
+
+    return `
+      <div class="forn-bloco">
+        <div class="forn-head" onclick="toggleForn(${gi})">
+          <span class="forn-nome">${escapeHtml(g.fornecedor)}</span>
+          ${semCadastro ? '<span class="forn-sem-email">⚠ fornecedor não cadastrado</span>' : ''}
+          <span class="forn-meta">${g.linhas.length} item(ns)</span>
+          <span class="forn-valor">${fmtMoeda(g.valor)}</span>
+          <span class="chevron" id="chevF-${gi}">▼</span>
+        </div>
+        <div class="forn-body" id="bodyF-${gi}">
+          <table class="data-table">
+            <thead><tr><th>Item</th><th class="num">Qtd</th><th class="num">Preço un.</th><th class="num right">Total</th></tr></thead>
+            <tbody>${linhas}</tbody>
+          </table>
+          <div class="form-actions mt-3">
+            <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();abrirGerarPO('${escapeAttr(g.fornecedor)}')">
+              Gerar Ordem de Compra
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleForn(i) {
+  document.getElementById('bodyF-' + i).classList.toggle('open');
+  document.getElementById('chevF-' + i).classList.toggle('open');
+}
+
+// =====================================================================
+// GERAR PO
+// =====================================================================
+function abrirGerarPO(fornNome) {
+  const grupo = agruparFilaPorFornecedor().find(g => g.fornecedor === fornNome);
+  if (!grupo) { showToast('Fornecedor não encontrado na fila.', 'error'); return; }
+
+  const f = state.fornecedores.find(x => x.nome === fornNome);
+  state.poAtual = { grupo, fornecedor: f || null };
+
+  const prazo = f?.prazo_entrega_dias ?? 1;
+  const prev = new Date(); prev.setDate(prev.getDate() + prazo);
+
+  const semPreco = grupo.linhas.filter(l => !l.preco).length;
+
+  document.getElementById('poModalTitle').textContent = 'Gerar PO — ' + fornNome;
+  document.getElementById('poModalBody').innerHTML = `
+    ${!f ? `<div class="aviso aviso-warn">Este fornecedor ainda não está cadastrado.
+             A PO será criada e o cadastro feito automaticamente — complete os dados depois em Fornecedores.</div>` : ''}
+    ${semPreco ? `<div class="aviso aviso-warn">${semPreco} item(ns) sem preço de referência — o valor total sai incompleto.</div>` : ''}
+    <div class="form-row col2">
+      <div>
+        <label class="field-label">Entrega prevista</label>
+        <input class="input" type="date" id="po-entrega" value="${isoDate(prev)}">
+      </div>
+      <div>
+        <label class="field-label">Valor total estimado</label>
+        <input class="input" value="${fmtMoeda(grupo.valor)}" disabled>
+      </div>
+    </div>
+    <label class="field-label">Observação para o fornecedor</label>
+    <input class="input" id="po-obs" placeholder="opcional — entra no corpo do e-mail">
+    <div class="section-title mt-3"><span>${grupo.linhas.length} item(ns)</span></div>
+    <table class="data-table">
+      <thead><tr><th>Item</th><th class="num">Qtd</th><th class="num right">Total</th></tr></thead>
+      <tbody>${grupo.linhas.map(l => `
+        <tr>
+          <td>${escapeHtml(l.nome)}</td>
+          <td class="num">${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}</td>
+          <td class="num right">${l.preco ? fmtMoeda(l.qtd * l.preco) : '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  abrirModal('poModal');
+}
+
+async function gerarPO() {
+  if (state.enviando) return;
+  const { grupo } = state.poAtual || {};
+  if (!grupo) return;
+
+  state.enviando = true;
+  const btn = document.getElementById('btnGerarPO');
+  btn.disabled = true; btn.textContent = 'Gerando...';
+
+  try {
+    // Garante o fornecedor cadastrado
+    let forn = state.fornecedores.find(x => x.nome === grupo.fornecedor);
+    if (!forn) {
+      const { data, error } = await sb.from('fornecedores')
+        .insert({ nome: grupo.fornecedor }).select().single();
+      if (error) { showToast('Erro ao criar fornecedor: ' + error.message, 'error'); return; }
+      forn = data;
+      state.fornecedores.push(forn);
+    }
+
+    const entrega = document.getElementById('po-entrega').value || null;
+    const obs = document.getElementById('po-obs').value.trim() || null;
+
+    const { data: ordem, error } = await inserirIdempotente(sb, 'ordens_compra', {
+      fornecedor_id: forn.id,
+      status: 'rascunho',
+      data_emissao: isoDate(new Date()),
+      data_entrega_prevista: entrega,
+      valor_total: grupo.valor,
+      observacao: obs,
+      email_destino: forn.email || null,   // só registro de para quem foi — o sistema não envia
+      criada_por: state.perfil.id,
+    }, 'po-' + grupo.fornecedor);
+
+    if (error) {
+      if (ehEnvioDuplicado(error)) { showToast('Esta PO já havia sido gerada.', 'info'); fecharModal('poModal'); return; }
+      showToast('Erro ao gerar PO: ' + error.message, 'error'); return;
+    }
+
+    // Itens da PO
+    const itensPO = grupo.linhas.map(l => ({
+      ordem_id: ordem.id,
+      item_id: l.item_id,
+      item_nome: l.nome,
+      item_categoria: l.categoria,
+      item_unidade: l.unidade,
+      quantidade: l.qtd,
+      preco_unitario: l.preco || null,
+      valor_linha: l.preco ? l.qtd * l.preco : null,
+      origem_pdvs: l.pdvs.join(' · ') || null,
+    }));
+    const { error: ei } = await sb.from('ordem_compra_itens').insert(itensPO);
+    if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
+
+    // Marca as solicitações originais como atendidas por esta PO
+    const idsSolic = grupo.linhas.flatMap(l => l.itemIds);
+    await sb.from('solicitacao_compra_itens').update({ ordem_compra_id: ordem.id }).in('id', idsSolic);
+
+    resetTokenCarrinho('po-' + grupo.fornecedor);
+    showToast('PO ' + fmtPO(ordem.numero) + ' gerada.', 'success');
+    fecharModal('poModal');
+    await carregarFila();
+    await carregarOrdens();
+    abrirEmail(ordem.id);
+  } finally {
+    state.enviando = false;
+    btn.disabled = false; btn.textContent = 'Gerar PO';
+  }
+}
+
+// =====================================================================
+// EXPORTAR PEDIDO
+// =====================================================================
+// O sistema não envia e-mail — monta o texto e a compradora cola no
+// cliente de e-mail dela. Substitui o filtrar-copiar-colar da planilha.
+//
+// Dois formatos:
+//   texto  → lista simples, cola em qualquer lugar
+//   tabela → HTML que o Outlook cola já formatado, como a planilha hoje
+
+async function abrirEmail(ordemId) {
+  const { data: ordem, error } = await sb.from('ordens_compra')
+    .select('*, fornecedores(*), ordem_compra_itens(*)').eq('id', ordemId).single();
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+  const f = ordem.fornecedores;
+  const itens = (ordem.ordem_compra_itens || []).sort((a, b) => a.item_nome.localeCompare(b.item_nome));
+  const cfg = state.config;
+
+  const assunto = `Pedido de Compra ${fmtPO(ordem.numero)}`
+    + (ordem.data_entrega_prevista ? ' — entrega ' + ptDate(ordem.data_entrega_prevista) : '');
+
+  // ── Blocos de texto configuráveis (Gerente preenche uma vez) ──
+  const blocos = [];
+  if (cfg.pedido_cabecalho?.trim()) blocos.push(cfg.pedido_cabecalho.trim());
+  else blocos.push('Prezados,\n\nSegue nosso pedido de compra.');
+
+  blocos.push(`Pedido: ${fmtPO(ordem.numero)}`
+    + `\nEmissão: ${ptDate(ordem.data_emissao)}`
+    + (ordem.data_entrega_prevista ? `\nEntrega solicitada: ${ptDate(ordem.data_entrega_prevista)}` : '')
+    + (f?.condicao_pagamento ? `\nCondição de pagamento: ${f.condicao_pagamento}` : ''));
+
+  const listaTxt = itens.map(i => {
+    const q = `${fmtQtd(i.quantidade)} ${i.item_unidade || ''}`.trim();
+    return `${i.item_nome}\t${q}`;
+  }).join('\n');
+  blocos.push('ITENS\n' + listaTxt);
+
+  if (ordem.observacao?.trim()) blocos.push('OBSERVAÇÃO\n' + ordem.observacao.trim());
+  if (cfg.pedido_dados_entrega?.trim()) blocos.push(cfg.pedido_dados_entrega.trim());
+  if (cfg.pedido_dados_fiscais?.trim()) blocos.push(cfg.pedido_dados_fiscais.trim());
+  if (cfg.pedido_regras?.trim())        blocos.push(cfg.pedido_regras.trim());
+
+  blocos.push((cfg.pedido_assinatura?.trim() ? cfg.pedido_assinatura.trim() + '\n' : '')
+    + state.perfil.nome);
+
+  const corpoTexto = blocos.join('\n\n');
+
+  // ── Versão com tabela, para colar formatado no Outlook ──
+  const linhasHtml = itens.map(i => `<tr>
+      <td style="border:1px solid #999;padding:6px 10px">${escapeHtml(i.item_nome)}</td>
+      <td style="border:1px solid #999;padding:6px 10px;text-align:right;white-space:nowrap">${fmtQtd(i.quantidade)}</td>
+      <td style="border:1px solid #999;padding:6px 10px">${escapeHtml(i.item_unidade || '')}</td>
+    </tr>`).join('');
+
+  const antesTabela = blocos.slice(0, 2).join('\n\n');
+  const depoisTabela = blocos.slice(3).join('\n\n');
+  const paraHtml = t => escapeHtml(t).replace(/\n/g, '<br>');
+
+  const corpoHtml =
+    `<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">
+      <p>${paraHtml(antesTabela)}</p>
+      <table style="border-collapse:collapse;font-size:11pt">
+        <thead><tr>
+          <th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:left">Item</th>
+          <th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:right">Qtd</th>
+          <th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:left">Un</th>
+        </tr></thead>
+        <tbody>${linhasHtml}</tbody>
+      </table>
+      <p>${paraHtml(depoisTabela)}</p>
+    </div>`;
+
+  state.emailAtual = {
+    ordemId: ordem.id, numero: ordem.numero,
+    assunto, corpoTexto, corpoHtml,
+    jaEnviada: !!ordem.enviada_em,
+  };
+
+  const faltamCfg = !cfg.pedido_dados_entrega?.trim() && !cfg.pedido_dados_fiscais?.trim();
+
+  document.getElementById('emailModalTitle').textContent =
+    'Exportar ' + fmtPO(ordem.numero) + ' — ' + (f?.nome || '');
+  document.getElementById('emailModalBody').innerHTML = `
+    <div class="aviso aviso-info">
+      O sistema <strong>não envia e-mail</strong>. Copie o pedido abaixo e cole na sua
+      mensagem — o destinatário e o envio continuam com você.
+    </div>
+    ${faltamCfg ? `<div class="aviso aviso-warn">
+      Os textos fixos (entrega, dados fiscais, regras) ainda não foram preenchidos.
+      O Gerente configura uma vez em <strong>Configurações do pedido</strong> e eles passam
+      a sair em todo pedido automaticamente.</div>` : ''}
+    ${ordem.enviada_em ? `<div class="aviso aviso-info">
+      Já marcada como enviada em ${ptDateTime(ordem.enviada_em)}.</div>` : ''}
+
+    <div class="email-campo"><b>Assunto</b><span>${escapeHtml(assunto)}</span></div>
+    <div class="email-campo"><b>Itens</b><span>${itens.length} · ${fmtMoeda(ordem.valor_total)}</span></div>
+
+    <div class="section-title mt-3"><span>Pedido</span></div>
+    <div class="email-preview" id="emailCorpo">${escapeHtml(corpoTexto)}</div>
+
+    <div class="text-muted mt-2" style="font-size:11px">
+      <strong>Copiar com tabela</strong> cola a lista formatada em tabela no Outlook.
+      <strong>Copiar como texto</strong> usa tabulação entre nome e quantidade — cola bem em qualquer editor.
+    </div>`;
+  abrirModal('emailModal');
+}
+
+async function copiarPedido(formato) {
+  const e = state.emailAtual; if (!e) return;
+
+  if (formato === 'tabela' && navigator.clipboard?.write && window.ClipboardItem) {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html':  new Blob([e.corpoHtml],  { type: 'text/html' }),
+        'text/plain': new Blob([e.corpoTexto], { type: 'text/plain' }),
+      })]);
+      showToast('Pedido copiado com tabela — cole no e-mail.', 'success');
+      return;
+    } catch (err) {
+      console.warn('[copiar tabela] falhou, usando texto', err);
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(e.corpoTexto);
+    showToast('Pedido copiado — cole no e-mail.', 'success');
+  } catch {
+    // Ambientes que bloqueiam a área de transferência: seleciona pro usuário copiar
+    const el = document.getElementById('emailCorpo');
+    if (el) {
+      const r = document.createRange(); r.selectNodeContents(el);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      showToast('Texto selecionado — use Ctrl+C para copiar.', 'info');
+    }
+  }
+}
+
+// Marca que a compradora já enviou o e-mail por fora do sistema.
+// É o que faz a PO aparecer na lista do Recebimento.
+async function marcarEnviada() {
+  const e = state.emailAtual; if (!e) return;
+  const { error } = await sb.from('ordens_compra').update({
+    status: 'enviada',
+    enviada_em: new Date().toISOString(),
+    enviada_por: state.perfil.id,
+  }).eq('id', e.ordemId);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  showToast(fmtPO(e.numero) + ' marcada como enviada — já aparece no Recebimento.', 'success');
+  fecharModal('emailModal');
+  await carregarOrdens();
+}
+
+// =====================================================================
+// CONFIGURAÇÕES DO PEDIDO
+// =====================================================================
+// Os textos fixos que a compradora digita à mão hoje. Preenchidos uma vez,
+// passam a sair em todo pedido. Nada disso vive no código.
+const CAMPOS_CFG = [
+  ['pedido_cabecalho',     'Abertura',        'Como o pedido começa — saudação e identificação.', 3],
+  ['pedido_dados_entrega', 'Entrega',         'Endereço, horários de recebimento, instruções de acesso.', 5],
+  ['pedido_dados_fiscais', 'Dados fiscais',   'Razão social, CNPJ, inscrição estadual.', 4],
+  ['pedido_regras',        'Regras',          'Prazo, conferência, recusa, embalagem.', 5],
+  ['pedido_assinatura',    'Encerramento',    'Fecho do pedido. O nome de quem gerou entra depois.', 3],
+];
+
+function abrirConfigPedido() {
+  document.getElementById('cfgBody').innerHTML = `
+    <div class="aviso aviso-info">
+      Estes textos entram em todo pedido exportado, na ordem abaixo.
+      Cole aqui o que hoje é digitado à mão no e-mail.
+    </div>
+    ${CAMPOS_CFG.map(([chave, rotulo, ajuda, linhas]) => `
+      <label class="field-label mt-3">${rotulo}</label>
+      <div class="text-muted" style="font-size:11px;margin-bottom:4px">${ajuda}</div>
+      <textarea class="textarea" id="cfg-${chave}" rows="${linhas}"
+                placeholder="deixe vazio para omitir">${escapeHtml(state.config[chave] || '')}</textarea>
+    `).join('')}`;
+  abrirModal('cfgModal');
+}
+
+async function salvarConfigPedido() {
+  const btn = document.getElementById('btnSalvarCfg');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  try {
+    for (const [chave] of CAMPOS_CFG) {
+      const valor = document.getElementById('cfg-' + chave).value;
+      const { error } = await sb.from('configuracoes_sistema')
+        .update({ valor, atualizado_em: new Date().toISOString(), atualizado_por: state.perfil.id })
+        .eq('chave', chave);
+      if (error) { showToast('Erro em ' + chave + ': ' + error.message, 'error'); return; }
+      state.config[chave] = valor;
+    }
+    showToast('Textos do pedido salvos.', 'success');
+    fecharModal('cfgModal');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvar';
+  }
+}
+
+function previewPedido() {
+  const cfg = {};
+  CAMPOS_CFG.forEach(([c]) => cfg[c] = document.getElementById('cfg-' + c).value.trim());
+  const partes = [];
+  if (cfg.pedido_cabecalho) partes.push(cfg.pedido_cabecalho);
+  partes.push('Pedido: PO-00042\nEmissão: ' + ptDate(isoDate(new Date())) + '\nEntrega solicitada: (data)');
+  partes.push('ITENS\nFILÉ MIGNON 180G\t12 UND\nQUEIJO BRIE 20CM\t3 KG');
+  if (cfg.pedido_dados_entrega) partes.push(cfg.pedido_dados_entrega);
+  if (cfg.pedido_dados_fiscais) partes.push(cfg.pedido_dados_fiscais);
+  if (cfg.pedido_regras)        partes.push(cfg.pedido_regras);
+  partes.push((cfg.pedido_assinatura ? cfg.pedido_assinatura + '\n' : '') + state.perfil.nome);
+
+  document.getElementById('cfgBody').insertAdjacentHTML('afterbegin',
+    `<div class="section-title"><span>Prévia</span>
+       <button class="btn btn-sm btn-secondary" onclick="this.closest('div').nextElementSibling.remove();this.closest('div').remove()">fechar</button>
+     </div>
+     <div class="email-preview mb-3">${escapeHtml(partes.join('\n\n'))}</div>`);
+}
+
+// =====================================================================
+// ORDENS DE COMPRA
+// =====================================================================
+async function carregarOrdens() {
+  const cont = document.getElementById('ordensContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const f = document.getElementById('o-status').value;
+
+  let q = sb.from('ordens_compra')
+    .select('*, fornecedores(nome, email), ordem_compra_itens(id), recebimentos(id, status, data_recebimento)')
+    .order('numero', { ascending: false }).limit(200);
+  if (f === 'abertas') q = q.in('status', ['rascunho', 'enviada', 'confirmada', 'recebida_parcial']);
+  else if (f)          q = q.eq('status', f);
+
+  const { data, error } = await q;
+  if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + escapeHtml(error.message) + '</div>'; return; }
+  state.ordens = data || [];
+
+  const atrasadas = state.ordens.filter(o => diasAtraso(o) > 0
+    && ['enviada','confirmada','recebida_parcial'].includes(o.status)).length;
+  setBadge('badgeAtraso', atrasadas);
+
+  renderOrdens();
+}
+
+function diasAtraso(o) {
+  if (!o.data_entrega_prevista) return 0;
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const prev = new Date(o.data_entrega_prevista + 'T00:00:00');
+  return Math.round((hoje - prev) / 86400000);
+}
+
+function pillPrazo(o) {
+  if (['recebida','cancelada'].includes(o.status)) return '<span class="prazo-pill prazo-neutro">—</span>';
+  if (!o.data_entrega_prevista) return '<span class="prazo-pill prazo-neutro">sem data</span>';
+  const d = diasAtraso(o);
+  if (d > 0)  return `<span class="prazo-pill prazo-atraso">${d}d de atraso</span>`;
+  if (d === 0) return '<span class="prazo-pill prazo-hoje">chega hoje</span>';
+  return `<span class="prazo-pill prazo-ok">em ${-d}d</span>`;
+}
+
+function renderOrdens() {
+  const busca = (document.getElementById('o-busca').value || '').toLowerCase();
+  let lista = state.ordens;
+  if (busca) lista = lista.filter(o =>
+    fmtPO(o.numero).toLowerCase().includes(busca) ||
+    (o.fornecedores?.nome || '').toLowerCase().includes(busca));
+
+  document.getElementById('oCount').textContent = lista.length;
+  const cont = document.getElementById('ordensContainer');
+  if (!lista.length) { cont.innerHTML = '<div class="empty-text">Nenhuma ordem de compra.</div>'; return; }
+
+  const statusLabel = {
+    rascunho:'Rascunho', enviada:'Enviada', confirmada:'Confirmada',
+    recebida_parcial:'Recebida parcial', recebida:'Recebida', cancelada:'Cancelada',
+  };
+
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr>
+      <th>PO</th><th>Fornecedor</th><th class="center">Itens</th>
+      <th class="num right">Valor</th><th>Entrega</th><th>Status</th><th class="center">Ações</th>
+    </tr></thead>
+    <tbody>${lista.map(o => `
+      <tr>
+        <td class="po-num">${fmtPO(o.numero)}</td>
+        <td>${escapeHtml(o.fornecedores?.nome || '—')}</td>
+        <td class="center">${(o.ordem_compra_itens || []).length}</td>
+        <td class="num right">${fmtMoeda(o.valor_total)}</td>
+        <td>${o.data_entrega_prevista ? ptDate(o.data_entrega_prevista) : '—'}<br>${pillPrazo(o)}</td>
+        <td><span class="badge">${statusLabel[o.status] || o.status}</span></td>
+        <td class="center">
+          <button class="btn btn-sm btn-secondary" onclick="abrirEmail('${o.id}')">E-mail</button>
+          ${['rascunho','enviada','confirmada'].includes(o.status)
+            ? `<button class="btn btn-sm btn-secondary" onclick="cancelarOrdem('${o.id}', ${o.numero})">Cancelar</button>` : ''}
+        </td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+
+async function cancelarOrdem(id, numero) {
+  const motivo = prompt('Motivo do cancelamento da ' + fmtPO(numero) + ':');
+  if (motivo === null) return;
+  if (!motivo.trim()) { showToast('Informe o motivo.', 'error'); return; }
+
+  const { error } = await sb.from('ordens_compra')
+    .update({ status: 'cancelada', motivo_cancelamento: motivo.trim() }).eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+  // Devolve os itens para a fila
+  await sb.from('solicitacao_compra_itens').update({ ordem_compra_id: null }).eq('ordem_compra_id', id);
+  showToast(fmtPO(numero) + ' cancelada — itens voltaram para a fila.', 'success');
+  await carregarOrdens();
+  await carregarFila();
+}
+
+// =====================================================================
+// FORNECEDORES
+// =====================================================================
+async function carregarFornecedores() {
+  const { data } = await sb.from('fornecedores').select('*').order('nome');
+  state.fornecedores = data || [];
+  const sel = document.getElementById('h-forn');
+  sel.innerHTML = '<option value="">Todos os fornecedores</option>' +
+    state.fornecedores.map(f => `<option value="${f.id}">${escapeHtml(f.nome)}</option>`).join('');
+  renderFornecedores();
+}
+
+function renderFornecedores() {
+  const busca = (document.getElementById('f-busca')?.value || '').toLowerCase();
+  let lista = state.fornecedores;
+  if (busca) lista = lista.filter(f => f.nome.toLowerCase().includes(busca));
+
+  document.getElementById('fCount').textContent = state.fornecedores.length;
+  const cont = document.getElementById('fornContainer');
+  if (!lista.length) { cont.innerHTML = '<div class="empty-text">Nenhum fornecedor.</div>'; return; }
+
+  cont.innerHTML = `<table class="data-table">
+    <thead><tr><th>Nome</th><th>E-mail</th><th>Contato</th><th class="center">Prazo</th><th>Pagamento</th><th class="center">Ações</th></tr></thead>
+    <tbody>${lista.map(f => `
+      <tr>
+        <td>${escapeHtml(f.nome)}</td>
+        <td>${f.email ? escapeHtml(f.email) : '<span class="text-error">— sem e-mail —</span>'}</td>
+        <td>${escapeHtml(f.contato_nome || '—')}</td>
+        <td class="center">${f.prazo_entrega_dias}d</td>
+        <td>${escapeHtml(f.condicao_pagamento || '—')}</td>
+        <td class="center"><button class="btn btn-sm btn-secondary" onclick="abrirFornecedor('${f.id}')">Editar</button></td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+
+function abrirFornecedor(id) {
+  const f = id ? state.fornecedores.find(x => x.id === id) : null;
+  document.getElementById('fornModalTitle').textContent = f ? 'Editar Fornecedor' : 'Novo Fornecedor';
+  document.getElementById('fm-id').value      = f?.id || '';
+  document.getElementById('fm-nome').value    = f?.nome || '';
+  document.getElementById('fm-cnpj').value    = f?.cnpj || '';
+  document.getElementById('fm-email').value   = f?.email || '';
+  document.getElementById('fm-email2').value  = f?.email_secundario || '';
+  document.getElementById('fm-contato').value = f?.contato_nome || '';
+  document.getElementById('fm-tel').value     = f?.telefone || '';
+  document.getElementById('fm-prazo').value   = f?.prazo_entrega_dias ?? 1;
+  document.getElementById('fm-pgto').value    = f?.condicao_pagamento || '';
+  document.getElementById('fm-obs').value     = f?.observacao || '';
+  abrirModal('fornModal');
+}
+
+async function salvarFornecedor() {
+  const id = document.getElementById('fm-id').value;
+  const nome = document.getElementById('fm-nome').value.trim();
+  if (!nome) { showToast('Informe o nome do fornecedor.', 'error'); return; }
+
+  const payload = {
+    nome,
+    cnpj:               document.getElementById('fm-cnpj').value.trim() || null,
+    email:              document.getElementById('fm-email').value.trim() || null,
+    email_secundario:   document.getElementById('fm-email2').value.trim() || null,
+    contato_nome:       document.getElementById('fm-contato').value.trim() || null,
+    telefone:           document.getElementById('fm-tel').value.trim() || null,
+    prazo_entrega_dias: parseInt(document.getElementById('fm-prazo').value, 10) || 1,
+    condicao_pagamento: document.getElementById('fm-pgto').value.trim() || null,
+    observacao:         document.getElementById('fm-obs').value.trim() || null,
+  };
+
+  const { error } = id
+    ? await sb.from('fornecedores').update(payload).eq('id', id)
+    : await sb.from('fornecedores').insert(payload);
+
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  showToast('Fornecedor salvo.', 'success');
+  fecharModal('fornModal');
+  await carregarFornecedores();
+  renderFila();
+}
+
+// =====================================================================
+// HISTÓRICO
+// =====================================================================
+let histCache = [];
+
+async function carregarHistorico() {
+  const de = document.getElementById('h-de').value;
+  const ate = document.getElementById('h-ate').value;
+  const fornId = document.getElementById('h-forn').value;
+  const cont = document.getElementById('histContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+
+  let q = sb.from('ordens_compra')
+    .select('numero, data_emissao, data_entrega_prevista, status, valor_total, fornecedores(nome), recebimentos(data_recebimento, status)')
+    .gte('data_emissao', de).lte('data_emissao', ate)
+    .order('numero', { ascending: false });
+  if (fornId) q = q.eq('fornecedor_id', fornId);
+
+  const { data, error } = await q;
+  if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + escapeHtml(error.message) + '</div>'; return; }
+
+  histCache = data || [];
+  if (!histCache.length) { cont.innerHTML = '<div class="empty-text">Nenhuma ordem no período.</div>'; return; }
+
+  const total = histCache.reduce((s, o) => s + (parseFloat(o.valor_total) || 0), 0);
+  cont.innerHTML = `
+    <div class="stats-grid mb-3">
+      <div class="stat-card"><div class="stat-label">Ordens</div><div class="stat-val">${histCache.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Valor total</div><div class="stat-val">${fmtMoeda(total)}</div></div>
+      <div class="stat-card"><div class="stat-label">Recebidas</div><div class="stat-val">${histCache.filter(o=>o.status==='recebida').length}</div></div>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>PO</th><th>Emissão</th><th>Fornecedor</th><th class="num right">Valor</th><th>Prevista</th><th>Recebida</th><th>Status</th></tr></thead>
+      <tbody>${histCache.map(o => {
+        const rec = (o.recebimentos || [])[0];
+        return `<tr>
+          <td class="po-num">${fmtPO(o.numero)}</td>
+          <td>${ptDate(o.data_emissao)}</td>
+          <td>${escapeHtml(o.fornecedores?.nome || '—')}</td>
+          <td class="num right">${fmtMoeda(o.valor_total)}</td>
+          <td>${o.data_entrega_prevista ? ptDate(o.data_entrega_prevista) : '—'}</td>
+          <td>${rec ? ptDate(rec.data_recebimento) : '—'}</td>
+          <td><span class="badge">${o.status}</span></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+function exportarHistorico() {
+  if (!histCache.length) { showToast('Nada para exportar.', 'error'); return; }
+  const head = ['PO','Emissao','Fornecedor','Valor','Entrega prevista','Recebida em','Status'];
+  const linhas = histCache.map(o => {
+    const rec = (o.recebimentos || [])[0];
+    return [fmtPO(o.numero), o.data_emissao, o.fornecedores?.nome || '',
+            (parseFloat(o.valor_total)||0).toFixed(2).replace('.', ','),
+            o.data_entrega_prevista || '', rec?.data_recebimento || '', o.status];
+  });
+  const csv = [head, ...linhas].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ordens_compra_${document.getElementById('h-de').value}_${document.getElementById('h-ate').value}.csv`;
+  a.click();
+}
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+const TITULOS = {
+  fila:         ['A Comprar', 'Solicitações aprovadas, agrupadas por fornecedor'],
+  ordens:       ['Ordens de Compra', 'Acompanhe prazo e status de cada PO'],
+  fornecedores: ['Fornecedores', 'Contato, prazo e condição de pagamento'],
+  historico:    ['Histórico', 'Ordens emitidas por período'],
+};
+
+function goTab(tab, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (el) el.classList.add('active');
+  const [t, s] = TITULOS[tab] || ['', ''];
+  document.getElementById('topTitle').textContent = t;
+  document.getElementById('topSub').textContent = s;
+  if (window.innerWidth <= 900) fecharSidebar();
+}
+
+function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.getElementById('sbOverlay').classList.toggle('open');
+}
+function fecharSidebar() {
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('sbOverlay').classList.remove('open');
+}
+function abrirModal(id) { document.getElementById(id).classList.add('open'); }
+function fecharModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function setBadge(id, n) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = n > 0 ? n : '';
+  el.style.display = n > 0 ? '' : 'none';
+}
+
+function fmtPO(n)     { return 'PO-' + String(n).padStart(5, '0'); }
+function fmtMoeda(v)  { return 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtQtd(v)    { const n = parseFloat(v) || 0; return n % 1 === 0 ? String(n) : n.toFixed(3).replace(/0+$/, '').replace(/\.$/, ''); }
+function isoDate(d)   { return new Date(d).toISOString().slice(0, 10); }
+function ptDate(s)    { return s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—'; }
+function ptDateTime(s){ return s ? new Date(s).toLocaleString('pt-BR') : '—'; }
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s).replace(/'/g, '&#39;'); }
+
+function showToast(msg, tipo = 'info', duration = 4000) {
+  const stack = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast ' + tipo;
+  t.textContent = msg;
+  stack.appendChild(t);
+  setTimeout(() => t.remove(), duration);
+}
+
+async function logout() { await sb.auth.signOut(); window.location.href = 'index.html'; }
+</script>
+</body>
+</html>

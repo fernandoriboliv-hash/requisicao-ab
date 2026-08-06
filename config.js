@@ -24,6 +24,19 @@ const REDIRECT_POR_PERFIL = {
   executivo:       'executivo.html',
   pdv:             'pdv.html',           // tela unificada PDV (compra + requisição)
   estoque:         'estoque.html',
+  comprador:       'comprador.html',     // fase pós-piloto
+  recebimento:     'recebimento.html',   // fase pós-piloto
+};
+
+// Rótulo de cada perfil na interface. Fonte única — evita divergência entre telas.
+const LABEL_PERFIL = {
+  master_sistema:  'Master de Sistema',
+  gerente_compras: 'Gerente de Compras',
+  executivo:       'Chef',
+  pdv:             'PDV',
+  estoque:         'Estoque',
+  comprador:       'Comprador',
+  recebimento:     'Recebimento',
 };
 
 // =====================================================================

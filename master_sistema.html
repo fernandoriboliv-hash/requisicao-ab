@@ -96,6 +96,8 @@
               <option value="estoque">Estoque (Comissaria)</option>
               <option value="executivo">Chef</option>
               <option value="gerente_compras">Gerente de Compras</option>
+              <option value="comprador">Comprador</option>
+              <option value="recebimento">Recebimento</option>
               <option value="master_sistema">Master de Sistema</option>
             </select>
           </div>
@@ -122,6 +124,8 @@
           <option value="executivo">Chef</option>
           <option value="pdv">PDV</option>
           <option value="estoque">Estoque</option>
+          <option value="comprador">Comprador</option>
+          <option value="recebimento">Recebimento</option>
         </select>
       </div>
       <div id="usuariosContainer"><div class="loading-text">Carregando...</div></div>
@@ -390,10 +394,7 @@ function renderUsuarios() {
   if (q) lista = lista.filter(u => (u.nome||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q));
   const cont = document.getElementById('usuariosContainer');
   if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum usuário.</div>'; return; }
-  const labelPerfil = {
-    master_sistema: 'Master Sistema', gerente_compras: 'Gerente Compras',
-    executivo: 'Chef', pdv: 'PDV', estoque: 'Estoque'
-  };
+  const labelPerfil = LABEL_PERFIL;   // definido em config.js
   cont.innerHTML = `<table class="data-table">
     <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>PDV</th><th>Status</th><th class="center">Ações</th></tr></thead>
     <tbody>${lista.map(u => `<tr>
