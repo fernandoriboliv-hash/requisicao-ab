@@ -92,6 +92,33 @@
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.02); }
   }
+
+  /* Cancelar requisição — ação destrutiva, visual discreto até o hover */
+  .btn-cancelar {
+    background: transparent;
+    border: 1px solid rgba(224,82,82,0.35);
+    color: var(--error);
+    margin-left: auto;
+  }
+  .btn-cancelar:hover {
+    background: rgba(224,82,82,0.12);
+    border-color: var(--error);
+  }
+  .cancel-motivos { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+  .cancel-motivo-btn {
+    background: rgba(224,82,82,0.06);
+    border: 1px solid rgba(224,82,82,0.3);
+    color: var(--text);
+    font-family: inherit; font-size: 12px;
+    padding: 8px 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .cancel-motivo-btn:hover { background: rgba(224,82,82,0.14); }
+  .cancel-motivo-btn.selected {
+    background: var(--c-proteina); border-color: var(--c-proteina);
+    color: #FFFFFF; font-weight: 500;
+  }
+  .req-card.cancelada { opacity: 0.55; }
+  .badge.status-cancelada { background: rgba(224,82,82,0.15); color: var(--error); }
   .obs-box {
     margin-top: 12px; padding: 10px 14px;
     background: rgba(255,255,255,0.03); border-left: 2px solid var(--border);
@@ -1079,6 +1106,37 @@
   </div>
 </div>
 
+<!-- Modal: cancelar requisição -->
+<div class="modal-overlay" id="cancelarReqModal">
+  <div class="modal" style="width:480px">
+    <div class="modal-header">
+      <span>Cancelar Requisição</span>
+      <button class="modal-close" onclick="fecharModal('cancelarReqModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="cancelarReqInfo" class="text-muted" style="font-size:13px"></div>
+      <div class="obs-box mt-3" style="border-left-color:var(--error)">
+        A requisição fica registrada como <strong>Cancelada</strong> e não conta no consumo do PDV.
+        Nada é apagado — o histórico continua auditável.
+      </div>
+      <label class="field-label mt-3">Motivo do cancelamento</label>
+      <div class="cancel-motivos">
+        <button type="button" class="cancel-motivo-btn" data-cm="Requisição duplicada" onclick="setMotivoCancel('Requisição duplicada')">Requisição duplicada</button>
+        <button type="button" class="cancel-motivo-btn" data-cm="Enviada por engano" onclick="setMotivoCancel('Enviada por engano')">Enviada por engano</button>
+        <button type="button" class="cancel-motivo-btn" data-cm="PDV desistiu do pedido" onclick="setMotivoCancel('PDV desistiu do pedido')">PDV desistiu</button>
+        <button type="button" class="cancel-motivo-btn" data-cm="Itens errados" onclick="setMotivoCancel('Itens errados')">Itens errados</button>
+      </div>
+      <input class="input" type="text" id="cancelarReqObs" placeholder="Observação (opcional)...">
+      <input type="hidden" id="cancelarReqId">
+      <input type="hidden" id="cancelarReqMotivo">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('cancelarReqModal')">Voltar</button>
+      <button class="btn btn-primary" id="btnConfirmarCancel" onclick="confirmarCancelamento()">Confirmar Cancelamento</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: adicionar item avulso ao checklist -->
 <div class="modal-overlay" id="itemAvulsoModal">
   <div class="modal">
@@ -1123,6 +1181,7 @@ const state = {
 };
 
 window.addEventListener('load', async () => {
+  instalarAvisoConexao();   // barra vermelha fixa quando a internet cai
   const { data: { user } } = await sb.auth.getUser();
   if (!user) { window.location.href = 'index.html'; return; }
   state.user = user;
@@ -1278,7 +1337,8 @@ function renderFila() {
   cont.innerHTML = lista.map(r => {
     const itens = r.requisicao_itens || [];
     const hora = new Date(r.created_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
-    const entregue = r.status === 'entregue';
+    // Cancelada não recebe formulário de entrega nem botões de ação
+    const entregue = r.status === 'entregue' || r.status === 'cancelada';
     const manualTag = r.criada_pelo_estoque ? '<span class="manual-tag">MANUAL</span>' : '';
 
     const linhasItens = itens.map((it, idx) => {
@@ -1313,9 +1373,16 @@ function renderFila() {
       <div class="form-actions mt-3">
         ${r.status === 'enviado' ? `<button class="btn btn-sm btn-orange" onclick="event.stopPropagation();marcarSeparacao('${r.id}')">Em Separação</button>` : ''}
         <button class="btn btn-sm btn-green" onclick="event.stopPropagation();registrarEntrega('${r.id}')">Registrar Entrega</button>
+        <button class="btn btn-sm btn-cancelar" onclick="event.stopPropagation();abrirCancelamento('${r.id}')">Cancelar Requisição</button>
       </div>` : '';
 
-    return `<div class="req-card" id="card-${r.id}">
+    const cancelada = r.status === 'cancelada';
+    const boxCancel = cancelada ? `
+      <div class="obs-box" style="border-left-color:var(--error);color:var(--error)">
+        ✕ Cancelada — ${escapeHtml(r.motivo_cancelamento || 'sem motivo registrado')}
+      </div>` : '';
+
+    return `<div class="req-card${cancelada ? ' cancelada' : ''}" id="card-${r.id}">
       <div class="req-head" onclick="toggleDetail('${r.id}')">
         <span class="req-num">#${String(r.id).slice(0,8)}</span>
         <span class="req-pdv">${escapeHtml(r.pdvs?.nome || '—')}${manualTag}</span>
@@ -1325,6 +1392,7 @@ function renderFila() {
         <span class="chevron" id="chev-${r.id}">▼</span>
       </div>
       <div class="req-detail" id="detail-${r.id}">
+        ${boxCancel}
         ${r.observacao ? `<div class="obs-box">💬 ${escapeHtml(r.observacao)}</div>` : ''}
         <table class="data-table mt-3">
           <thead><tr><th>Categoria</th><th>Item</th><th>Solicitado</th><th>Entregue</th><th>Divergência</th></tr></thead>
@@ -1362,6 +1430,79 @@ async function marcarSeparacao(id) {
   await sb.from('requisicoes').update({ status: 'separacao' }).eq('id', id);
   showToast('Marcado como Em Separação.', 'info');
   await carregarFila();
+}
+
+// =====================================================================
+// CANCELAMENTO DE REQUISIÇÃO
+// =====================================================================
+// Cancela sem apagar: o registro fica com status 'cancelada' e guarda quem
+// cancelou, quando e por quê. Requisição cancelada não debita estoque nem
+// entra nos relatórios de consumo.
+
+function abrirCancelamento(reqId) {
+  const req = state.reqs.find(r => r.id === reqId);
+  const itens = req?.requisicao_itens || [];
+  document.getElementById('cancelarReqId').value = reqId;
+  document.getElementById('cancelarReqMotivo').value = '';
+  document.getElementById('cancelarReqObs').value = '';
+  document.querySelectorAll('#cancelarReqModal .cancel-motivo-btn')
+    .forEach(b => b.classList.remove('selected'));
+  document.getElementById('cancelarReqInfo').innerHTML =
+    `<strong>#${String(reqId).slice(0,8)}</strong> · ${escapeHtml(req?.pdvs?.nome || '—')} · ${itens.length} item(ns)`;
+  abrirModal('cancelarReqModal');
+}
+
+function setMotivoCancel(motivo) {
+  document.querySelectorAll('#cancelarReqModal .cancel-motivo-btn')
+    .forEach(b => b.classList.remove('selected'));
+  const btn = document.querySelector(`#cancelarReqModal [data-cm="${motivo}"]`);
+  if (btn) btn.classList.add('selected');
+  document.getElementById('cancelarReqMotivo').value = motivo;
+}
+
+let _cancelando = false;
+
+async function confirmarCancelamento() {
+  if (_cancelando) return;
+  const reqId  = document.getElementById('cancelarReqId').value;
+  const motivo = document.getElementById('cancelarReqMotivo').value;
+  const obs    = document.getElementById('cancelarReqObs').value.trim();
+
+  if (!motivo) { showToast('Selecione o motivo do cancelamento.', 'error'); return; }
+
+  _cancelando = true;
+  const btn = document.getElementById('btnConfirmarCancel');
+  btn.disabled = true; btn.textContent = 'Cancelando...';
+  try {
+    const motivoFinal = motivo + (obs ? ' — ' + obs : '');
+    let { error } = await sb.from('requisicoes').update({
+      status: 'cancelada',
+      cancelada_em: new Date().toISOString(),
+      cancelada_por: state.perfil.id,
+      motivo_cancelamento: motivoFinal,
+    }).eq('id', reqId);
+
+    // Se as colunas de auditoria ainda não existem (migration 17 pendente),
+    // cancela mesmo assim e guarda o motivo na observação.
+    if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+      console.warn('[cancelamento] colunas de auditoria ausentes — rode a migration 17.');
+      const req = state.reqs.find(r => r.id === reqId);
+      const obsAntiga = req?.observacao ? req.observacao + ' | ' : '';
+      ({ error } = await sb.from('requisicoes').update({
+        status: 'cancelada',
+        observacao: obsAntiga + 'CANCELADA: ' + motivoFinal,
+      }).eq('id', reqId));
+    }
+
+    if (error) { showToast('Erro ao cancelar: ' + error.message, 'error'); return; }
+
+    showToast('Requisição cancelada.', 'success');
+    fecharModal('cancelarReqModal');
+    await carregarFila();
+  } finally {
+    _cancelando = false;
+    btn.disabled = false; btn.textContent = 'Confirmar Cancelamento';
+  }
 }
 
 async function registrarEntrega(reqId) {
@@ -1608,44 +1749,67 @@ function setQtyManual(itemId, val) {
 // toggleManual alias — cart sidebar chama pra remover
 function toggleManual(itemId) { removerManual(itemId); }
 
+let _enviandoManual = false;
+
 async function enviarManual() {
+  if (_enviandoManual) return;          // trava de re-entrada contra clique repetido
   const pdvId = document.getElementById('m-pdv').value;
   const obs = document.getElementById('m-obs').value.trim();
   const sel = Object.values(state.manual.selecionados);
   if (!pdvId) { showToast('Selecione o PDV de destino.', 'error'); return; }
   if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
 
-  const { data: req, error } = await sb.from('requisicoes').insert({
-    pdv_id: pdvId,
-    usuario_id: state.perfil.id,
-    criada_pelo_estoque: true,
-    status: 'entregue',  // como é registro de saída balcão, já entra como entregue
-    data_competencia: isoDate(new Date()),
-    entregue_em: new Date().toISOString(),
-    observacao: obs || 'Retirada balcão',
-  }).select().single();
-  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  _enviandoManual = true;
+  try {
+    const { data: req, error } = await inserirIdempotente(sb, 'requisicoes', {
+      pdv_id: pdvId,
+      usuario_id: state.perfil.id,
+      criada_pelo_estoque: true,
+      status: 'entregue',  // como é registro de saída balcão, já entra como entregue
+      data_competencia: isoDate(new Date()),
+      entregue_em: new Date().toISOString(),
+      observacao: obs || 'Retirada balcão',
+    }, 'manual');
 
-  const itens = sel.map(s => ({
-    requisicao_id: req.id,
-    item_id: s.item.id,
-    item_nome: s.item.nome,
-    item_categoria: s.item.categoria,
-    item_unidade: s.item.unidade,
-    quantidade_solicitada: s.qty,
-    quantidade_entregue: s.qty,
-    divergencia: false,
-    item_livre: false,
-  }));
-  const { error: ei } = await sb.from('requisicao_itens').insert(itens);
-  if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
+    if (error) {
+      if (ehEnvioDuplicado(error)) {
+        showToast('Esta saída já havia sido registrada — nenhuma duplicata foi criada.', 'info');
+        limparManual();
+        await carregarFila();
+        return;
+      }
+      showToast('Erro: ' + error.message, 'error');
+      return;
+    }
 
-  showToast(`Saída registrada para ${state.pdvs.find(p=>p.id===pdvId)?.nome}.`, 'success');
+    const itens = sel.map(s => ({
+      requisicao_id: req.id,
+      item_id: s.item.id,
+      item_nome: s.item.nome,
+      item_categoria: s.item.categoria,
+      item_unidade: s.item.unidade,
+      quantidade_solicitada: s.qty,
+      quantidade_entregue: s.qty,
+      divergencia: false,
+      item_livre: false,
+    }));
+    const { error: ei } = await sb.from('requisicao_itens').insert(itens);
+    if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
+
+    showToast(`Saída registrada para ${state.pdvs.find(p=>p.id===pdvId)?.nome}.`, 'success');
+    limparManual();
+    await carregarFila();
+  } finally {
+    _enviandoManual = false;
+  }
+}
+
+function limparManual() {
   state.manual.selecionados = {};
+  resetTokenCarrinho('manual');
   document.getElementById('m-pdv').value = '';
   document.getElementById('m-obs').value = '';
   renderItensManual();
-  await carregarFila();
 }
 
 // =====================================================================
@@ -1876,15 +2040,23 @@ async function enviarCompraCommissary() {
   const itensDoCarrinho = sel.map(s => s.item);
   const competencia = isoDate(calcularCompetenciaFinal(dataEntrega, itensDoCarrinho));
 
-  const { data: solc, error } = await sb.from('solicitacoes_compra').insert({
+  const { data: solc, error } = await inserirIdempotente(sb, 'solicitacoes_compra', {
     pdv_id: state.pdvComissariaId,
     usuario_id: state.perfil.id,
     status: 'enviada',
     data_competencia: competencia,
     data_entrega_desejada: dataEntrega,
     observacao: obs || 'Reposição estoque commissary',
-  }).select().single();
-  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  }, 'compraComis');
+  if (error) {
+    if (ehEnvioDuplicado(error)) {
+      showToast('Esta solicitação já havia sido enviada — nenhuma duplicata foi criada.', 'info');
+      limparCompraComis();
+      return;
+    }
+    showToast('Erro: ' + error.message, 'error');
+    return;
+  }
 
   const itens = sel.map(s => ({
     solicitacao_id: solc.id,
@@ -1899,9 +2071,15 @@ async function enviarCompraCommissary() {
   if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
 
   showToast('Solicitação de compra enviada para o Gerente de Compras.', 'success');
+  limparCompraComis();
+}
+
+function limparCompraComis() {
   state.compra.selecionados = {};
   state.compra.qtdInputs = {};
-  document.getElementById('c-obs').value = '';
+  resetTokenCarrinho('compraComis');
+  const obs = document.getElementById('c-obs');
+  if (obs) obs.value = '';
   renderItensCompra();
 }
 

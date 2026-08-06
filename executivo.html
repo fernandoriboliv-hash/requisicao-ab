@@ -406,6 +406,7 @@ const state = {
 };
 
 window.addEventListener('load', async () => {
+  instalarAvisoConexao();   // barra vermelha fixa quando a internet cai
   const { data: { user } } = await sb.auth.getUser();
   if (!user) { window.location.href = 'index.html'; return; }
   const { data: perfil } = await sb.from('usuarios').select('id, perfil, nome').eq('auth_uid', user.id).single();
@@ -729,7 +730,10 @@ function atualizarAvisoCorte() {
   }
 }
 
+let _enviandoExec = false;
+
 async function enviar(modo) {
+  if (_enviandoExec) return;              // trava de re-entrada contra clique repetido
   const pdvId = document.getElementById('pdvSel').value;
   if (!pdvId) { showToast('Selecione o PDV em nome de quem está solicitando.', 'error'); return; }
   const sel = Object.values(state.selecionados[modo]);
@@ -737,43 +741,69 @@ async function enviar(modo) {
   const obs = document.getElementById(`${modo}-obs`).value.trim();
   const dataEntrega = document.getElementById(`${modo}-data-entrega`).value || null;
 
-  if (modo === 'compra') {
-    const itensDoCarrinho = sel.map(s => s.item);
-    const competencia = isoDate(calcularCompetenciaFinal(dataEntrega, itensDoCarrinho));
-    const { data: solc, error } = await sb.from('solicitacoes_compra').insert({
-      pdv_id: pdvId, usuario_id: state.perfil.id,
-      status: 'enviada',
-      data_competencia: competencia, data_entrega_desejada: dataEntrega,
-      observacao: obs || null,
-    }).select().single();
-    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-    const itens = sel.map(s => ({
-      solicitacao_id: solc.id, item_id: s.item.id,
-      item_nome: s.item.nome, item_categoria: s.item.categoria, item_unidade: s.item.unidade,
-      quantidade_solicitada: s.qty, item_livre: false,
-    }));
-    await sb.from('solicitacao_compra_itens').insert(itens);
-    showToast('Solicitação de compra enviada para aprovação.', 'success');
-  } else {
-    const { data: req, error } = await sb.from('requisicoes').insert({
-      pdv_id: pdvId, usuario_id: state.perfil.id,
-      status: 'enviado',
-      data_competencia: isoDate(new Date()),
-      data_entrega_desejada: dataEntrega,
-      observacao: obs || null,
-    }).select().single();
-    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-    const itens = sel.map(s => ({
-      requisicao_id: req.id, item_id: s.item.id,
-      item_nome: s.item.nome, item_categoria: s.item.categoria, item_unidade: s.item.unidade,
-      quantidade_solicitada: s.qty, item_livre: false,
-    }));
-    await sb.from('requisicao_itens').insert(itens);
-    showToast('Requisição enviada para a Comissaria.', 'success');
+  _enviandoExec = true;
+  try {
+    if (modo === 'compra') {
+      const itensDoCarrinho = sel.map(s => s.item);
+      const competencia = isoDate(calcularCompetenciaFinal(dataEntrega, itensDoCarrinho));
+      const { data: solc, error } = await inserirIdempotente(sb, 'solicitacoes_compra', {
+        pdv_id: pdvId, usuario_id: state.perfil.id,
+        status: 'enviada',
+        data_competencia: competencia, data_entrega_desejada: dataEntrega,
+        observacao: obs || null,
+      }, 'exec-compra');
+      if (error) {
+        if (ehEnvioDuplicado(error)) {
+          showToast('Esta solicitação já havia sido enviada — nenhuma duplicata foi criada.', 'info');
+          limparEnvioExec(modo);
+          return;
+        }
+        showToast('Erro: ' + error.message, 'error');
+        return;
+      }
+      const itens = sel.map(s => ({
+        solicitacao_id: solc.id, item_id: s.item.id,
+        item_nome: s.item.nome, item_categoria: s.item.categoria, item_unidade: s.item.unidade,
+        quantidade_solicitada: s.qty, item_livre: false,
+      }));
+      await sb.from('solicitacao_compra_itens').insert(itens);
+      showToast('Solicitação de compra enviada para aprovação.', 'success');
+    } else {
+      const { data: req, error } = await inserirIdempotente(sb, 'requisicoes', {
+        pdv_id: pdvId, usuario_id: state.perfil.id,
+        status: 'enviado',
+        data_competencia: isoDate(new Date()),
+        data_entrega_desejada: dataEntrega,
+        observacao: obs || null,
+      }, 'exec-req');
+      if (error) {
+        if (ehEnvioDuplicado(error)) {
+          showToast('Esta requisição já havia sido enviada — nenhuma duplicata foi criada.', 'info');
+          limparEnvioExec(modo);
+          return;
+        }
+        showToast('Erro: ' + error.message, 'error');
+        return;
+      }
+      const itens = sel.map(s => ({
+        requisicao_id: req.id, item_id: s.item.id,
+        item_nome: s.item.nome, item_categoria: s.item.categoria, item_unidade: s.item.unidade,
+        quantidade_solicitada: s.qty, item_livre: false,
+      }));
+      await sb.from('requisicao_itens').insert(itens);
+      showToast('Requisição enviada para a Comissaria.', 'success');
+    }
+    limparEnvioExec(modo);
+  } finally {
+    _enviandoExec = false;
   }
+}
 
+function limparEnvioExec(modo) {
   state.selecionados[modo] = {};
-  document.getElementById(`${modo}-obs`).value = '';
+  resetTokenCarrinho(modo === 'compra' ? 'exec-compra' : 'exec-req');
+  const obs = document.getElementById(`${modo}-obs`);
+  if (obs) obs.value = '';
   renderItens(modo);
 }
 

@@ -286,6 +286,7 @@ function toggleSidebar() {
 const state = { user: null, perfil: null, usuarios: [], pdvs: [] };
 
 window.addEventListener('load', async () => {
+  instalarAvisoConexao();   // barra vermelha fixa quando a internet cai
   const { data: { user } } = await sb.auth.getUser();
   if (!user) { window.location.href = 'index.html'; return; }
   const { data: perfil } = await sb.from('usuarios').select('id, perfil, nome').eq('auth_uid', user.id).single();

@@ -557,12 +557,15 @@ const state = {
   historico: { compra: [], req: [] },
   estoqueCritico: new Set(),               // itemIds com nível vermelho na Comissaria
   estoqueAmarelo: new Set(),               // itemIds com nível amarelo (só aviso leve)
+  enviando: false,                         // trava de re-entrada (não depende do DOM)
 };
+// tokenCarrinho() / resetTokenCarrinho() / ehEnvioDuplicado() vêm de config.js
 
 // =====================================================================
 // INIT
 // =====================================================================
 window.addEventListener('load', async () => {
+  instalarAvisoConexao();   // barra vermelha fixa quando a internet cai
   const { data: { user } } = await sb.auth.getUser();
   if (!user) { window.location.href = 'index.html'; return; }
   state.user = user;
@@ -1089,6 +1092,11 @@ function abrirRevisao() {
 }
 
 async function confirmarEnvio() {
+  // Trava de re-entrada: vive no state, não no DOM. Protege mesmo se o botão
+  // for re-renderizado ou se dois eventos de toque dispararem juntos no celular.
+  if (state.enviando) return;
+  state.enviando = true;
+
   const aba = state.abaAtual;
   const btn = document.getElementById('btn-confirmar');
   btn.disabled = true; btn.textContent = 'Enviando...';
@@ -1096,21 +1104,48 @@ async function confirmarEnvio() {
     if (aba === 'compra') await enviarCompra();
     else                  await enviarRequisicao();
   } catch (err) {
-    // Diagnóstico ampliado — mostra estado local + erro completo no console
+    // Violação de índice único → o mesmo carrinho já foi gravado antes.
+    // Não é erro do usuário: o pedido está lá, só evitamos a duplicata.
+    if (ehEnvioDuplicado(err)) {
+      console.warn('[Envio duplicado bloqueado]', { aba, token: tokenCarrinho(aba) });
+      showToast('Este pedido já havia sido enviado — nenhuma duplicata foi criada.', 'info');
+      limparCarrinho(aba);
+      fecharModal('revisaoModal');
+      btn.disabled = false; btn.textContent = 'Confirmar Envio';
+      state.enviando = false;
+      return;
+    }
     console.error('[Envio falhou]', {
       aba,
       pdvId: state.pdvId,
       perfilId: state.perfil?.id,
       perfil: state.perfil?.perfil,
       authUid: state.user?.id,
+      token: tokenCarrinho(aba),
       err,
     });
     showToast('Erro ao enviar: ' + err.message, 'error');
     btn.disabled = false; btn.textContent = 'Confirmar Envio';
+    state.enviando = false;
     return;
   }
   fecharModal('revisaoModal');
   btn.disabled = false; btn.textContent = 'Confirmar Envio';
+  state.enviando = false;
+}
+
+// Zera o carrinho da aba e emite um token novo para o próximo pedido.
+// Chamado assim que o envio dá certo — antes ficava só no botão "Novo Pedido",
+// então quem não clicava nele mantinha o carrinho cheio e reenviava sem querer.
+function limparCarrinho(aba) {
+  state.selecionados[aba] = {};
+  state.livres[aba] = [];
+  resetTokenCarrinho(aba);
+  const obs = document.getElementById(aba + '-obs');
+  if (obs) obs.value = '';
+  renderItens(aba);
+  renderLivres(aba);
+  atualizarCarrinho();
 }
 
 async function enviarCompra() {
@@ -1133,14 +1168,14 @@ async function enviarCompra() {
     // Apagar itens antigos para sobrescrever
     await sb.from('solicitacao_compra_itens').delete().eq('solicitacao_id', solcId);
   } else {
-    const { data, error } = await sb.from('solicitacoes_compra').insert({
+    const { data, error } = await inserirIdempotente(sb, 'solicitacoes_compra', {
       pdv_id: state.pdvId,
       usuario_id: state.perfil.id,
       status: 'enviada',
       data_competencia: competencia,
       data_entrega_desejada: dataEntrega,
       observacao: obs || null,
-    }).select().single();
+    }, 'compra');
     if (error) throw error;
     solcId = data.id;
   }
@@ -1148,6 +1183,7 @@ async function enviarCompra() {
   await inserirItensSolicitacao(solcId, 'compra');
 
   state.rascunhoIdCompra = null;
+  limparCarrinho('compra');
   mostrarSucesso(solcId, 'compra', competencia);
 }
 
@@ -1155,18 +1191,19 @@ async function enviarRequisicao() {
   const obs = document.getElementById('req-obs').value.trim();
   const dataEntrega = document.getElementById('req-data-entrega').value || null;
 
-  const { data, error } = await sb.from('requisicoes').insert({
+  const { data, error } = await inserirIdempotente(sb, 'requisicoes', {
     pdv_id: state.pdvId,
     usuario_id: state.perfil.id,
     status: 'enviado',
     data_competencia: isoDate(new Date()),
     data_entrega_desejada: dataEntrega,
     observacao: obs || null,
-  }).select().single();
+  }, 'req');
   if (error) throw error;
 
   await inserirItensRequisicao(data.id);
 
+  limparCarrinho('req');
   mostrarSucesso(data.id, 'req', data.data_competencia);
 }
 
@@ -1263,13 +1300,9 @@ function mostrarSucesso(id, aba, competencia) {
 }
 
 function novoPedido() {
-  state.selecionados[state.abaAtual] = {};
-  state.livres[state.abaAtual] = [];
-  document.getElementById(state.abaAtual + '-obs').value = '';
+  // O carrinho já foi zerado no envio; aqui só fechamos e atualizamos o histórico.
+  limparCarrinho(state.abaAtual);
   fecharModal('sucessoModal');
-  renderItens(state.abaAtual);
-  renderLivres(state.abaAtual);
-  atualizarCarrinho();
   carregarHistorico(state.abaAtual);
 }
 

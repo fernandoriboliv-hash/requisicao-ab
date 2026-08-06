@@ -731,6 +731,7 @@ const state = {
 };
 
 window.addEventListener('load', async () => {
+  instalarAvisoConexao();   // barra vermelha fixa quando a internet cai
   const { data: { user } } = await sb.auth.getUser();
   if (!user) { window.location.href = 'index.html'; return; }
   const { data: perfil } = await sb.from('usuarios').select('id, perfil, nome').eq('auth_uid', user.id).single();
@@ -2074,34 +2075,57 @@ function descartarReqCreate() {
   renderItensReqCreate();
   atualizarCartBarRC();
 }
+let _enviandoReqCreate = false;
+
 async function enviarReqCreate() {
+  if (_enviandoReqCreate) return;         // trava de re-entrada contra clique repetido
   if (!state.reqNew.pdvId) { showToast('Selecione o PDV de destino.', 'error'); return; }
   const sel = Object.values(state.reqNew.selecionados);
   if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
   const obs = document.getElementById('rc-obs').value.trim();
-  const { data: req, error } = await sb.from('requisicoes').insert({
-    pdv_id: state.reqNew.pdvId,
-    usuario_id: state.perfil.id,
-    criada_pelo_estoque: false,
-    status: 'enviado',
-    data_competencia: new Date().toISOString().slice(0,10),
-    observacao: obs || null,
-  }).select('id').single();
-  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-  const itensPayload = sel.map(s => ({
-    requisicao_id: req.id,
-    item_id: s.item.id,
-    item_nome: s.item.nome,
-    item_categoria: s.item.categoria,
-    item_unidade: s.item.unidade,
-    quantidade_solicitada: s.qty,
-  }));
-  const { error: ei } = await sb.from('requisicao_itens').insert(itensPayload);
-  if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
-  const pdvNome = state.pdvs.find(p => p.id === state.reqNew.pdvId)?.nome || 'PDV';
-  showToast(`Requisição enviada para a Comissaria (destino: ${pdvNome}).`, 'success');
+
+  _enviandoReqCreate = true;
+  try {
+    const { data: req, error } = await inserirIdempotente(sb, 'requisicoes', {
+      pdv_id: state.reqNew.pdvId,
+      usuario_id: state.perfil.id,
+      criada_pelo_estoque: false,
+      status: 'enviado',
+      data_competencia: new Date().toISOString().slice(0,10),
+      observacao: obs || null,
+    }, 'ger-req', 'id');
+    if (error) {
+      if (ehEnvioDuplicado(error)) {
+        showToast('Esta requisição já havia sido enviada — nenhuma duplicata foi criada.', 'info');
+        limparReqCreate();
+        return;
+      }
+      showToast('Erro: ' + error.message, 'error');
+      return;
+    }
+    const itensPayload = sel.map(s => ({
+      requisicao_id: req.id,
+      item_id: s.item.id,
+      item_nome: s.item.nome,
+      item_categoria: s.item.categoria,
+      item_unidade: s.item.unidade,
+      quantidade_solicitada: s.qty,
+    }));
+    const { error: ei } = await sb.from('requisicao_itens').insert(itensPayload);
+    if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
+    const pdvNome = state.pdvs.find(p => p.id === state.reqNew.pdvId)?.nome || 'PDV';
+    showToast(`Requisição enviada para a Comissaria (destino: ${pdvNome}).`, 'success');
+    limparReqCreate();
+  } finally {
+    _enviandoReqCreate = false;
+  }
+}
+
+function limparReqCreate() {
   state.reqNew.selecionados = {};
-  document.getElementById('rc-obs').value = '';
+  resetTokenCarrinho('ger-req');
+  const obs = document.getElementById('rc-obs');
+  if (obs) obs.value = '';
   renderItensReqCreate();
   atualizarCartBarRC();
 }
