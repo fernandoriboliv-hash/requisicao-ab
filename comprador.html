@@ -57,8 +57,106 @@
   }
   .linha-origem { font-size: 11px; color: var(--muted); font-style: italic; }
 
+  /* ---- Matriz Item × Fornecedor ---- */
+  /* Cada opção de fornecedor de um item. A primária ganha borda dourada
+     porque é ela que o sistema usa por padrão ao montar a PO. */
+  .opc-forn {
+    display: grid; grid-template-columns: 22px 1fr 100px 70px 90px 120px;
+    align-items: center; gap: 10px;
+    padding: 10px 12px; border-bottom: 1px solid var(--border-subtle);
+    font-size: 13px;
+  }
+  .opc-forn:last-child { border-bottom: none; }
+  .opc-forn.primario { background: rgba(184,150,62,0.07); }
+  .opc-forn.inativo  { opacity: 0.45; }
+  .opc-pref {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--muted2); cursor: pointer; flex-shrink: 0;
+  }
+  .opc-pref.on { background: var(--gold); border-color: var(--gold); }
+  .opc-preco { font-variant-numeric: tabular-nums; text-align: right; }
+  .opc-melhor { color: var(--green); }
+  .opc-caro   { color: var(--orange); }
+  .opc-tag {
+    display: inline-block; padding: 1px 7px; font-size: 10px;
+    letter-spacing: 0.5px; background: rgba(255,255,255,0.06); color: var(--muted);
+  }
+
+  .mtz-linha {
+    background: var(--panel); border: 1px solid var(--border-subtle);
+    margin-bottom: 8px;
+  }
+  .mtz-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; cursor: pointer;
+  }
+  .mtz-head:hover { background: rgba(255,255,255,0.02); }
+  .mtz-nome { flex: 1; font-size: 14px; }
+  .mtz-body { display: none; border-top: 1px solid var(--border-subtle); }
+  .mtz-body.open { display: block; }
+  .mtz-econ { font-size: 11px; color: var(--green); }
+
+  /* ---- Certificações ---- */
+  .cert-linha {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px;
+  }
+  .cert-linha:last-child { border-bottom: none; }
+  .cert-tipo { flex: 1; }
+  .cert-venc { font-variant-numeric: tabular-nums; font-size: 12px; }
+  .cert-ok      { color: var(--green); }
+  .cert-perto   { color: var(--orange); }
+  .cert-vencido { color: var(--error); }
+
+  /* ---- Edição da PO antes de gerar ---- */
+  .po-linha-edit {
+    display: grid; grid-template-columns: 1fr 96px 100px 92px 34px;
+    align-items: center; gap: 8px;
+    padding: 9px 10px; border-bottom: 1px solid var(--border-subtle);
+  }
+  .po-linha-edit:last-child { border-bottom: none; }
+  .po-linha-edit.removida { opacity: 0.35; text-decoration: line-through; }
+  .po-inp {
+    width: 100%; background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border-subtle); color: var(--text);
+    font-family: inherit; font-size: 13px; padding: 6px 8px;
+    text-align: right; outline: none;
+  }
+  .po-inp:focus { border-color: rgba(184,150,62,0.5); }
+  .po-inp.alerta { border-color: var(--orange); color: var(--orange); }
+  .po-del {
+    background: none; border: 1px solid var(--border-subtle); color: var(--muted);
+    cursor: pointer; font-size: 15px; padding: 4px 0; width: 30px;
+  }
+  .po-del:hover { border-color: var(--error); color: var(--error); }
+  .po-nome-edit { font-size: 13px; }
+  .po-moq { font-size: 11px; color: var(--orange); }
+  .po-alt {
+    font-size: 11px; color: var(--muted); cursor: pointer;
+    text-decoration: underline dotted;
+  }
+  .po-alt:hover { color: var(--gold); }
+
+  /* ---- Pendências de entrega (backorder) ---- */
+  .pend-bloco {
+    background: rgba(224,140,62,0.06); border: 1px solid rgba(224,140,62,0.35);
+    margin-bottom: 14px;
+  }
+  .pend-head {
+    display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+    color: var(--orange); font-size: 14px; letter-spacing: 0.5px;
+  }
+
   body { padding-bottom: 60px; }
 
+  @media (max-width: 900px) {
+    .opc-forn { grid-template-columns: 22px 1fr 90px; row-gap: 6px; }
+    .opc-forn > :nth-child(n+4) { grid-column: 2 / -1; }
+    .po-linha-edit {
+      grid-template-columns: 1fr 80px 34px; row-gap: 6px;
+    }
+    .po-linha-edit > :nth-child(3) { grid-column: 1 / 3; }
+  }
   @media (max-width: 600px) {
     .forn-head { flex-wrap: wrap; gap: 6px; }
     .forn-nome { flex: 1 1 100%; }
@@ -82,7 +180,11 @@
       <span class="nav-icon">▤</span> Ordens de Compra
       <span class="nav-badge" id="badgeAtraso"></span>
     </div>
-    <div class="nav-item" onclick="goTab('fornecedores',this)"><span class="nav-icon">◎</span> Fornecedores</div>
+    <div class="nav-item" onclick="goTab('matriz',this)"><span class="nav-icon">⇄</span> Itens × Fornecedores</div>
+    <div class="nav-item" onclick="goTab('fornecedores',this)">
+      <span class="nav-icon">◎</span> Fornecedores
+      <span class="nav-badge" id="badgeCert"></span>
+    </div>
     <div class="nav-item" onclick="goTab('historico',this)"><span class="nav-icon">▣</span> Histórico</div>
     <div class="nav-item" onclick="abrirConfigPedido()"><span class="nav-icon">≡</span> Textos do Pedido</div>
   </div>
@@ -118,8 +220,49 @@
         <button class="btn btn-sm btn-secondary" onclick="carregarFila()">Atualizar</button>
       </div>
 
+      <!-- Faltas do recebimento voltam para cá até serem recompradas -->
+      <div id="pendContainer"></div>
+
       <div class="section-title"><span>Aprovados aguardando ordem de compra</span></div>
       <div id="filaContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- ================= ITENS × FORNECEDORES ================= -->
+  <div class="tab-content" id="tab-matriz">
+    <div class="main full">
+      <div class="stats-grid mb-3">
+        <div class="stat-card"><div class="stat-label">Itens mapeados</div><div class="stat-val" id="mtItens">—</div><div class="stat-sub">com fornecedor definido</div></div>
+        <div class="stat-card"><div class="stat-label">Com concorrência</div><div class="stat-val" id="mtMulti">—</div><div class="stat-sub">2 ou mais fornecedores</div></div>
+        <div class="stat-card"><div class="stat-label">Economia possível</div><div class="stat-val" id="mtEcon">—</div><div class="stat-sub">se comprar sempre o menor</div></div>
+      </div>
+
+      <div class="aviso aviso-info">
+        Cada item pode ter vários fornecedores. O <strong>primário</strong> (círculo dourado) é o
+        que o sistema usa ao montar a ordem de compra — a compradora troca a qualquer momento,
+        e pode trocar só naquele pedido sem mexer no cadastro.
+      </div>
+
+      <div class="filters-bar mb-3" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input class="input" id="m-busca" placeholder="Buscar item ou fornecedor..." oninput="renderMatriz()" style="flex:1;min-width:200px">
+        <select class="select" id="m-cat" onchange="renderMatriz()" style="max-width:170px">
+          <option value="">Todas as categorias</option>
+          <option value="proteina">Proteína</option>
+          <option value="laticinios">Laticínios</option>
+          <option value="hortifruti">Hortifruti</option>
+          <option value="diversos">Diversos</option>
+        </select>
+        <select class="select" id="m-filtro" onchange="renderMatriz()" style="max-width:210px">
+          <option value="">Todos os itens</option>
+          <option value="multi">Só com 2+ fornecedores</option>
+          <option value="caro">Primário não é o mais barato</option>
+          <option value="sem_preco">Sem preço cadastrado</option>
+          <option value="orfao">Sem fornecedor nenhum</option>
+        </select>
+      </div>
+
+      <div class="section-title"><span>Itens (<span id="mtCount">0</span>)</span></div>
+      <div id="matrizContainer"><div class="loading-text">Carregando...</div></div>
     </div>
   </div>
 
@@ -235,12 +378,89 @@
         <div><label class="field-label">Prazo de entrega (dias)</label><input class="input" id="fm-prazo" type="number" min="0" value="1"></div>
         <div><label class="field-label">Condição de pagamento</label><input class="input" id="fm-pgto" placeholder="Ex.: 28 dias"></div>
       </div>
-      <label class="field-label">Observação</label>
+      <label class="field-label">Categorias que atende</label>
+      <div id="fm-cats" style="display:flex;gap:14px;flex-wrap:wrap;padding:6px 0 2px"></div>
+      <label class="field-label mt-2">Observação</label>
       <input class="input" id="fm-obs" placeholder="opcional">
+
+      <!-- Certificações: só aparece ao editar, precisa do fornecedor já salvo -->
+      <div id="fm-certBloco" style="display:none">
+        <div class="section-title mt-3">
+          <span>Certificações</span>
+          <button class="btn btn-sm btn-secondary" onclick="abrirCert()">+ Adicionar</button>
+        </div>
+        <div class="text-muted mb-2" style="font-size:11px">
+          Alvará sanitário, SIF, CRMV, ISO, laudo de potabilidade. O sistema avisa antes de vencer.
+        </div>
+        <div id="fm-certLista"></div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="fecharModal('fornModal')">Cancelar</button>
       <button class="btn btn-primary" onclick="salvarFornecedor()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: certificação ============ -->
+<div class="modal-overlay" id="certModal">
+  <div class="modal" style="width:520px">
+    <div class="modal-header">
+      <span id="certModalTitle">Nova certificação</span>
+      <button class="modal-close" onclick="fecharModal('certModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="ct-id">
+      <label class="field-label">Tipo *</label>
+      <input class="input" id="ct-tipo" list="tiposCert" placeholder="Ex.: Alvará Sanitário">
+      <datalist id="tiposCert">
+        <option value="Alvará Sanitário"><option value="SIF"><option value="CRMV">
+        <option value="ISO 22000"><option value="Licença Ambiental">
+        <option value="Laudo de Potabilidade"><option value="Certificado de Boas Práticas">
+      </datalist>
+      <div class="form-row col2 mt-2">
+        <div><label class="field-label">Número</label><input class="input" id="ct-num" placeholder="opcional"></div>
+        <div><label class="field-label">Emissão</label><input class="input" type="date" id="ct-emissao"></div>
+      </div>
+      <label class="field-label">Vencimento *</label>
+      <input class="input" type="date" id="ct-venc">
+      <label class="field-label mt-2">Observação</label>
+      <input class="input" id="ct-obs" placeholder="opcional">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="btnExcluirCert" onclick="excluirCert()">Excluir</button>
+      <button class="btn btn-outline" onclick="fecharModal('certModal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarCert()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: par item × fornecedor ============ -->
+<div class="modal-overlay" id="ifModal">
+  <div class="modal" style="width:600px">
+    <div class="modal-header">
+      <span id="ifModalTitle">Item × Fornecedor</span>
+      <button class="modal-close" onclick="fecharModal('ifModal')">✕</button>
+    </div>
+    <div class="modal-body" id="ifModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="btnRemoverIF" onclick="removerIF()">Remover opção</button>
+      <button class="btn btn-outline" onclick="fecharModal('ifModal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarIF()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: trocar fornecedor de uma linha ============ -->
+<div class="modal-overlay" id="altModal">
+  <div class="modal" style="width:600px">
+    <div class="modal-header">
+      <span id="altModalTitle">Trocar fornecedor</span>
+      <button class="modal-close" onclick="fecharModal('altModal')">✕</button>
+    </div>
+    <div class="modal-body" id="altModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('altModal')">Voltar</button>
     </div>
   </div>
 </div>
@@ -269,14 +489,71 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const state = {
   user: null, perfil: null,
   fornecedores: [],
-  precos: {},          // itemId -> preco_unitario vigente
+  precos: {},          // itemId -> preco_unitario vigente (fallback pré-migration 22)
   fila: [],            // itens aprovados sem PO
   ordens: [],
   config: {},
-  poAtual: null,       // fornecedor selecionado no modal
-  emailAtual: null,    // { ordemId, texto, destino, copia }
+  poAtual: null,       // { grupo, fornecedor, linhas } — edição em andamento
+  emailAtual: null,
   enviando: false,
+
+  // ── Matriz Item × Fornecedor (migration 22) ──
+  // matriz[itemId] = [{ id, fornecedor_id, fornecedor, preco, prazo, moq, preferencia, ... }]
+  // ordenada por preferência e depois por preço.
+  matriz: {},
+  matrizOk: false,     // false quando a migration 22 ainda não rodou
+  itens: [],           // catálogo, para a aba da matriz
+  certificacoes: {},   // fornecedorId -> [certificações]
+  pendencias: [],      // faltas do recebimento aguardando recompra
 };
+
+// Troca de fornecedor válida só neste pedido: itemId -> fornecedorId.
+// Não vai para o banco — some ao recarregar a tela, que é o comportamento
+// esperado de "só desta vez".
+const overrideFornecedor = {};
+
+// =====================================================================
+// COMPARAÇÃO DE PREÇO ENTRE FORNECEDORES
+// =====================================================================
+// Cuidado necessário: o catálogo tem cotações de datas diferentes. Vários
+// itens têm preço da HETROS de 03/06 e de outro fornecedor de 30/07 —
+// isso é histórico, não concorrência. Anunciar "economize R$184" com base
+// nisso mandaria a compradora negociar em cima de um preço vencido.
+//
+// Só chamamos de comparável quando as duas cotações estão dentro da mesma
+// janela. Fora dela o sistema mostra os dois preços com a data e não
+// sugere economia — a compradora recotiza se quiser.
+const DIAS_COTACAO_COMPARAVEL = 45;
+
+function diasEntre(a, b) {
+  if (!a || !b) return null;
+  return Math.abs(new Date(a + 'T00:00:00') - new Date(b + 'T00:00:00')) / 86400000;
+}
+
+// Melhor alternativa REAL a uma opção: mais barata e cotada na mesma época
+function alternativaComparavel(opcaoAtual, todasOpcoes) {
+  if (!opcaoAtual || opcaoAtual.preco == null) return null;
+  return todasOpcoes
+    .filter(o => o.fornecedor_id !== opcaoAtual.fornecedor_id
+      && o.preco != null
+      && o.preco < opcaoAtual.preco
+      && cotacoesComparaveis(o, opcaoAtual))
+    .reduce((m, o) => (!m || o.preco < m.preco ? o : m), null);
+}
+
+function cotacoesComparaveis(a, b) {
+  const d = diasEntre(a.preco_em, b.preco_em);
+  return d !== null && d <= DIAS_COTACAO_COMPARAVEL;
+}
+
+// Rótulo curto de quão velho é o preço
+function idadePreco(op) {
+  if (!op?.preco_em) return '';
+  const dias = Math.round((new Date() - new Date(op.preco_em + 'T00:00:00')) / 86400000);
+  if (dias <= 30)  return '';
+  if (dias <= 90)  return 'cotado em ' + ptDate(op.preco_em);
+  return 'preço de ' + ptDate(op.preco_em) + ' — reconfirmar';
+}
 
 // =====================================================================
 // INIT
@@ -307,8 +584,12 @@ window.addEventListener('load', async () => {
   await carregarConfig();
   await carregarFornecedores();
   await carregarPrecos();
+  await carregarMatriz();
+  await carregarCertificacoes();
+  await carregarPendencias();
   await carregarFila();
   await carregarOrdens();
+  renderFornecedores();   // agora com matriz e certificações carregadas
 });
 
 async function carregarConfig() {
@@ -319,6 +600,190 @@ async function carregarConfig() {
 async function carregarPrecos() {
   const { data } = await sb.from('precos').select('item_id, preco_unitario, vigente').eq('vigente', true);
   (data || []).forEach(p => state.precos[p.item_id] = parseFloat(p.preco_unitario) || 0);
+}
+
+// PostgREST corta em 1000 linhas por requisição — a matriz passa disso.
+async function buscarTudo(tabela, colunas, ajustar) {
+  const out = [];
+  for (let de = 0; ; de += 1000) {
+    let q = sb.from(tabela).select(colunas).range(de, de + 999);
+    if (ajustar) q = ajustar(q);
+    const { data, error } = await q;
+    if (error) return { data: out, error };
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return { data: out, error: null };
+}
+
+// =====================================================================
+// MATRIZ ITEM × FORNECEDOR
+// =====================================================================
+// Antes da migration 22 o fornecedor era um texto solto em
+// itens.fornecedor_principal — uma opção por item, sem preço comparável.
+// Se a migration ainda não rodou, matrizOk fica false e todo o resto da
+// tela cai no comportamento antigo. O sistema não quebra no meio do deploy.
+
+async function carregarMatriz() {
+  const { data, error } = await buscarTudo('item_fornecedores',
+    `id, item_id, fornecedor_id, preco_unitario, preco_atualizado_em, prazo_entrega_dias,
+     quantidade_minima, embalagem, unidade_compra, fator_conversao, codigo_fornecedor,
+     preferencia, ativo, observacao`);
+
+  if (error) {
+    console.warn('[matriz] indisponível — rode a migration 22.', error.message);
+    state.matrizOk = false;
+    return;
+  }
+  state.matrizOk = true;
+
+  const { data: itens } = await buscarTudo('itens',
+    'id, nome, categoria, unidade, fornecedor_principal, ativo, producao_propria',
+    q => q.eq('ativo', true));
+  state.itens = itens || [];
+
+  const porForn = Object.fromEntries(state.fornecedores.map(f => [f.id, f]));
+  state.matriz = {};
+
+  (data || []).forEach(r => {
+    const f = porForn[r.fornecedor_id];
+    (state.matriz[r.item_id] ||= []).push({
+      id: r.id,
+      item_id: r.item_id,
+      fornecedor_id: r.fornecedor_id,
+      fornecedor: f?.nome || '—',
+      email: f?.email || null,
+      preco: r.preco_unitario != null ? parseFloat(r.preco_unitario) : null,
+      preco_em: r.preco_atualizado_em,
+      // Prazo do item vence o do fornecedor: congelado costuma demorar mais
+      prazo: r.prazo_entrega_dias ?? f?.prazo_entrega_dias ?? 1,
+      prazo_proprio: r.prazo_entrega_dias,
+      moq: r.quantidade_minima != null ? parseFloat(r.quantidade_minima) : null,
+      embalagem: r.embalagem, unidade_compra: r.unidade_compra,
+      fator: parseFloat(r.fator_conversao) || 1,
+      codigo: r.codigo_fornecedor,
+      preferencia: r.preferencia, ativo: r.ativo, observacao: r.observacao,
+    });
+  });
+
+  // Primário primeiro, depois o mais barato. Sem preço vai para o fim —
+  // senão um cadastro incompleto venceria de um preço real.
+  Object.values(state.matriz).forEach(ops => ops.sort((a, b) =>
+    a.preferencia - b.preferencia ||
+    (a.preco ?? Infinity) - (b.preco ?? Infinity)));
+}
+
+// A opção que o sistema usa por padrão para um item
+function opcaoPadrao(itemId) {
+  const ops = (state.matriz[itemId] || []).filter(o => o.ativo);
+  return ops[0] || null;
+}
+
+function opcoesDe(itemId) {
+  return (state.matriz[itemId] || []).filter(o => o.ativo);
+}
+
+// =====================================================================
+// CERTIFICAÇÕES
+// =====================================================================
+async function carregarCertificacoes() {
+  const { data, error } = await sb.from('fornecedor_certificacoes')
+    .select('*').eq('ativo', true).order('vencimento');
+  if (error) { state.certificacoes = {}; return; }
+
+  state.certificacoes = {};
+  (data || []).forEach(c => (state.certificacoes[c.fornecedor_id] ||= []).push(c));
+
+  const n = Object.values(state.certificacoes).flat()
+    .filter(c => statusCert(c).nivel !== 'ok').length;
+  setBadge('badgeCert', n);
+}
+
+// vencido · perto do vencimento · ok
+function statusCert(c) {
+  if (!c.vencimento) return { nivel: 'ok', dias: null, rotulo: 'sem data' };
+  const alerta = parseInt(state.config.alerta_certificado_dias || '30', 10);
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const venc = new Date(c.vencimento + 'T00:00:00');
+  const dias = Math.round((venc - hoje) / 86400000);
+  if (dias < 0)      return { nivel: 'vencido', dias, rotulo: `vencido há ${-dias}d` };
+  if (dias <= alerta) return { nivel: 'perto',  dias, rotulo: `vence em ${dias}d` };
+  return { nivel: 'ok', dias, rotulo: ptDate(c.vencimento) };
+}
+
+// Pior situação entre os certificados de um fornecedor
+function alertaFornecedor(fornId) {
+  const cs = state.certificacoes[fornId] || [];
+  if (!cs.length) return null;
+  const st = cs.map(statusCert);
+  if (st.some(s => s.nivel === 'vencido')) return 'vencido';
+  if (st.some(s => s.nivel === 'perto'))   return 'perto';
+  return null;
+}
+
+// =====================================================================
+// PENDÊNCIAS DE ENTREGA (backorder)
+// =====================================================================
+// O que foi pedido e não chegou. O Recebimento gera; o Comprador resolve
+// colocando na próxima PO. Sem isso a falta só aparece quando o PDV reclama.
+async function carregarPendencias() {
+  const { data, error } = await sb.from('pendencias_compra')
+    .select('*, fornecedores(nome)').eq('status', 'aberta')
+    .order('criada_em', { ascending: false });
+  state.pendencias = error ? [] : (data || []);
+  renderPendencias();
+}
+
+function renderPendencias() {
+  const cont = document.getElementById('pendContainer');
+  if (!cont) return;
+  if (!state.pendencias.length) { cont.innerHTML = ''; return; }
+
+  const linhas = state.pendencias.map(p => `
+    <tr>
+      <td>${escapeHtml(p.item_nome)}</td>
+      <td class="num">${fmtQtd(p.quantidade)} ${escapeHtml(p.item_unidade || '')}</td>
+      <td>${escapeHtml(p.fornecedores?.nome || '—')}</td>
+      <td>${escapeHtml(rotuloMotivo(p.motivo_codigo))}</td>
+      <td>${ptDate(String(p.criada_em).slice(0, 10))}</td>
+      <td class="center">
+        <button class="btn btn-sm btn-secondary" onclick="resolverPendencia('${p.id}','cancelada')">Descartar</button>
+      </td>
+    </tr>`).join('');
+
+  cont.innerHTML = `
+    <div class="pend-bloco">
+      <div class="pend-head">
+        <span style="flex:1">⚠ ${state.pendencias.length} item(ns) pedidos que não chegaram</span>
+      </div>
+      <div style="padding:0 18px 16px">
+        <div class="text-muted mb-2" style="font-size:12px">
+          Vieram do Recebimento. Some à próxima ordem de compra do fornecedor —
+          ao gerar a PO, o sistema pergunta se quer incluí-los.
+        </div>
+        <table class="data-table">
+          <thead><tr><th>Item</th><th class="num">Falta</th><th>Fornecedor</th><th>Motivo</th><th>Desde</th><th class="center">Ação</th></tr></thead>
+          <tbody>${linhas}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+const MOTIVOS_RECEB = {
+  quantidade_menor: 'Veio menos', quantidade_maior: 'Veio mais',
+  nao_entregue: 'Não entregue', qualidade: 'Qualidade',
+  temperatura: 'Temperatura', validade: 'Validade',
+  embalagem: 'Embalagem', produto_errado: 'Produto errado', outro: 'Outro',
+};
+function rotuloMotivo(c) { return MOTIVOS_RECEB[c] || c || '—'; }
+
+async function resolverPendencia(id, status) {
+  if (status === 'cancelada' && !confirm('Descartar esta pendência? Ela some da fila.')) return;
+  const { error } = await sb.from('pendencias_compra').update({
+    status, resolvida_em: new Date().toISOString(), resolvida_por: state.perfil.id,
+  }).eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  await carregarPendencias();
 }
 
 // =====================================================================
@@ -345,22 +810,43 @@ async function carregarFila() {
   renderFila();
 }
 
-// Agrupa a fila por fornecedor e, dentro dele, consolida item repetido de PDVs diferentes
+// Agrupa a fila por fornecedor e, dentro dele, consolida item repetido de PDVs
+// diferentes. Com a matriz, o fornecedor de cada item é a opção primária (ou a
+// mais barata); sem ela, cai no fornecedor_principal como antes.
 function agruparFilaPorFornecedor() {
   const grupos = {};
   state.fila.forEach(it => {
-    const forn = (it.itens?.fornecedor_principal || '').trim() || 'SEM FORNECEDOR';
-    grupos[forn] ||= { fornecedor: forn, linhas: {}, ids: [] };
+    // Troca "só neste pedido" tem precedência sobre a preferência do cadastro
+    const forcado = overrideFornecedor[it.item_id];
+    const op = !state.matrizOk ? null
+      : (forcado ? opcoesDe(it.item_id).find(o => o.fornecedor_id === forcado) : null)
+        || opcaoPadrao(it.item_id);
+    const forn = op ? op.fornecedor
+      : ((it.itens?.fornecedor_principal || '').trim() || 'SEM FORNECEDOR');
+
+    grupos[forn] ||= { fornecedor: forn, fornecedor_id: op?.fornecedor_id || null, linhas: {}, ids: [] };
     const g = grupos[forn];
     g.ids.push(it.id);
 
     const chave = it.item_id || it.item_nome;
     if (!g.linhas[chave]) {
+      const alternativas = state.matrizOk ? opcoesDe(it.item_id) : [];
+      // Só conta como economia se a cotação for da mesma época — ver
+      // DIAS_COTACAO_COMPARAVEL
+      const maisBarata = alternativaComparavel(op, alternativas);
+
       g.linhas[chave] = {
         item_id: it.item_id, nome: it.item_nome,
         categoria: it.item_categoria, unidade: it.item_unidade,
-        qtd: 0, preco: state.precos[it.item_id] || 0,
+        qtd: 0,
+        preco: op?.preco ?? state.precos[it.item_id] ?? 0,
+        opcao: op,                    // fornecedor escolhido para esta linha
+        alternativas,                 // todas as opções ativas do item
+        maisBarata,                   // referência para o aviso de economia
+        moq: op?.moq ?? null,
+        codigo: op?.codigo ?? null,
         pdvs: [], itemIds: [],
+        removida: false, obsLinha: '',
       };
     }
     const l = g.linhas[chave];
@@ -373,7 +859,10 @@ function agruparFilaPorFornecedor() {
   return Object.values(grupos).map(g => {
     const linhas = Object.values(g.linhas).sort((a, b) => a.nome.localeCompare(b.nome));
     const valor = linhas.reduce((s, l) => s + l.qtd * l.preco, 0);
-    return { ...g, linhas, valor };
+    // Quanto sairia se cada item fosse comprado no fornecedor mais barato
+    const economia = linhas.reduce((s, l) =>
+      s + (l.maisBarata && l.preco ? Math.max(0, (l.preco - l.maisBarata.preco) * l.qtd) : 0), 0);
+    return { ...g, linhas, valor, economia };
   }).sort((a, b) => b.valor - a.valor);
 }
 
@@ -396,33 +885,50 @@ function renderFila() {
   cont.innerHTML = grupos.map((g, gi) => {
     const f = state.fornecedores.find(x => x.nome === g.fornecedor);
     const semCadastro = !f;
-    const linhas = g.linhas.map(l => `
+    const alertaCert = f ? alertaFornecedor(f.id) : null;
+
+    const linhas = g.linhas.map(l => {
+      const nAlt = l.alternativas.length;
+      const ganho = l.maisBarata ? (l.preco - l.maisBarata.preco) * l.qtd : 0;
+      const idade = idadePreco(l.opcao);
+      return `
       <tr>
         <td>${escapeHtml(l.nome)}
           ${l.pdvs.length ? `<br><span class="linha-origem">${escapeHtml(l.pdvs.join(' · '))}</span>` : ''}
+          ${ganho > 0 ? `<br><span class="mtz-econ">${escapeHtml(l.maisBarata.fornecedor)} cobra
+             ${fmtMoeda(l.maisBarata.preco)} — economia de ${fmtMoeda(ganho)}</span>` : ''}
         </td>
         <td class="num">${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}</td>
-        <td class="num">${l.preco ? fmtMoeda(l.preco) : '<span class="text-muted">sem preço</span>'}</td>
+        <td class="num">${l.preco ? fmtMoeda(l.preco) : '<span class="text-muted">sem preço</span>'}
+          ${idade ? `<br><span class="opc-tag">${escapeHtml(idade)}</span>` : ''}
+          ${nAlt > 1 ? `<br><span class="opc-tag">${nAlt} fornecedores</span>` : ''}</td>
         <td class="num right">${l.preco ? fmtMoeda(l.qtd * l.preco) : '—'}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     return `
       <div class="forn-bloco">
         <div class="forn-head" onclick="toggleForn(${gi})">
           <span class="forn-nome">${escapeHtml(g.fornecedor)}</span>
           ${semCadastro ? '<span class="forn-sem-email">⚠ fornecedor não cadastrado</span>' : ''}
+          ${alertaCert === 'vencido' ? '<span class="forn-sem-email">⚠ certificado vencido</span>'
+            : alertaCert === 'perto' ? '<span class="forn-sem-email">⚠ certificado vencendo</span>' : ''}
           <span class="forn-meta">${g.linhas.length} item(ns)</span>
           <span class="forn-valor">${fmtMoeda(g.valor)}</span>
           <span class="chevron" id="chevF-${gi}">▼</span>
         </div>
         <div class="forn-body" id="bodyF-${gi}">
+          ${g.economia > 0 ? `<div class="aviso aviso-info">
+            Comprando cada item no fornecedor mais barato, este bloco sairia
+            <strong>${fmtMoeda(g.economia)}</strong> mais barato. A troca é feita item a item
+            na tela de gerar a ordem.</div>` : ''}
           <table class="data-table">
             <thead><tr><th>Item</th><th class="num">Qtd</th><th class="num">Preço un.</th><th class="num right">Total</th></tr></thead>
             <tbody>${linhas}</tbody>
           </table>
           <div class="form-actions mt-3">
             <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();abrirGerarPO('${escapeAttr(g.fornecedor)}')">
-              Gerar Ordem de Compra
+              Revisar e gerar ordem
             </button>
           </div>
         </div>
@@ -436,66 +942,245 @@ function toggleForn(i) {
 }
 
 // =====================================================================
-// GERAR PO
+// GERAR PO — com revisão antes de fechar
 // =====================================================================
+// A compradora precisa poder ajustar quantidade e preço antes de mandar:
+// o fornecedor mudou o preço por telefone, o PDV pediu 12 mas cabe 1 caixa
+// de 10, um item entrou por engano. Antes isso só dava para consertar
+// cancelando a PO e refazendo.
+
 function abrirGerarPO(fornNome) {
   const grupo = agruparFilaPorFornecedor().find(g => g.fornecedor === fornNome);
   if (!grupo) { showToast('Fornecedor não encontrado na fila.', 'error'); return; }
 
   const f = state.fornecedores.find(x => x.nome === fornNome);
-  state.poAtual = { grupo, fornecedor: f || null };
 
+  // Pendências de entrega deste mesmo fornecedor entram como sugestão
+  const pends = state.pendencias.filter(p =>
+    (f && p.fornecedor_id === f.id) || p.fornecedores?.nome === fornNome);
+
+  state.poAtual = {
+    fornecedorNome: fornNome,
+    fornecedor: f || null,
+    // cópia editável — mexer aqui não altera a fila até a PO ser gerada
+    linhas: grupo.linhas.map(l => ({ ...l, incluir: true })),
+    pendencias: pends.map(p => ({
+      pendencia_id: p.id, item_id: p.item_id, nome: p.item_nome,
+      unidade: p.item_unidade, qtd: parseFloat(p.quantidade) || 0,
+      preco: opcaoPadrao(p.item_id)?.preco ?? state.precos[p.item_id] ?? 0,
+      motivo: p.motivo_codigo, incluir: false,
+    })),
+  };
+
+  document.getElementById('poModalTitle').textContent = 'Revisar pedido — ' + fornNome;
+  renderPOEdit();
+  abrirModal('poModal');
+}
+
+function totalPO() {
+  const { linhas, pendencias } = state.poAtual;
+  const a = linhas.filter(l => l.incluir).reduce((s, l) => s + l.qtd * (l.preco || 0), 0);
+  const b = pendencias.filter(p => p.incluir).reduce((s, p) => s + p.qtd * (p.preco || 0), 0);
+  return a + b;
+}
+
+function renderPOEdit() {
+  const { linhas, pendencias, fornecedor: f, fornecedorNome } = state.poAtual;
   const prazo = f?.prazo_entrega_dias ?? 1;
   const prev = new Date(); prev.setDate(prev.getDate() + prazo);
 
-  const semPreco = grupo.linhas.filter(l => !l.preco).length;
+  const ativas = linhas.filter(l => l.incluir);
+  const semPreco = ativas.filter(l => !l.preco).length;
+  const abaixoMOQ = ativas.filter(l => l.moq != null && l.qtd < l.moq);
+  const alertaCert = f ? alertaFornecedor(f.id) : null;
 
-  document.getElementById('poModalTitle').textContent = 'Gerar PO — ' + fornNome;
+  const linhaHtml = (l, i) => `
+    <div class="po-linha-edit ${l.incluir ? '' : 'removida'}" id="pol-${i}">
+      <div>
+        <div class="po-nome-edit">${escapeHtml(l.nome)}</div>
+        ${l.pdvs?.length ? `<span class="linha-origem">${escapeHtml(l.pdvs.join(' · '))}</span>` : ''}
+        ${l.codigo ? `<span class="opc-tag">cód. ${escapeHtml(l.codigo)}</span>` : ''}
+        ${l.moq != null && l.qtd < l.moq
+          ? `<div class="po-moq">pedido mínimo ${fmtQtd(l.moq)} ${escapeHtml(l.unidade || '')}</div>` : ''}
+        ${l.alternativas?.length > 1
+          ? `<span class="po-alt" onclick="abrirAlternativas(${i})">${l.alternativas.length} fornecedores — trocar</span>` : ''}
+      </div>
+      <input class="po-inp ${l.moq != null && l.qtd < l.moq ? 'alerta' : ''}" type="number" step="0.001" min="0"
+             value="${l.qtd}" onchange="mudarLinhaPO(${i},'qtd',this.value)" ${l.incluir ? '' : 'disabled'}>
+      <input class="po-inp" type="number" step="0.01" min="0" placeholder="preço"
+             value="${l.preco || ''}" onchange="mudarLinhaPO(${i},'preco',this.value)" ${l.incluir ? '' : 'disabled'}>
+      <div class="num right" style="font-size:13px">${l.preco ? fmtMoeda(l.qtd * l.preco) : '—'}</div>
+      <button class="po-del" onclick="alternarLinhaPO(${i})"
+              title="${l.incluir ? 'Tirar do pedido' : 'Devolver ao pedido'}">${l.incluir ? '✕' : '↺'}</button>
+    </div>`;
+
+  const pendHtml = pendencias.map((p, i) => `
+    <div class="po-linha-edit ${p.incluir ? '' : 'removida'}">
+      <div>
+        <div class="po-nome-edit">${escapeHtml(p.nome)}</div>
+        <span class="linha-origem">falta de entrega anterior · ${escapeHtml(rotuloMotivo(p.motivo))}</span>
+      </div>
+      <input class="po-inp" type="number" step="0.001" min="0" value="${p.qtd}"
+             onchange="mudarPendPO(${i},'qtd',this.value)" ${p.incluir ? '' : 'disabled'}>
+      <input class="po-inp" type="number" step="0.01" min="0" placeholder="preço" value="${p.preco || ''}"
+             onchange="mudarPendPO(${i},'preco',this.value)" ${p.incluir ? '' : 'disabled'}>
+      <div class="num right" style="font-size:13px">${p.preco ? fmtMoeda(p.qtd * p.preco) : '—'}</div>
+      <button class="po-del" onclick="alternarPendPO(${i})">${p.incluir ? '✕' : '＋'}</button>
+    </div>`).join('');
+
   document.getElementById('poModalBody').innerHTML = `
     ${!f ? `<div class="aviso aviso-warn">Este fornecedor ainda não está cadastrado.
              A PO será criada e o cadastro feito automaticamente — complete os dados depois em Fornecedores.</div>` : ''}
-    ${semPreco ? `<div class="aviso aviso-warn">${semPreco} item(ns) sem preço de referência — o valor total sai incompleto.</div>` : ''}
+    ${alertaCert === 'vencido' ? `<div class="aviso aviso-warn">
+      <strong>Certificado vencido.</strong> Verifique a documentação de ${escapeHtml(fornecedorNome)}
+      antes de emitir o pedido.</div>` : ''}
+    ${alertaCert === 'perto' ? `<div class="aviso aviso-info">
+      Um certificado deste fornecedor vence em breve — veja em Fornecedores.</div>` : ''}
+    ${semPreco ? `<div class="aviso aviso-warn">${semPreco} item(ns) sem preço — o total sai incompleto.
+      Preencha na coluna de preço para já deixar registrado.</div>` : ''}
+    ${abaixoMOQ.length ? `<div class="aviso aviso-warn">
+      ${abaixoMOQ.length} item(ns) abaixo do pedido mínimo do fornecedor.
+      Ajuste a quantidade ou o fornecedor pode recusar a linha.</div>` : ''}
+
     <div class="form-row col2">
       <div>
         <label class="field-label">Entrega prevista</label>
         <input class="input" type="date" id="po-entrega" value="${isoDate(prev)}">
       </div>
       <div>
-        <label class="field-label">Valor total estimado</label>
-        <input class="input" value="${fmtMoeda(grupo.valor)}" disabled>
+        <label class="field-label">Total do pedido</label>
+        <input class="input" id="po-total" value="${fmtMoeda(totalPO())}" disabled>
       </div>
     </div>
     <label class="field-label">Observação para o fornecedor</label>
-    <input class="input" id="po-obs" placeholder="opcional — entra no corpo do e-mail">
-    <div class="section-title mt-3"><span>${grupo.linhas.length} item(ns)</span></div>
+    <input class="input" id="po-obs" placeholder="opcional — entra no texto do pedido">
+
+    <div class="section-title mt-3">
+      <span>Itens (${ativas.length} de ${linhas.length})</span>
+    </div>
+    <div class="text-muted mb-2" style="font-size:11px">
+      Ajuste quantidade e preço direto na linha. O ✕ tira o item deste pedido —
+      ele volta para a fila e entra no próximo.
+    </div>
+    <div style="border:1px solid var(--border-subtle)">
+      ${linhas.map(linhaHtml).join('')}
+    </div>
+
+    ${pendencias.length ? `
+      <div class="section-title mt-3"><span>Faltas de entregas anteriores</span></div>
+      <div class="text-muted mb-2" style="font-size:11px">
+        Este fornecedor deve estes itens. Clique em ＋ para incluir na ordem.
+      </div>
+      <div style="border:1px solid rgba(224,140,62,0.35)">${pendHtml}</div>` : ''}`;
+}
+
+function mudarLinhaPO(i, campo, valor) {
+  const l = state.poAtual.linhas[i];
+  l[campo] = parseFloat(valor) || 0;
+  renderPOEdit();
+}
+function alternarLinhaPO(i) {
+  state.poAtual.linhas[i].incluir = !state.poAtual.linhas[i].incluir;
+  renderPOEdit();
+}
+function mudarPendPO(i, campo, valor) {
+  state.poAtual.pendencias[i][campo] = parseFloat(valor) || 0;
+  renderPOEdit();
+}
+function alternarPendPO(i) {
+  state.poAtual.pendencias[i].incluir = !state.poAtual.pendencias[i].incluir;
+  renderPOEdit();
+}
+
+// ── Trocar o fornecedor de um item ────────────────────────────────
+// Duas decisões diferentes, e a tela separa as duas: mudar só neste pedido
+// (o item sai daqui e vai para o bloco do outro fornecedor na fila) ou mudar
+// o cadastro, que passa a valer para todos os pedidos seguintes.
+function abrirAlternativas(i) {
+  const l = state.poAtual.linhas[i];
+  const atual = l.opcao?.fornecedor_id;
+
+  document.getElementById('altModalTitle').textContent = l.nome;
+  document.getElementById('altModalBody').innerHTML = `
+    <div class="aviso aviso-info">
+      Quantidade desta linha: <strong>${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}</strong>.
+      Os totais abaixo já consideram essa quantidade.
+    </div>
     <table class="data-table">
-      <thead><tr><th>Item</th><th class="num">Qtd</th><th class="num right">Total</th></tr></thead>
-      <tbody>${grupo.linhas.map(l => `
-        <tr>
-          <td>${escapeHtml(l.nome)}</td>
-          <td class="num">${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}</td>
-          <td class="num right">${l.preco ? fmtMoeda(l.qtd * l.preco) : '—'}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>`;
-  abrirModal('poModal');
+      <thead><tr><th>Fornecedor</th><th class="num">Preço un.</th><th class="num">Total</th>
+        <th class="center">Prazo</th><th class="center">Mín.</th><th class="center">Usar</th></tr></thead>
+      <tbody>${l.alternativas.map(o => {
+        const ehAtual = o.fornecedor_id === atual;
+        const velha = !ehAtual && l.opcao && !cotacoesComparaveis(o, l.opcao);
+        return `<tr>
+          <td>${escapeHtml(o.fornecedor)}
+            ${o.preferencia === 1 ? '<span class="opc-tag">primário</span>' : ''}
+            ${ehAtual ? '<span class="opc-tag">neste pedido</span>' : ''}
+            ${velha ? '<span class="opc-tag" style="color:var(--orange)">outra época — recotizar</span>' : ''}
+            ${o.codigo ? `<br><span class="linha-origem">cód. ${escapeHtml(o.codigo)}</span>` : ''}</td>
+          <td class="num">${o.preco != null ? fmtMoeda(o.preco) : '—'}
+            ${o.preco_em ? `<br><span class="linha-origem">${ptDate(o.preco_em)}</span>` : ''}</td>
+          <td class="num">${o.preco != null ? fmtMoeda(o.preco * l.qtd) : '—'}</td>
+          <td class="center">${o.prazo}d</td>
+          <td class="center">${o.moq != null ? fmtQtd(o.moq) : '—'}</td>
+          <td class="center">${ehAtual ? '<span class="text-muted">—</span>' : `
+            <button class="btn btn-sm btn-secondary" onclick="trocarFornecedorLinha(${i},'${o.fornecedor_id}',false)">Só aqui</button>
+            <button class="btn btn-sm btn-gold" onclick="trocarFornecedorLinha(${i},'${o.fornecedor_id}',true)">Tornar primário</button>`}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    <div class="text-muted mt-2" style="font-size:11px">
+      <strong>Só aqui</strong> tira o item deste pedido e o joga para o bloco do outro fornecedor,
+      sem tocar no cadastro. <strong>Tornar primário</strong> muda o padrão do item para todos
+      os pedidos futuros.
+    </div>`;
+  abrirModal('altModal');
+}
+
+async function trocarFornecedorLinha(i, fornecedorId, permanente) {
+  const l = state.poAtual.linhas[i];
+
+  if (permanente) {
+    // preferencia 1 no escolhido, 2 nos demais do mesmo item
+    const ids = l.alternativas.map(o => o.id);
+    await sb.from('item_fornecedores').update({ preferencia: 2 }).in('id', ids);
+    const alvo = l.alternativas.find(o => o.fornecedor_id === fornecedorId);
+    const { error } = await sb.from('item_fornecedores').update({
+      preferencia: 1, atualizado_em: new Date().toISOString(), atualizado_por: state.perfil.id,
+    }).eq('id', alvo.id);
+    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    showToast(alvo.fornecedor + ' agora é o fornecedor padrão de ' + l.nome + '.', 'success');
+    await carregarMatriz();
+  } else {
+    overrideFornecedor[l.item_id] = fornecedorId;
+    showToast(l.nome + ' movido para o outro fornecedor neste pedido.', 'info');
+  }
+
+  fecharModal('altModal');
+  fecharModal('poModal');
+  renderFila();
 }
 
 async function gerarPO() {
   if (state.enviando) return;
-  const { grupo } = state.poAtual || {};
-  if (!grupo) return;
+  const po = state.poAtual;
+  if (!po) return;
+
+  const linhas = po.linhas.filter(l => l.incluir);
+  const pends  = po.pendencias.filter(p => p.incluir);
+  if (!linhas.length && !pends.length) {
+    showToast('Nenhum item no pedido.', 'error'); return;
+  }
 
   state.enviando = true;
   const btn = document.getElementById('btnGerarPO');
   btn.disabled = true; btn.textContent = 'Gerando...';
 
   try {
-    // Garante o fornecedor cadastrado
-    let forn = state.fornecedores.find(x => x.nome === grupo.fornecedor);
+    let forn = state.fornecedores.find(x => x.nome === po.fornecedorNome);
     if (!forn) {
       const { data, error } = await sb.from('fornecedores')
-        .insert({ nome: grupo.fornecedor }).select().single();
+        .insert({ nome: po.fornecedorNome }).select().single();
       if (error) { showToast('Erro ao criar fornecedor: ' + error.message, 'error'); return; }
       forn = data;
       state.fornecedores.push(forn);
@@ -503,51 +1188,105 @@ async function gerarPO() {
 
     const entrega = document.getElementById('po-entrega').value || null;
     const obs = document.getElementById('po-obs').value.trim() || null;
+    const total = totalPO();
 
     const { data: ordem, error } = await inserirIdempotente(sb, 'ordens_compra', {
       fornecedor_id: forn.id,
       status: 'rascunho',
       data_emissao: isoDate(new Date()),
       data_entrega_prevista: entrega,
-      valor_total: grupo.valor,
+      valor_total: total,
       observacao: obs,
-      email_destino: forn.email || null,   // só registro de para quem foi — o sistema não envia
+      email_destino: forn.email || null,   // só registro — o sistema não envia
       criada_por: state.perfil.id,
-    }, 'po-' + grupo.fornecedor);
+    }, 'po-' + po.fornecedorNome);
 
     if (error) {
       if (ehEnvioDuplicado(error)) { showToast('Esta PO já havia sido gerada.', 'info'); fecharModal('poModal'); return; }
       showToast('Erro ao gerar PO: ' + error.message, 'error'); return;
     }
 
-    // Itens da PO
-    const itensPO = grupo.linhas.map(l => ({
-      ordem_id: ordem.id,
-      item_id: l.item_id,
-      item_nome: l.nome,
-      item_categoria: l.categoria,
-      item_unidade: l.unidade,
-      quantidade: l.qtd,
-      preco_unitario: l.preco || null,
-      valor_linha: l.preco ? l.qtd * l.preco : null,
-      origem_pdvs: l.pdvs.join(' · ') || null,
-    }));
-    const { error: ei } = await sb.from('ordem_compra_itens').insert(itensPO);
+    const itensPO = [
+      ...linhas.map(l => ({
+        ordem_id: ordem.id, item_id: l.item_id, item_nome: l.nome,
+        item_categoria: l.categoria, item_unidade: l.unidade,
+        quantidade: l.qtd,
+        preco_unitario: l.preco || null,
+        valor_linha: l.preco ? l.qtd * l.preco : null,
+        origem_pdvs: l.pdvs.join(' · ') || null,
+        codigo_fornecedor: l.codigo || null,
+      })),
+      ...pends.map(p => ({
+        ordem_id: ordem.id, item_id: p.item_id, item_nome: p.nome,
+        item_unidade: p.unidade, quantidade: p.qtd,
+        preco_unitario: p.preco || null,
+        valor_linha: p.preco ? p.qtd * p.preco : null,
+        origem_pdvs: null,
+        observacao: 'reposição de entrega anterior',
+      })),
+    ];
+    let { error: ei } = await sb.from('ordem_compra_itens').insert(itensPO);
+    // codigo_fornecedor só existe a partir da migration 22
+    if (ei && (ei.code === 'PGRST204' || ei.code === '42703')) {
+      ({ error: ei } = await sb.from('ordem_compra_itens')
+        .insert(itensPO.map(({ codigo_fornecedor, ...resto }) => resto)));
+    }
     if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
 
-    // Marca as solicitações originais como atendidas por esta PO
-    const idsSolic = grupo.linhas.flatMap(l => l.itemIds);
-    await sb.from('solicitacao_compra_itens').update({ ordem_compra_id: ordem.id }).in('id', idsSolic);
+    // Solicitações atendidas por esta PO — só as linhas que ficaram
+    const idsSolic = linhas.flatMap(l => l.itemIds);
+    if (idsSolic.length) {
+      await sb.from('solicitacao_compra_itens')
+        .update({ ordem_compra_id: ordem.id }).in('id', idsSolic);
+    }
 
-    resetTokenCarrinho('po-' + grupo.fornecedor);
-    showToast('PO ' + fmtPO(ordem.numero) + ' gerada.', 'success');
+    // Pendências incluídas ficam resolvidas por esta PO
+    if (pends.length) {
+      await sb.from('pendencias_compra').update({
+        status: 'recomprada', ordem_compra_id: ordem.id,
+        resolvida_em: new Date().toISOString(), resolvida_por: state.perfil.id,
+      }).in('id', pends.map(p => p.pendencia_id));
+    }
+
+    // Preço editado à mão vira o preço vigente do par item × fornecedor
+    if (state.matrizOk) await atualizarPrecosMatriz(linhas, forn.id);
+
+    resetTokenCarrinho('po-' + po.fornecedorNome);
+    showToast('PO ' + fmtPO(ordem.numero) + ' gerada com ' + itensPO.length + ' item(ns).', 'success');
     fecharModal('poModal');
+    await carregarMatriz();
+    await carregarPendencias();
     await carregarFila();
     await carregarOrdens();
     abrirEmail(ordem.id);
   } finally {
     state.enviando = false;
     btn.disabled = false; btn.textContent = 'Gerar PO';
+  }
+}
+
+// Preço digitado na revisão é informação nova: a compradora acabou de
+// confirmar com o fornecedor. Grava na matriz e no histórico de `precos`,
+// que é o que alimenta a curva de preço.
+async function atualizarPrecosMatriz(linhas, fornecedorId) {
+  const hoje = isoDate(new Date());
+  for (const l of linhas) {
+    const op = (state.matriz[l.item_id] || []).find(o => o.fornecedor_id === fornecedorId);
+    if (!op || !l.preco) continue;
+    if (op.preco != null && Math.abs(op.preco - l.preco) < 0.005) continue;   // não mudou
+
+    await sb.from('item_fornecedores').update({
+      preco_unitario: l.preco, preco_atualizado_em: hoje,
+      atualizado_em: new Date().toISOString(), atualizado_por: state.perfil.id,
+    }).eq('id', op.id);
+
+    // Histórico: o registro anterior deixa de ser vigente
+    await sb.from('precos').update({ vigente: false })
+      .eq('item_id', l.item_id).eq('fornecedor', op.fornecedor).eq('vigente', true);
+    await sb.from('precos').insert({
+      item_id: l.item_id, preco_unitario: l.preco, fornecedor: op.fornecedor,
+      vigente: true, atualizado_em: new Date().toISOString(), atualizado_por: state.perfil.id,
+    });
   }
 }
 
@@ -583,9 +1322,14 @@ async function abrirEmail(ordemId) {
     + (ordem.data_entrega_prevista ? `\nEntrega solicitada: ${ptDate(ordem.data_entrega_prevista)}` : '')
     + (f?.condicao_pagamento ? `\nCondição de pagamento: ${f.condicao_pagamento}` : ''));
 
+  // Quando o item tem código no catálogo do fornecedor, ele vai junto —
+  // é o que evita o fornecedor separar o corte errado.
+  const temCodigo = itens.some(i => i.codigo_fornecedor);
   const listaTxt = itens.map(i => {
     const q = `${fmtQtd(i.quantidade)} ${i.item_unidade || ''}`.trim();
-    return `${i.item_nome}\t${q}`;
+    return temCodigo
+      ? `${i.codigo_fornecedor || ''}\t${i.item_nome}\t${q}`
+      : `${i.item_nome}\t${q}`;
   }).join('\n');
   blocos.push('ITENS\n' + listaTxt);
 
@@ -601,6 +1345,7 @@ async function abrirEmail(ordemId) {
 
   // ── Versão com tabela, para colar formatado no Outlook ──
   const linhasHtml = itens.map(i => `<tr>
+      ${temCodigo ? `<td style="border:1px solid #999;padding:6px 10px">${escapeHtml(i.codigo_fornecedor || '')}</td>` : ''}
       <td style="border:1px solid #999;padding:6px 10px">${escapeHtml(i.item_nome)}</td>
       <td style="border:1px solid #999;padding:6px 10px;text-align:right;white-space:nowrap">${fmtQtd(i.quantidade)}</td>
       <td style="border:1px solid #999;padding:6px 10px">${escapeHtml(i.item_unidade || '')}</td>
@@ -615,6 +1360,7 @@ async function abrirEmail(ordemId) {
       <p>${paraHtml(antesTabela)}</p>
       <table style="border-collapse:collapse;font-size:11pt">
         <thead><tr>
+          ${temCodigo ? '<th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:left">Código</th>' : ''}
           <th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:left">Item</th>
           <th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:right">Qtd</th>
           <th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:left">Un</th>
@@ -866,6 +1612,361 @@ async function cancelarOrdem(id, numero) {
 }
 
 // =====================================================================
+// ABA ITENS × FORNECEDORES
+// =====================================================================
+function renderMatriz() {
+  const cont = document.getElementById('matrizContainer');
+  if (!state.matrizOk) {
+    cont.innerHTML = `<div class="aviso aviso-warn">
+      A matriz Item × Fornecedor ainda não existe no banco.
+      Rode a <strong>migration 22</strong> para habilitar esta tela. Até lá o sistema
+      continua usando um fornecedor por item, como antes.</div>`;
+    return;
+  }
+
+  const busca  = document.getElementById('m-busca').value.trim();
+  const cat    = document.getElementById('m-cat').value;
+  const filtro = document.getElementById('m-filtro').value;
+
+  // Só itens compráveis: produção própria não entra em ordem de compra
+  let itens = state.itens.filter(i => !i.producao_propria);
+  if (cat) itens = itens.filter(i => i.categoria === cat);
+
+  if (busca) {
+    itens = itens.filter(i =>
+      itemCasaBusca(i.nome, busca) ||
+      opcoesDe(i.id).some(o => itemCasaBusca(o.fornecedor, busca)));
+  }
+
+  const dados = itens.map(i => {
+    const ops = opcoesDe(i.id);
+    const comPreco = ops.filter(o => o.preco != null);
+    const menor = comPreco.length ? Math.min(...comPreco.map(o => o.preco)) : null;
+    const primario = ops[0] || null;
+    // "Primário está caro" só vale se a opção mais barata for da mesma época.
+    // Sem isso, um preço de junho faria o de julho parecer caro sem motivo.
+    const melhorReal = alternativaComparavel(primario, ops);
+    return { item: i, ops, menor, primario, melhorReal, primarioCaro: !!melhorReal };
+  });
+
+  const filtrados = dados.filter(d =>
+    filtro === 'multi'      ? d.ops.length > 1
+    : filtro === 'caro'     ? d.primarioCaro
+    : filtro === 'sem_preco'? d.ops.length > 0 && d.menor === null
+    : filtro === 'orfao'    ? d.ops.length === 0
+    : true);
+
+  // Indicadores sempre sobre o catálogo inteiro, não sobre o filtro
+  const mapeados = dados.filter(d => d.ops.length > 0).length;
+  const multi    = dados.filter(d => d.ops.length > 1).length;
+  document.getElementById('mtItens').textContent = mapeados;
+  document.getElementById('mtMulti').textContent = multi;
+  document.getElementById('mtEcon').textContent  = dados.filter(d => d.primarioCaro).length + ' itens';
+  document.getElementById('mtCount').textContent = filtrados.length;
+
+  if (!filtrados.length) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item com esse filtro.</div>';
+    return;
+  }
+
+  // Lista longa: 200 por vez mantém a tela responsiva
+  const MAX = 200;
+  const pagina = filtrados.slice(0, MAX);
+
+  cont.innerHTML = pagina.map((d, di) => {
+    const { item: i, ops, menor, primarioCaro } = d;
+
+    // Datas muito distantes entre si: os preços não se comparam
+    const datas = ops.map(o => o.preco_em).filter(Boolean).sort();
+    const misturaEpocas = datas.length > 1
+      && diasEntre(datas[0], datas[datas.length - 1]) > DIAS_COTACAO_COMPARAVEL;
+
+    const opsHtml = ops.length ? ops.map(o => `
+      <div class="opc-forn ${o.preferencia === 1 ? 'primario' : ''}">
+        <div class="opc-pref ${o.preferencia === 1 ? 'on' : ''}"
+             title="Tornar fornecedor padrão deste item"
+             onclick="tornarPrimario('${i.id}','${o.id}')"></div>
+        <div>${escapeHtml(o.fornecedor)}
+          ${o.codigo ? `<span class="opc-tag">cód. ${escapeHtml(o.codigo)}</span>` : ''}
+          ${o.embalagem ? `<span class="opc-tag">${escapeHtml(o.embalagem)}</span>` : ''}</div>
+        <div class="opc-preco ${!misturaEpocas && o.preco != null && menor != null
+              ? (o.preco <= menor + 0.005 ? 'opc-melhor' : 'opc-caro') : ''}">
+          ${o.preco != null ? fmtMoeda(o.preco) : '<span class="text-muted">—</span>'}
+          ${o.preco_em ? `<div class="match-sub">${ptDate(o.preco_em)}</div>` : ''}</div>
+        <div class="center" style="font-size:12px;color:var(--muted)">${o.prazo}d</div>
+        <div class="center" style="font-size:12px;color:var(--muted)">
+          ${o.moq != null ? fmtQtd(o.moq) : '—'}</div>
+        <div class="center">
+          <button class="btn btn-sm btn-secondary" onclick="abrirIF('${o.id}')">Editar</button>
+        </div>
+      </div>`).join('')
+      : '<div style="padding:14px 16px;color:var(--muted);font-size:13px">Nenhum fornecedor cadastrado para este item.</div>';
+
+    const avisoEpocas = misturaEpocas ? `
+      <div style="padding:10px 16px;font-size:11px;color:var(--orange);border-top:1px solid var(--border-subtle)">
+        Estas cotações são de datas diferentes (${ptDate(datas[0])} e ${ptDate(datas[datas.length-1])}).
+        Não são preços concorrentes — recotize antes de trocar de fornecedor por causa deles.
+      </div>` : '';
+
+    return `
+      <div class="mtz-linha">
+        <div class="mtz-head" onclick="toggleMtz(${di})">
+          <span class="mtz-nome">${escapeHtml(i.nome)}
+            <span class="opc-tag">${escapeHtml(i.categoria || '')}</span></span>
+          <span class="forn-meta">${ops.length} fornecedor(es)</span>
+          <span class="forn-valor">${menor != null ? fmtMoeda(menor) : '—'}</span>
+          ${primarioCaro ? '<span class="forn-sem-email">primário não é o mais barato</span>'
+            : misturaEpocas ? '<span class="opc-tag">cotações de épocas diferentes</span>' : ''}
+          <span class="chevron" id="chevM-${di}">▼</span>
+        </div>
+        <div class="mtz-body" id="bodyM-${di}">
+          <div class="opc-forn" style="border-bottom:1px solid var(--border-subtle);font-size:11px;color:var(--muted);letter-spacing:0.5px">
+            <div></div><div>FORNECEDOR</div><div class="opc-preco">PREÇO</div>
+            <div class="center">PRAZO</div><div class="center">MÍN.</div><div class="center">AÇÃO</div>
+          </div>
+          ${opsHtml}
+          ${avisoEpocas}
+          <div style="padding:12px 16px">
+            <button class="btn btn-sm btn-secondary" onclick="abrirIF(null,'${i.id}')">+ Adicionar fornecedor</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('') + (filtrados.length > MAX
+    ? `<div class="text-muted" style="padding:14px;font-size:12px">
+         Mostrando ${MAX} de ${filtrados.length}. Use a busca ou os filtros para reduzir a lista.</div>` : '');
+}
+
+function toggleMtz(i) {
+  document.getElementById('bodyM-' + i).classList.toggle('open');
+  document.getElementById('chevM-' + i).classList.toggle('open');
+}
+
+async function tornarPrimario(itemId, ifId) {
+  const ops = state.matriz[itemId] || [];
+  await sb.from('item_fornecedores').update({ preferencia: 2 }).in('id', ops.map(o => o.id));
+  const { error } = await sb.from('item_fornecedores').update({
+    preferencia: 1, atualizado_em: new Date().toISOString(), atualizado_por: state.perfil.id,
+  }).eq('id', ifId);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  showToast('Fornecedor padrão atualizado.', 'success');
+  await carregarMatriz();
+  renderMatriz();
+  renderFila();
+}
+
+// ── Editar um par item × fornecedor ───────────────────────────────
+function abrirIF(ifId, itemIdNovo) {
+  let op = null, item = null;
+  if (ifId) {
+    op = Object.values(state.matriz).flat().find(o => o.id === ifId);
+    item = state.itens.find(i => i.id === op.item_id);
+  } else {
+    item = state.itens.find(i => i.id === itemIdNovo);
+  }
+  if (!item) { showToast('Item não encontrado.', 'error'); return; }
+
+  state.ifAtual = { id: ifId, item_id: item.id, op };
+
+  // Ao adicionar, só oferece fornecedores que ainda não estão neste item
+  const jaTem = new Set((state.matriz[item.id] || []).map(o => o.fornecedor_id));
+  const disponiveis = state.fornecedores.filter(f => f.ativo !== false && !jaTem.has(f.id));
+
+  document.getElementById('ifModalTitle').textContent =
+    (ifId ? 'Editar — ' : 'Adicionar fornecedor — ') + item.nome;
+  document.getElementById('btnRemoverIF').style.display = ifId ? '' : 'none';
+
+  document.getElementById('ifModalBody').innerHTML = `
+    ${ifId ? `<div class="email-campo"><b>Fornecedor</b><span>${escapeHtml(op.fornecedor)}</span></div>`
+      : `<label class="field-label">Fornecedor *</label>
+         <select class="select" id="if-forn">
+           ${disponiveis.map(f => `<option value="${f.id}">${escapeHtml(f.nome)}</option>`).join('')}
+         </select>
+         ${!disponiveis.length ? '<div class="text-error" style="font-size:12px">Todos os fornecedores já estão neste item.</div>' : ''}`}
+
+    <div class="form-row col2 mt-2">
+      <div>
+        <label class="field-label">Preço unitário (R$)</label>
+        <input class="input" type="number" step="0.01" min="0" id="if-preco" value="${op?.preco ?? ''}">
+      </div>
+      <div>
+        <label class="field-label">Pedido mínimo (${escapeHtml(item.unidade || 'un')})</label>
+        <input class="input" type="number" step="0.001" min="0" id="if-moq" value="${op?.moq ?? ''}"
+               placeholder="deixe vazio se não houver">
+      </div>
+    </div>
+    <div class="form-row col2">
+      <div>
+        <label class="field-label">Prazo de entrega (dias)</label>
+        <input class="input" type="number" min="0" id="if-prazo" value="${op?.prazo_proprio ?? ''}"
+               placeholder="vazio = usa o prazo do fornecedor">
+      </div>
+      <div>
+        <label class="field-label">Código no fornecedor</label>
+        <input class="input" id="if-codigo" value="${escapeAttr(op?.codigo || '')}"
+               placeholder="o que ele usa no catálogo dele">
+      </div>
+    </div>
+    <div class="form-row col2">
+      <div>
+        <label class="field-label">Embalagem</label>
+        <input class="input" id="if-emb" value="${escapeAttr(op?.embalagem || '')}"
+               placeholder="Ex.: CX 12x1KG">
+      </div>
+      <div>
+        <label class="field-label">Preferência</label>
+        <select class="select" id="if-pref">
+          <option value="1" ${op?.preferencia === 1 ? 'selected' : ''}>1 — Primário</option>
+          <option value="2" ${!op || op.preferencia === 2 ? 'selected' : ''}>2 — Alternativo</option>
+          <option value="3" ${op?.preferencia === 3 ? 'selected' : ''}>3 — Eventual</option>
+        </select>
+      </div>
+    </div>
+    <label class="field-label">Observação</label>
+    <input class="input" id="if-obs" value="${escapeAttr(op?.observacao || '')}" placeholder="opcional">
+    ${op?.preco_em ? `<div class="text-muted mt-2" style="font-size:11px">
+      Preço atualizado em ${ptDate(op.preco_em)}.</div>` : ''}`;
+  abrirModal('ifModal');
+}
+
+async function salvarIF() {
+  const a = state.ifAtual;
+  const num = id => {
+    const v = document.getElementById(id).value.trim();
+    return v === '' ? null : parseFloat(v);
+  };
+  const txt = id => document.getElementById(id).value.trim() || null;
+
+  const payload = {
+    preco_unitario:     num('if-preco'),
+    quantidade_minima:  num('if-moq'),
+    prazo_entrega_dias: num('if-prazo'),
+    codigo_fornecedor:  txt('if-codigo'),
+    embalagem:          txt('if-emb'),
+    observacao:         txt('if-obs'),
+    preferencia:        parseInt(document.getElementById('if-pref').value, 10),
+    atualizado_em:      new Date().toISOString(),
+    atualizado_por:     state.perfil.id,
+  };
+  if (payload.preco_unitario != null) payload.preco_atualizado_em = isoDate(new Date());
+
+  let error;
+  if (a.id) {
+    ({ error } = await sb.from('item_fornecedores').update(payload).eq('id', a.id));
+  } else {
+    const fid = document.getElementById('if-forn')?.value;
+    if (!fid) { showToast('Escolha um fornecedor.', 'error'); return; }
+    ({ error } = await sb.from('item_fornecedores')
+      .insert({ ...payload, item_id: a.item_id, fornecedor_id: fid }));
+  }
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+  // Um item só pode ter um primário
+  if (payload.preferencia === 1) {
+    const outros = (state.matriz[a.item_id] || []).filter(o => o.id !== a.id).map(o => o.id);
+    if (outros.length) await sb.from('item_fornecedores').update({ preferencia: 2 }).in('id', outros);
+  }
+
+  showToast('Salvo.', 'success');
+  fecharModal('ifModal');
+  await carregarMatriz();
+  renderMatriz();
+  renderFila();
+}
+
+async function removerIF() {
+  const a = state.ifAtual;
+  if (!a?.id) return;
+  if (!confirm('Remover este fornecedor do item? O histórico de preços não é apagado.')) return;
+  const { error } = await sb.from('item_fornecedores').delete().eq('id', a.id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  showToast('Opção removida.', 'success');
+  fecharModal('ifModal');
+  await carregarMatriz();
+  renderMatriz();
+  renderFila();
+}
+
+// =====================================================================
+// CERTIFICAÇÕES
+// =====================================================================
+function renderCertsDoFornecedor(fornId) {
+  const cont = document.getElementById('fm-certLista');
+  const cs = state.certificacoes[fornId] || [];
+  if (!cs.length) {
+    cont.innerHTML = '<div class="text-muted" style="font-size:12px;padding:8px 0">Nenhuma certificação cadastrada.</div>';
+    return;
+  }
+  cont.innerHTML = cs.map(c => {
+    const st = statusCert(c);
+    return `<div class="cert-linha">
+      <span class="cert-tipo">${escapeHtml(c.tipo)}
+        ${c.numero ? `<span class="opc-tag">${escapeHtml(c.numero)}</span>` : ''}</span>
+      <span class="cert-venc cert-${st.nivel}">${escapeHtml(st.rotulo)}</span>
+      <button class="btn btn-sm btn-secondary" onclick="abrirCert('${c.id}')">Editar</button>
+    </div>`;
+  }).join('');
+}
+
+function abrirCert(id) {
+  const fornId = document.getElementById('fm-id').value;
+  if (!fornId) { showToast('Salve o fornecedor antes de cadastrar certificações.', 'error'); return; }
+
+  const c = id ? (state.certificacoes[fornId] || []).find(x => x.id === id) : null;
+  state.certAtual = { id: id || null, fornecedor_id: fornId };
+
+  document.getElementById('certModalTitle').textContent = c ? 'Editar certificação' : 'Nova certificação';
+  document.getElementById('btnExcluirCert').style.display = c ? '' : 'none';
+  document.getElementById('ct-id').value      = c?.id || '';
+  document.getElementById('ct-tipo').value    = c?.tipo || '';
+  document.getElementById('ct-num').value     = c?.numero || '';
+  document.getElementById('ct-emissao').value = c?.emissao || '';
+  document.getElementById('ct-venc').value    = c?.vencimento || '';
+  document.getElementById('ct-obs').value     = c?.observacao || '';
+  abrirModal('certModal');
+}
+
+async function salvarCert() {
+  const tipo = document.getElementById('ct-tipo').value.trim();
+  const venc = document.getElementById('ct-venc').value;
+  if (!tipo) { showToast('Informe o tipo da certificação.', 'error'); return; }
+  if (!venc) { showToast('Informe o vencimento — é ele que dispara o alerta.', 'error'); return; }
+
+  const payload = {
+    fornecedor_id: state.certAtual.fornecedor_id,
+    tipo,
+    numero:     document.getElementById('ct-num').value.trim() || null,
+    emissao:    document.getElementById('ct-emissao').value || null,
+    vencimento: venc,
+    observacao: document.getElementById('ct-obs').value.trim() || null,
+    atualizado_em: new Date().toISOString(),
+    atualizado_por: state.perfil.id,
+  };
+
+  const { error } = state.certAtual.id
+    ? await sb.from('fornecedor_certificacoes').update(payload).eq('id', state.certAtual.id)
+    : await sb.from('fornecedor_certificacoes').insert(payload);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+  showToast('Certificação salva.', 'success');
+  fecharModal('certModal');
+  await carregarCertificacoes();
+  renderCertsDoFornecedor(state.certAtual.fornecedor_id);
+  renderFornecedores();
+}
+
+async function excluirCert() {
+  if (!state.certAtual?.id) return;
+  if (!confirm('Excluir esta certificação?')) return;
+  const { error } = await sb.from('fornecedor_certificacoes')
+    .update({ ativo: false }).eq('id', state.certAtual.id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  fecharModal('certModal');
+  await carregarCertificacoes();
+  renderCertsDoFornecedor(state.certAtual.fornecedor_id);
+  renderFornecedores();
+}
+
+// =====================================================================
 // FORNECEDORES
 // =====================================================================
 async function carregarFornecedores() {
@@ -886,19 +1987,37 @@ function renderFornecedores() {
   const cont = document.getElementById('fornContainer');
   if (!lista.length) { cont.innerHTML = '<div class="empty-text">Nenhum fornecedor.</div>'; return; }
 
+  // Quantos itens cada fornecedor atende — mostra o peso real dele na operação
+  const itensPorForn = {};
+  Object.values(state.matriz).flat().forEach(o =>
+    itensPorForn[o.fornecedor_id] = (itensPorForn[o.fornecedor_id] || 0) + 1);
+
   cont.innerHTML = `<table class="data-table">
-    <thead><tr><th>Nome</th><th>E-mail</th><th>Contato</th><th class="center">Prazo</th><th>Pagamento</th><th class="center">Ações</th></tr></thead>
-    <tbody>${lista.map(f => `
+    <thead><tr><th>Nome</th><th>E-mail</th><th class="center">Itens</th><th class="center">Prazo</th>
+      <th>Pagamento</th><th>Documentação</th><th class="center">Ações</th></tr></thead>
+    <tbody>${lista.map(f => {
+      const al = alertaFornecedor(f.id);
+      const cs = state.certificacoes[f.id] || [];
+      const doc = al === 'vencido' ? '<span class="cert-vencido">✕ vencida</span>'
+        : al === 'perto'  ? '<span class="cert-perto">⚠ vence em breve</span>'
+        : cs.length       ? `<span class="cert-ok">✓ ${cs.length} em dia</span>`
+        : '<span class="text-muted">não cadastrada</span>';
+      return `
       <tr>
-        <td>${escapeHtml(f.nome)}</td>
+        <td>${escapeHtml(f.nome)}
+          ${f.categorias?.length ? `<br><span class="opc-tag">${escapeHtml(f.categorias.join(' · '))}</span>` : ''}</td>
         <td>${f.email ? escapeHtml(f.email) : '<span class="text-error">— sem e-mail —</span>'}</td>
-        <td>${escapeHtml(f.contato_nome || '—')}</td>
+        <td class="center">${itensPorForn[f.id] || 0}</td>
         <td class="center">${f.prazo_entrega_dias}d</td>
         <td>${escapeHtml(f.condicao_pagamento || '—')}</td>
+        <td>${doc}</td>
         <td class="center"><button class="btn btn-sm btn-secondary" onclick="abrirFornecedor('${f.id}')">Editar</button></td>
-      </tr>`).join('')}
+      </tr>`;
+    }).join('')}
     </tbody></table>`;
 }
+
+const CATEGORIAS = ['proteina', 'laticinios', 'hortifruti', 'diversos'];
 
 function abrirFornecedor(id) {
   const f = id ? state.fornecedores.find(x => x.id === id) : null;
@@ -913,6 +2032,18 @@ function abrirFornecedor(id) {
   document.getElementById('fm-prazo').value   = f?.prazo_entrega_dias ?? 1;
   document.getElementById('fm-pgto').value    = f?.condicao_pagamento || '';
   document.getElementById('fm-obs').value     = f?.observacao || '';
+
+  const marcadas = new Set(f?.categorias || []);
+  document.getElementById('fm-cats').innerHTML = CATEGORIAS.map(c => `
+    <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+      <input type="checkbox" class="fm-cat" value="${c}" ${marcadas.has(c) ? 'checked' : ''}>
+      ${c}
+    </label>`).join('');
+
+  // Certificação precisa do fornecedor já gravado para ter a que se ligar
+  document.getElementById('fm-certBloco').style.display = f ? '' : 'none';
+  if (f) renderCertsDoFornecedor(f.id);
+
   abrirModal('fornModal');
 }
 
@@ -920,6 +2051,8 @@ async function salvarFornecedor() {
   const id = document.getElementById('fm-id').value;
   const nome = document.getElementById('fm-nome').value.trim();
   if (!nome) { showToast('Informe o nome do fornecedor.', 'error'); return; }
+
+  const cats = [...document.querySelectorAll('.fm-cat:checked')].map(c => c.value);
 
   const payload = {
     nome,
@@ -931,11 +2064,21 @@ async function salvarFornecedor() {
     prazo_entrega_dias: parseInt(document.getElementById('fm-prazo').value, 10) || 1,
     condicao_pagamento: document.getElementById('fm-pgto').value.trim() || null,
     observacao:         document.getElementById('fm-obs').value.trim() || null,
+    categorias:         cats.length ? cats : null,
+    atualizado_em:      new Date().toISOString(),
   };
 
-  const { error } = id
+  let { error } = id
     ? await sb.from('fornecedores').update(payload).eq('id', id)
     : await sb.from('fornecedores').insert(payload);
+
+  // Antes da migration 22 as colunas categorias/atualizado_em não existem
+  if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+    delete payload.categorias; delete payload.atualizado_em;
+    ({ error } = id
+      ? await sb.from('fornecedores').update(payload).eq('id', id)
+      : await sb.from('fornecedores').insert(payload));
+  }
 
   if (error) { showToast('Erro: ' + error.message, 'error'); return; }
   showToast('Fornecedor salvo.', 'success');
@@ -1014,8 +2157,9 @@ function exportarHistorico() {
 // =====================================================================
 const TITULOS = {
   fila:         ['A Comprar', 'Solicitações aprovadas, agrupadas por fornecedor'],
+  matriz:       ['Itens × Fornecedores', 'Quem atende cada item, por quanto e em quantos dias'],
   ordens:       ['Ordens de Compra', 'Acompanhe prazo e status de cada PO'],
-  fornecedores: ['Fornecedores', 'Contato, prazo e condição de pagamento'],
+  fornecedores: ['Fornecedores', 'Contato, prazo, pagamento e documentação'],
   historico:    ['Histórico', 'Ordens emitidas por período'],
 };
 
@@ -1027,6 +2171,7 @@ function goTab(tab, el) {
   const [t, s] = TITULOS[tab] || ['', ''];
   document.getElementById('topTitle').textContent = t;
   document.getElementById('topSub').textContent = s;
+  if (tab === 'matriz') renderMatriz();
   if (window.innerWidth <= 900) fecharSidebar();
 }
 

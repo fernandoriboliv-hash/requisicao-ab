@@ -71,6 +71,63 @@
     font-family: inherit; font-size: 13px; padding: 8px 10px; outline: none;
   }
 
+  /* ---- Conformidade: temperatura, validade, lote ---- */
+  /* Aparece só para item que exige cadeia fria. Hortifruti e seco não
+     poluem a tela com campo que ninguém vai preencher. */
+  .conf-extra {
+    grid-column: 2 / -1; margin-top: 8px;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
+  .conf-campo { display: flex; flex-direction: column; gap: 3px; }
+  .conf-campo label {
+    font-size: 10px; color: var(--muted); letter-spacing: 0.5px;
+  }
+  .conf-campo input {
+    background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle);
+    color: var(--text); font-family: inherit; font-size: 13px;
+    padding: 6px 8px; outline: none; width: 118px;
+  }
+  .conf-campo input:focus { border-color: rgba(184,150,62,0.5); }
+  .conf-campo input.ruim { border-color: var(--error); color: var(--error); }
+  .conf-campo input.aviso { border-color: var(--orange); color: var(--orange); }
+  .conf-faixa { font-size: 10px; color: var(--muted); align-self: flex-end; padding-bottom: 7px; }
+
+  /* ---- Motivos estruturados ---- */
+  .conf-problema {
+    grid-column: 2 / -1; margin-top: 6px;
+    font-size: 12px; color: var(--muted); cursor: pointer;
+    text-decoration: underline dotted; width: fit-content;
+  }
+  .conf-problema:hover { color: var(--orange); }
+  .conf-problema.ativo { color: var(--error); }
+
+  .motivos-wrap {
+    grid-column: 2 / -1; margin-top: 8px;
+    padding: 10px 12px; background: rgba(224,82,82,0.05);
+    border: 1px solid rgba(224,82,82,0.25);
+    display: none;
+  }
+  .motivos-wrap.show { display: block; }
+  .motivos-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .motivo-btn {
+    background: transparent; border: 1px solid var(--border-subtle);
+    color: var(--muted); font-family: inherit; font-size: 12px;
+    padding: 6px 12px; cursor: pointer; transition: all 0.12s;
+  }
+  .motivo-btn:hover { border-color: var(--orange); color: var(--orange); }
+  .motivo-btn.on {
+    background: rgba(224,82,82,0.18); border-color: var(--error); color: var(--error);
+  }
+  .motivo-obs {
+    width: 100%; background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border-subtle); color: var(--text);
+    font-family: inherit; font-size: 13px; padding: 7px 10px; outline: none;
+  }
+  .backorder-check {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--orange); margin-top: 8px; cursor: pointer;
+  }
+
   /* Bloco da nota fiscal — a regra de aceite do hotel */
   .nf-box {
     background: var(--panel); border: 1px solid var(--gold);
@@ -88,7 +145,22 @@
   }
   .nf-veredito.bate    { background: rgba(76,175,125,0.15); color: var(--green); }
   .nf-veredito.difere  { background: rgba(224,82,82,0.15);  color: var(--error); }
+  .nf-veredito.parcial { background: rgba(224,140,62,0.15); color: var(--orange); }
   .nf-veredito.pendente{ background: rgba(255,255,255,0.05); color: var(--muted); }
+
+  /* Os três vértices do match, lado a lado */
+  .match-3 {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 1px; background: var(--border-subtle); margin-top: 12px;
+  }
+  .match-cel { background: var(--panel); padding: 12px 10px; text-align: center; }
+  .match-rot { font-size: 10px; color: var(--muted); letter-spacing: 0.5px; }
+  .match-val {
+    font-size: 16px; font-variant-numeric: tabular-nums; margin-top: 4px;
+  }
+  .match-val.ok    { color: var(--green); }
+  .match-val.ruim  { color: var(--error); }
+  .match-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
 
   .prazo-pill { display:inline-block; padding:2px 10px; font-size:11px; letter-spacing:0.5px; }
   .prazo-hoje   { background: rgba(224,140,62,0.15); color: var(--orange); }
@@ -221,7 +293,24 @@ const state = {
   config: {},
   conf: null,       // { ordem, itens: [{...}] } — conferência em andamento
   salvando: false,
+  faixas: {},       // conservacao -> { min_c, max_c, exige_temperatura, ... }
+  conservacaoOk: false,  // false enquanto a migration 23 não rodou
 };
+
+// Motivos estruturados. Substituem o campo livre: sem categoria não dá para
+// medir em que cada fornecedor falha, e é isso que embasa a cobrança.
+const MOTIVOS = [
+  ['quantidade_menor', 'Veio menos'],
+  ['nao_entregue',     'Não veio'],
+  ['quantidade_maior', 'Veio mais'],
+  ['qualidade',        'Qualidade'],
+  ['temperatura',      'Temperatura'],
+  ['validade',         'Validade'],
+  ['embalagem',        'Embalagem'],
+  ['produto_errado',   'Produto errado'],
+  ['outro',            'Outro'],
+];
+const ROTULO_MOTIVO = Object.fromEntries(MOTIVOS);
 
 // =====================================================================
 // INIT
@@ -248,8 +337,18 @@ window.addEventListener('load', async () => {
   document.getElementById('r-ate').value = isoDate(hoje);
 
   await carregarConfig();
+  await carregarFaixas();
   await carregarAChegar();
 });
+
+// Faixa de temperatura por tipo de conservação. Sem a migration 23 a tabela
+// não existe: os campos de conformidade somem e a tela volta ao que era.
+async function carregarFaixas() {
+  const { data, error } = await sb.from('faixas_conservacao').select('*');
+  if (error) { state.conservacaoOk = false; return; }
+  state.conservacaoOk = true;
+  (data || []).forEach(f => state.faixas[f.conservacao] = f);
+}
 
 async function carregarConfig() {
   const { data } = await sb.from('configuracoes_sistema').select('chave, valor');
@@ -347,18 +446,39 @@ async function abrirConferencia(ordemId) {
   if (error) { showToast('Erro: ' + error.message, 'error'); return; }
 
   const itens = (ordem.ordem_compra_itens || []).sort((a, b) => a.item_nome.localeCompare(b.item_nome));
+
+  // Como cada item precisa ser conservado — define se pede temperatura
+  let porItem = {};
+  if (state.conservacaoOk) {
+    const ids = itens.map(i => i.item_id).filter(Boolean);
+    if (ids.length) {
+      const { data: cat } = await sb.from('itens')
+        .select('id, conservacao, categoria').in('id', ids);
+      (cat || []).forEach(c => porItem[c.id] = c);
+    }
+  }
+
   state.conf = {
     ordem,
-    itens: itens.map(i => ({
-      ordem_item_id: i.id,
-      item_id: i.item_id,
-      nome: i.item_nome,
-      unidade: i.item_unidade,
-      pedida: parseFloat(i.quantidade) || 0,
-      recebida: parseFloat(i.quantidade) || 0,   // começa igual ao pedido
-      conferido: false,
-      motivo: '',
-    })),
+    itens: itens.map(i => {
+      const cons = porItem[i.item_id]?.conservacao || 'ambiente';
+      return {
+        ordem_item_id: i.id,
+        item_id: i.item_id,
+        nome: i.item_nome,
+        unidade: i.item_unidade,
+        preco: i.preco_unitario != null ? parseFloat(i.preco_unitario) : null,
+        pedida: parseFloat(i.quantidade) || 0,
+        recebida: parseFloat(i.quantidade) || 0,   // começa igual ao pedido
+        conferido: false,
+        conservacao: cons,
+        temperatura: '', validade: '', lote: '',
+        motivo: '',          // código estruturado
+        obs: '',             // complemento livre, opcional
+        painelAberto: false, // motivos visíveis
+        backorder: true,     // gerar pendência de recompra quando faltar
+      };
+    }),
   };
 
   document.getElementById('confTitle').textContent =
@@ -367,44 +487,139 @@ async function abrirConferencia(ordemId) {
   abrirModal('confModal');
 }
 
+// ── Avaliações de conformidade ────────────────────────────────────
+function faixaDe(it) {
+  return state.conservacaoOk ? state.faixas[it.conservacao] : null;
+}
+function exigeTemperatura(it) {
+  const f = faixaDe(it);
+  return !!(f && f.exige_temperatura);
+}
+// null quando não informado; true/false quando dá para julgar
+function temperaturaOk(it) {
+  const f = faixaDe(it);
+  if (!f || !f.exige_temperatura) return null;
+  const t = parseFloat(it.temperatura);
+  if (isNaN(t)) return null;
+  return t >= parseFloat(f.min_c) && t <= parseFloat(f.max_c);
+}
+// 'vencido' | 'curta' | 'ok' | null
+function statusValidade(it) {
+  if (!it.validade) return null;
+  const min = parseInt(state.config.validade_minima_dias || '15', 10);
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const v = new Date(it.validade + 'T00:00:00');
+  const dias = Math.round((v - hoje) / 86400000);
+  if (dias < 0)   return 'vencido';
+  if (dias < min) return 'curta';
+  return 'ok';
+}
+function difereQtd(it) { return Math.abs(it.recebida - it.pedida) > 0.0001; }
+// Um item pode chegar na quantidade certa e mesmo assim ter problema
+function temProblema(it) {
+  return difereQtd(it) || !!it.motivo
+    || temperaturaOk(it) === false
+    || ['vencido', 'curta'].includes(statusValidade(it));
+}
+
+// Valor do que de fato chegou — o vértice físico do three-way match
+function valorRecebido() {
+  return state.conf.itens.reduce((s, it) =>
+    s + (it.preco != null ? it.recebida * it.preco : 0), 0);
+}
+
 function renderConferencia() {
   const { ordem, itens } = state.conf;
   const tol = parseFloat(state.config.tolerancia_valor_nf_pct || '2');
+  const minVal = parseInt(state.config.validade_minima_dias || '15', 10);
 
   const linhas = itens.map((it, i) => {
-    const difere = Math.abs(it.recebida - it.pedida) > 0.0001;
-    const cls = !it.conferido ? '' : (difere ? 'divergente' : 'ok');
+    const difere = difereQtd(it);
+    const problema = temProblema(it);
+    const cls = !it.conferido ? '' : (problema ? 'divergente' : 'ok');
+    const f = faixaDe(it);
+    const tOk = temperaturaOk(it);
+    const vSt = statusValidade(it);
+
+    // Campos de conformidade: só para item que exige cadeia fria
+    const extra = exigeTemperatura(it) ? `
+      <div class="conf-extra">
+        <div class="conf-campo">
+          <label>TEMPERATURA °C</label>
+          <input type="number" step="0.1" placeholder="—" value="${escapeAttr(it.temperatura)}"
+                 class="${tOk === false ? 'ruim' : ''}"
+                 onchange="mudarCampo(${i},'temperatura',this.value)">
+        </div>
+        <span class="conf-faixa">aceita ${f.min_c}°C a ${f.max_c}°C</span>
+        <div class="conf-campo">
+          <label>VALIDADE</label>
+          <input type="date" value="${escapeAttr(it.validade)}"
+                 class="${vSt === 'vencido' ? 'ruim' : vSt === 'curta' ? 'aviso' : ''}"
+                 onchange="mudarCampo(${i},'validade',this.value)">
+        </div>
+        <div class="conf-campo">
+          <label>LOTE</label>
+          <input type="text" placeholder="opcional" value="${escapeAttr(it.lote)}"
+                 onchange="mudarCampo(${i},'lote',this.value)">
+        </div>
+        ${tOk === false ? '<span class="conf-faixa" style="color:var(--error)">fora da faixa</span>' : ''}
+        ${vSt === 'vencido' ? '<span class="conf-faixa" style="color:var(--error)">VENCIDO</span>'
+          : vSt === 'curta' ? `<span class="conf-faixa" style="color:var(--orange)">menos de ${minVal} dias</span>` : ''}
+      </div>` : '';
+
+    const motivosHtml = MOTIVOS.map(([cod, rot]) => `
+      <button class="motivo-btn ${it.motivo === cod ? 'on' : ''}"
+              onclick="setMotivo(${i},'${cod}')">${rot}</button>`).join('');
+
+    const falta = Math.max(0, it.pedida - it.recebida);
+
     return `
       <div class="conf-linha ${cls}" id="linha-${i}">
         <div class="conf-check ${it.conferido ? 'on' : ''}" onclick="toggleConferido(${i})" title="Marcar como conferido">✓</div>
         <div class="conf-nome-wrap">
           <div class="conf-nome">${escapeHtml(it.nome)}</div>
-          <div class="conf-pedido">pedido: ${fmtQtd(it.pedida)} ${escapeHtml(it.unidade || '')}</div>
+          <div class="conf-pedido">pedido: ${fmtQtd(it.pedida)} ${escapeHtml(it.unidade || '')}
+            ${it.preco != null ? ' · ' + fmtMoeda(it.preco) + '/' + escapeHtml(it.unidade || 'un') : ''}</div>
         </div>
         <div class="conf-qtd-wrap">
           <input class="conf-qtd ${difere ? 'difere' : ''}" type="number" step="0.001" min="0"
-                 value="${it.recebida}" id="qtd-${i}" oninput="mudarQtd(${i}, this.value)">
+                 value="${it.recebida}" id="qtd-${i}" onchange="mudarQtd(${i}, this.value)">
           <span class="conf-pedido">${escapeHtml(it.unidade || '')}</span>
         </div>
         <div></div>
-        <div class="conf-motivo ${difere ? 'show' : ''}" id="mot-${i}">
-          <input type="text" placeholder="O que houve? (faltou, veio errado, qualidade...)"
-                 value="${escapeAttr(it.motivo)}" oninput="mudarMotivo(${i}, this.value)">
+        ${extra}
+        <div class="conf-problema ${problema ? 'ativo' : ''}" onclick="togglePainel(${i})">
+          ${problema ? '⚠ problema registrado — abrir' : 'Reportar problema neste item'}
+        </div>
+        <div class="motivos-wrap ${it.painelAberto || problema ? 'show' : ''}" id="pan-${i}">
+          <div class="motivos-grid">${motivosHtml}</div>
+          <input class="motivo-obs" type="text" placeholder="Detalhe (opcional) — o que foi observado"
+                 value="${escapeAttr(it.obs)}" onchange="mudarCampo(${i},'obs',this.value)">
+          ${falta > 0 ? `
+            <label class="backorder-check">
+              <input type="checkbox" ${it.backorder ? 'checked' : ''}
+                     onchange="mudarCampo(${i},'backorder',this.checked)">
+              Cobrar os ${fmtQtd(falta)} ${escapeHtml(it.unidade || '')} que faltaram — volta para a fila do Comprador
+            </label>` : ''}
         </div>
       </div>`;
   }).join('');
 
   const nConf = itens.filter(i => i.conferido).length;
-  const nDiv  = itens.filter(i => Math.abs(i.recebida - i.pedida) > 0.0001).length;
+  const nProb = itens.filter(temProblema).length;
+  const semTemp = itens.filter(i => exigeTemperatura(i) && i.temperatura === '').length;
 
   document.getElementById('confBody').innerHTML = `
     <div class="aviso aviso-info">
       Marque <strong>✓</strong> em cada item conferido — é o mesmo que riscar na lista impressa.
-      Ajuste a quantidade se veio diferente do pedido.
+      Ajuste a quantidade se veio diferente e registre o motivo quando houver problema.
     </div>
+    ${semTemp ? `<div class="aviso aviso-warn">
+      ${semTemp} item(ns) de cadeia fria ainda sem temperatura registrada.
+      É o que a auditoria pede — meça antes de descarregar.</div>` : ''}
 
     <div class="section-title">
-      <span>Itens (${nConf}/${itens.length} conferidos${nDiv ? ' · ' + nDiv + ' com diferença' : ''})</span>
+      <span>Itens (${nConf}/${itens.length} conferidos${nProb ? ' · ' + nProb + ' com problema' : ''})</span>
       <button class="btn btn-sm btn-secondary" onclick="marcarTodos()">Marcar todos</button>
     </div>
     <div style="border:1px solid var(--border-subtle)">${linhas}</div>
@@ -414,94 +629,179 @@ function renderConferencia() {
       <div class="form-row col2 mt-2">
         <div>
           <label class="field-label">Número da NF</label>
-          <input class="input" id="nf-num" placeholder="Ex.: 123456" oninput="recalcularNF()">
+          <input class="input" id="nf-num" placeholder="Ex.: 123456"
+                 value="${escapeAttr(state.conf.nfNumero || '')}">
         </div>
         <div>
           <label class="field-label">Valor da NF (R$)</label>
           <input class="input" id="nf-valor" type="number" step="0.01" min="0"
-                 placeholder="0,00" oninput="recalcularNF()">
+                 placeholder="0,00" value="${state.conf.nfValor ?? ''}" oninput="recalcularNF()">
         </div>
       </div>
-      <div class="nf-linha">
-        <span class="text-muted">Valor do pedido (PO)</span>
-        <span class="nf-valor">${fmtMoeda(ordem.valor_total)}</span>
+
+      <!-- Three-way match: pedido × físico × fiscal -->
+      <div class="match-3">
+        <div class="match-cel">
+          <div class="match-rot">PEDIDO (PO)</div>
+          <div class="match-val">${fmtMoeda(ordem.valor_total)}</div>
+          <div class="match-sub">o que foi encomendado</div>
+        </div>
+        <div class="match-cel">
+          <div class="match-rot">RECEBIDO</div>
+          <div class="match-val" id="m-receb">${fmtMoeda(valorRecebido())}</div>
+          <div class="match-sub" id="m-receb-sub">o que desceu do caminhão</div>
+        </div>
+        <div class="match-cel">
+          <div class="match-rot">NOTA FISCAL</div>
+          <div class="match-val" id="m-nf">—</div>
+          <div class="match-sub">o que está sendo cobrado</div>
+        </div>
       </div>
-      <div class="nf-linha">
-        <span class="text-muted">Valor da nota fiscal</span>
-        <span class="nf-valor" id="nf-echo">—</span>
-      </div>
+
       <div class="nf-veredito pendente" id="nf-veredito">
-        Informe o valor da NF para conferir contra o pedido
+        Informe o valor da NF para fechar a conferência
       </div>
       <div class="text-muted mt-2" style="font-size:11px">
-        Tolerância configurada: ${tol}%
+        Tolerância configurada: ${tol}%. A nota é comparada com o que
+        <strong>chegou</strong>, não com o que foi pedido.
       </div>
     </div>
 
     <label class="field-label">Observação do recebimento</label>
-    <input class="input" id="rec-obs" placeholder="opcional — nota geral sobre a entrega">`;
+    <input class="input" id="rec-obs" placeholder="opcional — nota geral sobre a entrega"
+           value="${escapeAttr(state.conf.obsGeral || '')}">`;
+
+  recalcularNF();
 }
 
 function toggleConferido(i) {
+  guardarCamposVolateis();
   state.conf.itens[i].conferido = !state.conf.itens[i].conferido;
   renderConferencia();
 }
 
+function togglePainel(i) {
+  guardarCamposVolateis();
+  state.conf.itens[i].painelAberto = !state.conf.itens[i].painelAberto;
+  renderConferencia();
+}
+
 function marcarTodos() {
+  guardarCamposVolateis();
   const todos = state.conf.itens.every(i => i.conferido);
   state.conf.itens.forEach(i => i.conferido = !todos);
   renderConferencia();
 }
 
+// O render recria o HTML inteiro. NF e observação vivem fora do state.conf.itens,
+// então precisam ser salvos antes de qualquer re-render — senão o conferente
+// digita o valor da nota, marca um item e perde o que tinha digitado.
+function guardarCamposVolateis() {
+  const nf  = document.getElementById('nf-valor');
+  const num = document.getElementById('nf-num');
+  const obs = document.getElementById('rec-obs');
+  if (nf)  state.conf.nfValor = nf.value;
+  if (num) state.conf.nfNumero = num.value;
+  if (obs) state.conf.obsGeral = obs.value;
+}
+
 function mudarQtd(i, v) {
+  guardarCamposVolateis();
   const it = state.conf.itens[i];
   it.recebida = parseFloat(v);
   if (isNaN(it.recebida)) it.recebida = 0;
 
-  const difere = Math.abs(it.recebida - it.pedida) > 0.0001;
-  const inp = document.getElementById('qtd-' + i);
-  const mot = document.getElementById('mot-' + i);
-  const linha = document.getElementById('linha-' + i);
-  if (inp) inp.classList.toggle('difere', difere);
-  if (mot) mot.classList.toggle('show', difere);
-  if (linha) {
-    linha.classList.toggle('divergente', it.conferido && difere);
-    linha.classList.toggle('ok', it.conferido && !difere);
+  // Sugere o motivo óbvio; o conferente troca se for outro
+  if (!it.motivo) {
+    if (it.recebida === 0 && it.pedida > 0) it.motivo = 'nao_entregue';
+    else if (it.recebida < it.pedida)       it.motivo = 'quantidade_menor';
+    else if (it.recebida > it.pedida)       it.motivo = 'quantidade_maior';
+  } else if (!difereQtd(it) &&
+             ['quantidade_menor','quantidade_maior','nao_entregue'].includes(it.motivo)) {
+    it.motivo = '';   // voltou a bater: o motivo de quantidade não se aplica mais
   }
+  renderConferencia();
 }
 
-function mudarMotivo(i, v) { state.conf.itens[i].motivo = v; }
+function mudarCampo(i, campo, valor) {
+  guardarCamposVolateis();
+  const it = state.conf.itens[i];
+  it[campo] = valor;
 
+  // Temperatura fora da faixa e validade curta se explicam sozinhas
+  if (campo === 'temperatura' && !it.motivo && temperaturaOk(it) === false) it.motivo = 'temperatura';
+  if (campo === 'validade' && !it.motivo && ['vencido','curta'].includes(statusValidade(it))) it.motivo = 'validade';
+
+  renderConferencia();
+}
+
+function setMotivo(i, cod) {
+  guardarCamposVolateis();
+  const it = state.conf.itens[i];
+  it.motivo = it.motivo === cod ? '' : cod;   // clicar de novo desmarca
+  renderConferencia();
+}
+
+// ── Three-way match ───────────────────────────────────────────────
+// Pedido × Físico × Fiscal. Só PO contra NF (2-way) deixa passar a falha
+// clássica: entrega incompleta com nota cheia.
 function recalcularNF() {
   const tol = parseFloat(state.config.tolerancia_valor_nf_pct || '2');
   const valorPO = parseFloat(state.conf.ordem.valor_total) || 0;
-  const valorNF = parseFloat(document.getElementById('nf-valor').value);
-  const echo = document.getElementById('nf-echo');
-  const ver  = document.getElementById('nf-veredito');
+  const valorRec = valorRecebido();
+  const campo = document.getElementById('nf-valor');
+  const valorNF = parseFloat(campo?.value);
+
+  const elRec = document.getElementById('m-receb');
+  const elSub = document.getElementById('m-receb-sub');
+  const elNF  = document.getElementById('m-nf');
+  const ver   = document.getElementById('nf-veredito');
+  if (!ver) return;
+
+  // Físico contra pedido
+  const faltaVal = valorPO - valorRec;
+  const poOk = valorPO <= 0 ? true : Math.abs(faltaVal) / valorPO * 100 <= tol;
+  if (elRec) elRec.className = 'match-val ' + (poOk ? 'ok' : 'ruim');
+  if (elSub) elSub.textContent = poOk ? 'confere com o pedido'
+    : (faltaVal > 0 ? fmtMoeda(faltaVal) + ' a menos' : fmtMoeda(-faltaVal) + ' a mais');
+  if (elRec) elRec.textContent = fmtMoeda(valorRec);
 
   if (isNaN(valorNF) || valorNF <= 0) {
-    echo.textContent = '—';
+    if (elNF) { elNF.textContent = '—'; elNF.className = 'match-val'; }
     ver.className = 'nf-veredito pendente';
-    ver.textContent = 'Informe o valor da NF para conferir contra o pedido';
+    ver.textContent = poOk
+      ? 'Informe o valor da NF para fechar a conferência'
+      : 'A entrega veio incompleta. Informe a NF — ela deve cobrar só o que chegou.';
     return;
   }
 
-  echo.textContent = fmtMoeda(valorNF);
-  const dif = valorNF - valorPO;
-  const pct = valorPO > 0 ? Math.abs(dif) / valorPO * 100 : 100;
+  // Fiscal contra físico — é este o que decide o aceite
+  const difRec = valorNF - valorRec;
+  const pctRec = valorRec > 0 ? Math.abs(difRec) / valorRec * 100 : 100;
+  const nfOk = pctRec <= tol;
+  if (elNF) {
+    elNF.textContent = fmtMoeda(valorNF);
+    elNF.className = 'match-val ' + (nfOk ? 'ok' : 'ruim');
+  }
 
-  if (pct <= tol) {
+  if (nfOk && poOk) {
     ver.className = 'nf-veredito bate';
-    ver.textContent = '✓ Nota fiscal confere com o pedido' +
-      (Math.abs(dif) > 0.01 ? ` (diferença de ${fmtMoeda(Math.abs(dif))}, dentro da tolerância)` : '');
+    ver.textContent = '✓ Pedido, entrega e nota fiscal conferem';
+  } else if (nfOk && !poOk) {
+    ver.className = 'nf-veredito parcial';
+    ver.textContent = `⚠ Entrega parcial, mas a nota está correta: cobra ${fmtMoeda(valorNF)} `
+      + `pelo que chegou. Aceite gera pendência de ${fmtMoeda(faltaVal)} para recompra.`;
   } else {
     ver.className = 'nf-veredito difere';
-    ver.textContent = `✕ NF ${dif > 0 ? 'acima' : 'abaixo'} do pedido em ${fmtMoeda(Math.abs(dif))} (${pct.toFixed(1)}%) — não aceitar sem autorização`;
+    ver.textContent = `✕ A nota cobra ${fmtMoeda(Math.abs(difRec))} `
+      + `${difRec > 0 ? 'a MAIS' : 'a menos'} do que foi entregue (${pctRec.toFixed(1)}%) `
+      + '— não aceitar sem autorização do Comprador';
   }
 }
 
 async function finalizar(decisao) {
   if (state.salvando) return;
+  guardarCamposVolateis();
   const { ordem, itens } = state.conf;
 
   const naoConferidos = itens.filter(i => !i.conferido).length;
@@ -509,33 +809,48 @@ async function finalizar(decisao) {
     if (!confirm(`${naoConferidos} item(ns) não foram marcados como conferidos. Aceitar mesmo assim?`)) return;
   }
 
-  // Divergência de quantidade exige motivo
-  const semMotivo = itens.filter(i => Math.abs(i.recebida - i.pedida) > 0.0001 && !i.motivo.trim());
+  // Todo problema precisa de motivo: é o que permite cobrar o fornecedor depois
+  const semMotivo = itens.filter(i => temProblema(i) && !i.motivo);
   if (semMotivo.length) {
-    showToast(`Escreva o que houve com "${semMotivo[0].nome}".`, 'error');
+    showToast(`Escolha o motivo do problema em "${semMotivo[0].nome}".`, 'error');
     return;
   }
 
-  const nfNum   = document.getElementById('nf-num').value.trim();
-  const nfValor = parseFloat(document.getElementById('nf-valor').value);
-  const obs     = document.getElementById('rec-obs').value.trim();
+  const nfNum   = (state.conf.nfNumero || '').trim();
+  const nfValor = parseFloat(state.conf.nfValor);
+  const obs     = (state.conf.obsGeral || '').trim();
 
   if (decisao === 'aceito' && (!nfNum || isNaN(nfValor))) {
     showToast('Informe número e valor da nota fiscal para aceitar.', 'error');
     return;
   }
 
+  // ── Three-way match ──
   const tol = parseFloat(state.config.tolerancia_valor_nf_pct || '2');
-  const valorPO = parseFloat(ordem.valor_total) || 0;
-  const confere = !isNaN(nfValor) && valorPO > 0
-    ? (Math.abs(nfValor - valorPO) / valorPO * 100) <= tol
-    : null;
+  const valorPO  = parseFloat(ordem.valor_total) || 0;
+  const valorRec = valorRecebido();
 
-  if (decisao === 'aceito' && confere === false) {
-    if (!confirm('O valor da NF não bate com o pedido. Registrar como aceito COM DIVERGÊNCIA?')) return;
+  // físico × pedido
+  const matchPO = valorPO > 0 ? (Math.abs(valorPO - valorRec) / valorPO * 100) <= tol : true;
+  // fiscal × físico — é este que decide o aceite
+  const matchNFRec = !isNaN(nfValor) && valorRec > 0
+    ? (Math.abs(nfValor - valorRec) / valorRec * 100) <= tol : null;
+  // fiscal × pedido, mantido para não quebrar relatórios antigos
+  const confere = !isNaN(nfValor) && valorPO > 0
+    ? (Math.abs(nfValor - valorPO) / valorPO * 100) <= tol : null;
+
+  if (decisao === 'aceito' && matchNFRec === false) {
+    if (!confirm('A nota fiscal não bate com o que foi entregue. '
+      + 'Registrar como aceito COM DIVERGÊNCIA?')) return;
   }
 
-  const temDivergencia = itens.some(i => Math.abs(i.recebida - i.pedida) > 0.0001) || confere === false;
+  const tempRuim = itens.some(i => temperaturaOk(i) === false);
+  if (decisao === 'aceito' && tempRuim) {
+    if (!confirm('Há item fora da faixa de temperatura. '
+      + 'Aceitar assim mesmo? A ocorrência fica registrada para a auditoria.')) return;
+  }
+
+  const temDivergencia = itens.some(temProblema) || matchNFRec === false;
   const statusFinal = decisao === 'recusado' ? 'recusado'
     : (temDivergencia ? 'aceito_com_divergencia' : 'aceito');
 
@@ -544,7 +859,7 @@ async function finalizar(decisao) {
   btnA.disabled = btnR.disabled = true;
 
   try {
-    const { data: rec, error } = await inserirIdempotente(sb, 'recebimentos', {
+    const cabecalho = {
       ordem_id: ordem.id,
       status: statusFinal,
       data_recebimento: isoDate(new Date()),
@@ -556,27 +871,87 @@ async function finalizar(decisao) {
       conferido_por: state.perfil.id,
       conferido_em: new Date().toISOString(),
       estoque_atualizado: false,
-    }, 'rec-' + ordem.id);
+      // migration 23
+      valor_recebido: valorRec,
+      match_po_receb: matchPO,
+      match_nf_receb: matchNFRec,
+      temperatura_ok: tempRuim ? false : null,
+    };
+
+    let { data: rec, error } = await inserirIdempotente(sb, 'recebimentos', cabecalho, 'rec-' + ordem.id);
+
+    // Sem a migration 23 as colunas do match não existem — grava o essencial
+    if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+      const { valor_recebido, match_po_receb, match_nf_receb, temperatura_ok, ...basico } = cabecalho;
+      ({ data: rec, error } = await inserirIdempotente(sb, 'recebimentos', basico, 'rec-' + ordem.id));
+    }
 
     if (error) {
       if (ehEnvioDuplicado(error)) { showToast('Este recebimento já foi registrado.', 'info'); fecharModal('confModal'); return; }
       showToast('Erro: ' + error.message, 'error'); return;
     }
 
-    const linhas = itens.map(i => ({
-      recebimento_id: rec.id,
-      ordem_item_id: i.ordem_item_id,
-      item_id: i.item_id,
-      item_nome: i.nome,
-      item_unidade: i.unidade,
-      quantidade_pedida: i.pedida,
-      quantidade_recebida: i.recebida,
-      conferido: i.conferido,
-      divergencia: Math.abs(i.recebida - i.pedida) > 0.0001,
-      motivo_divergencia: i.motivo.trim() || null,
-    }));
-    const { error: ei } = await sb.from('recebimento_itens').insert(linhas);
+    const linhas = itens.map(i => {
+      const falta = Math.max(0, i.pedida - i.recebida);
+      return {
+        recebimento_id: rec.id,
+        ordem_item_id: i.ordem_item_id,
+        item_id: i.item_id,
+        item_nome: i.nome,
+        item_unidade: i.unidade,
+        quantidade_pedida: i.pedida,
+        quantidade_recebida: i.recebida,
+        conferido: i.conferido,
+        divergencia: temProblema(i),
+        // Motivo estruturado + detalhe livre no mesmo campo de texto, como no estoque
+        motivo_divergencia: i.motivo
+          ? (ROTULO_MOTIVO[i.motivo] || i.motivo) + (i.obs.trim() ? ' — ' + i.obs.trim() : '')
+          : (i.obs.trim() || null),
+        // migration 23
+        motivo_codigo: i.motivo || null,
+        acao: decisao === 'recusado' ? 'recusado' : (falta > 0 ? 'aceito_parcial' : 'aceito'),
+        temperatura_c: i.temperatura === '' ? null : parseFloat(i.temperatura),
+        temperatura_ok: temperaturaOk(i),
+        lote: i.lote.trim() || null,
+        validade: i.validade || null,
+        conservacao: i.conservacao,
+        quantidade_pendente: (i.backorder && decisao !== 'recusado') ? falta : 0,
+        preco_unitario: i.preco,
+        valor_recebido: i.preco != null ? i.recebida * i.preco : null,
+      };
+    });
+
+    let { error: ei } = await sb.from('recebimento_itens').insert(linhas);
+    if (ei && (ei.code === 'PGRST204' || ei.code === '42703')) {
+      const campos23 = ['motivo_codigo','acao','temperatura_c','temperatura_ok','lote',
+                        'validade','conservacao','quantidade_pendente','preco_unitario','valor_recebido'];
+      ({ error: ei } = await sb.from('recebimento_itens').insert(
+        linhas.map(l => Object.fromEntries(
+          Object.entries(l).filter(([k]) => !campos23.includes(k))))));
+    }
     if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
+
+    // ── Backorder: o que faltou volta para a fila do Comprador ──
+    if (state.config.backorder_automatico !== 'false' && decisao !== 'recusado') {
+      const pend = itens
+        .filter(i => i.backorder && i.pedida - i.recebida > 0.0001)
+        .map(i => ({
+          origem_recebimento_id: rec.id,
+          origem_ordem_id: ordem.id,
+          item_id: i.item_id,
+          item_nome: i.nome,
+          item_unidade: i.unidade,
+          quantidade: i.pedida - i.recebida,
+          fornecedor_id: ordem.fornecedor_id,
+          motivo_codigo: i.motivo || null,
+          observacao: i.obs.trim() || null,
+          criada_por: state.perfil.id,
+        }));
+      if (pend.length) {
+        const { error: ep } = await sb.from('pendencias_compra').insert(pend);
+        if (ep) console.warn('[backorder] não gerou pendências:', ep.message);
+      }
+    }
 
     // Entrada de estoque só acontece com a flag ligada — durante os testes fica desligada
     const flagLigada = state.config.entrada_automatica_estoque === 'true';
@@ -592,9 +967,16 @@ async function finalizar(decisao) {
           recebimento_id: rec.id,
           data_entrada: isoDate(new Date()),
           registrado_por: state.perfil.id,
+          // Rastreabilidade: acompanha o produto até o saldo
+          lote: i.lote.trim() || null,
+          validade: i.validade || null,
         }));
       if (entradas.length) {
-        const { error: ee } = await sb.from('entradas_estoque').insert(entradas);
+        let { error: ee } = await sb.from('entradas_estoque').insert(entradas);
+        if (ee && (ee.code === 'PGRST204' || ee.code === '42703')) {
+          ({ error: ee } = await sb.from('entradas_estoque')
+            .insert(entradas.map(({ lote, validade, ...resto }) => resto)));
+        }
         if (!ee) await sb.from('recebimentos').update({ estoque_atualizado: true }).eq('id', rec.id);
       }
     }
@@ -605,8 +987,13 @@ async function finalizar(decisao) {
     await sb.from('ordens_compra').update({ status: novoStatus }).eq('id', ordem.id);
 
     resetTokenCarrinho('rec-' + ordem.id);
-    showToast(decisao === 'recusado' ? 'Carga recusada e registrada.'
-      : (temDivergencia ? 'Recebido com divergência.' : 'Recebimento aceito.'), 'success');
+
+    const nPend = itens.filter(i => i.backorder && i.pedida - i.recebida > 0.0001).length;
+    const msg = decisao === 'recusado' ? 'Carga recusada e registrada.'
+      : (temDivergencia ? 'Recebido com divergência.' : 'Recebimento aceito.')
+        + (nPend && decisao !== 'recusado'
+          ? ` ${nPend} item(ns) voltaram para a fila do Comprador.` : '');
+    showToast(msg, 'success', 6000);
     fecharModal('confModal');
     await carregarAChegar();
   } finally {
@@ -631,21 +1018,31 @@ async function carregarRecebidos() {
   if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + escapeHtml(error.message) + '</div>'; return; }
   if (!data?.length) { cont.innerHTML = '<div class="empty-text">Nenhum recebimento no período.</div>'; return; }
 
+  // Os três vértices lado a lado — a conferência inteira numa linha só
   cont.innerHTML = `<table class="data-table">
     <thead><tr><th>Data</th><th>PO</th><th>Fornecedor</th><th>NF</th>
-      <th class="num right">Valor NF</th><th class="center">NF confere</th><th>Status</th><th class="center">Estoque</th></tr></thead>
-    <tbody>${data.map(r => `
+      <th class="num right">Pedido</th><th class="num right">Recebido</th><th class="num right">Nota</th>
+      <th class="center">Match</th><th>Status</th><th class="center">Estoque</th></tr></thead>
+    <tbody>${data.map(r => {
+      const m = r.match_nf_receb;
+      const match = m === true ? '<span class="cert-ok" style="color:var(--green)">✓ 3-way</span>'
+        : m === false ? '<span class="text-error">✕ difere</span>'
+        : r.valor_confere === true ? '<span class="text-muted">✓</span>'
+        : r.valor_confere === false ? '<span class="text-error">✕</span>' : '—';
+      return `
       <tr>
         <td>${ptDate(r.data_recebimento)}</td>
         <td class="po-numero">${fmtPO(r.ordens_compra?.numero)}</td>
         <td>${escapeHtml(r.ordens_compra?.fornecedores?.nome || '—')}</td>
         <td>${escapeHtml(r.nota_fiscal_numero || '—')}</td>
+        <td class="num right">${fmtMoeda(r.valor_po)}</td>
+        <td class="num right">${r.valor_recebido != null ? fmtMoeda(r.valor_recebido) : '—'}</td>
         <td class="num right">${r.nota_fiscal_valor != null ? fmtMoeda(r.nota_fiscal_valor) : '—'}</td>
-        <td class="center">${r.valor_confere === true ? '<span class="text-muted">✓</span>'
-          : r.valor_confere === false ? '<span class="text-error">✕</span>' : '—'}</td>
+        <td class="center">${match}</td>
         <td><span class="badge">${labelStatus(r.status)}</span></td>
         <td class="center">${r.estoque_atualizado ? '✓' : '<span class="text-muted">—</span>'}</td>
-      </tr>`).join('')}
+      </tr>`;
+    }).join('')}
     </tbody></table>`;
 }
 
@@ -675,17 +1072,25 @@ async function carregarDivergencias() {
           <span class="badge">${labelStatus(r.status)}</span>
         </div>
         <div style="padding:0 18px 16px">
-          ${r.valor_confere === false ? `<div class="aviso aviso-warn">
+          ${r.match_nf_receb === false ? `<div class="aviso aviso-warn">
+            NF ${escapeHtml(r.nota_fiscal_numero || '')} cobra ${fmtMoeda(r.nota_fiscal_valor)}
+            · chegou ${fmtMoeda(r.valor_recebido)} · pedido ${fmtMoeda(r.valor_po)}</div>`
+          : r.valor_confere === false ? `<div class="aviso aviso-warn">
             NF ${escapeHtml(r.nota_fiscal_numero || '')} = ${fmtMoeda(r.nota_fiscal_valor)}
             · pedido = ${fmtMoeda(r.valor_po)}</div>` : ''}
           ${r.divergencia ? `<div class="obs-box">${escapeHtml(r.divergencia)}</div>` : ''}
           ${itensDiv.length ? `<table class="data-table mt-2">
-            <thead><tr><th>Item</th><th class="num">Pedido</th><th class="num">Recebido</th><th>Motivo</th></tr></thead>
+            <thead><tr><th>Item</th><th class="num">Pedido</th><th class="num">Recebido</th>
+              <th>Motivo</th><th class="center">Temp.</th><th class="center">Validade</th><th>Lote</th></tr></thead>
             <tbody>${itensDiv.map(i => `<tr>
               <td>${escapeHtml(i.item_nome)}</td>
               <td class="num">${fmtQtd(i.quantidade_pedida)} ${escapeHtml(i.item_unidade || '')}</td>
               <td class="num text-error">${fmtQtd(i.quantidade_recebida)} ${escapeHtml(i.item_unidade || '')}</td>
               <td>${escapeHtml(i.motivo_divergencia || '—')}</td>
+              <td class="center">${i.temperatura_c != null
+                ? `<span class="${i.temperatura_ok === false ? 'text-error' : ''}">${i.temperatura_c}°C</span>` : '—'}</td>
+              <td class="center">${i.validade ? ptDate(i.validade) : '—'}</td>
+              <td>${escapeHtml(i.lote || '—')}</td>
             </tr>`).join('')}</tbody></table>` : ''}
         </div>
       </div>`;
