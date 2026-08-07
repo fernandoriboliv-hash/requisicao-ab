@@ -1061,8 +1061,7 @@ function renderAddItens() {
   const q = (document.getElementById('add-search').value || '').toLowerCase();
   const itens = state.catalogo.filter(i =>
     i.ativo && i.categoria === addCat &&
-    (!q || i.nome.toLowerCase().includes(q) ||
-     (i.fornecedor_principal || '').toLowerCase().includes(q))
+    itemAtendeBusca(i, q)
   );
   if (itens.length === 0) {
     cont.innerHTML = '<div class="empty-text">Nenhum item nesta categoria.</div>';
@@ -1577,7 +1576,7 @@ function renderCatalogoTable() {
   const cf = document.getElementById('cat-cat-filtro').value;
   let lista = state.catalogo;
   if (cf) lista = lista.filter(i => i.categoria === cf);
-  if (q) lista = lista.filter(i => i.nome.toLowerCase().includes(q) || (i.fornecedor_principal||'').toLowerCase().includes(q));
+  if (q) lista = lista.filter(i => itemAtendeBusca(i, q));
   state.catalogoLista = lista;
   const cont = document.getElementById('catalogoContainer');
   if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
@@ -1650,7 +1649,7 @@ function renderPrecos() {
   const cf = document.getElementById('precos-cat-filtro').value;
   let lista = state.catalogo.filter(i => i.ativo);
   if (cf) lista = lista.filter(i => i.categoria === cf);
-  if (q) lista = lista.filter(i => i.nome.toLowerCase().includes(q));
+  if (q) lista = lista.filter(i => itemCasaBusca(i.nome, q));
 
   const comPreco = lista.filter(i => state.precosMap[i.id]).length;
   document.getElementById('precos-stats').textContent = `${comPreco} de ${lista.length} com preço`;
@@ -1867,7 +1866,7 @@ function renderItensReqCreate() {
   const cat = state.reqNew.cat;
   const itens = state.catalogo.filter(i =>
     i.ativo && i.categoria === cat &&
-    (!q || i.nome.toLowerCase().includes(q) || (i.fornecedor_principal||'').toLowerCase().includes(q))
+    itemAtendeBusca(i, q)
   );
   if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item nesta categoria.</div>'; return; }
   itens.sort((a,b) => a.nome.localeCompare(b.nome));
@@ -2201,7 +2200,7 @@ function renderNiveisGer() {
   if (catFilt === 'camara')  filtrados = filtrados.filter(d => d.it.categoria === 'proteina' || d.it.categoria === 'laticinios');
   else if (catFilt)          filtrados = filtrados.filter(d => d.it.categoria === catFilt);
   if (stFilt) filtrados = filtrados.filter(d => d.semaforo === stFilt);
-  if (q) filtrados = filtrados.filter(d => d.it.nome.toLowerCase().includes(q));
+  if (q) filtrados = filtrados.filter(d => itemCasaBusca(d.it.nome, q));
   document.getElementById('nvCount').textContent = `${filtrados.length} item(ns)`;
 
   if (filtrados.length === 0) {
@@ -2266,7 +2265,7 @@ function renderDivergencias() {
   if (st) lista = lista.filter(d => d.status === st);
   if (catFilt === 'camara') lista = lista.filter(d => d.itens && (d.itens.categoria === 'proteina' || d.itens.categoria === 'laticinios'));
   else if (catFilt)         lista = lista.filter(d => d.itens && d.itens.categoria === catFilt);
-  if (q) lista = lista.filter(d => (d.itens?.nome||'').toLowerCase().includes(q));
+  if (q) lista = lista.filter(d => itemCasaBusca(d.itens?.nome || '', q));
 
   document.getElementById('dvCount').textContent = `${lista.length} divergência(s)`;
   if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma divergência com esses filtros.</div>'; return; }

@@ -564,8 +564,7 @@ function renderItens(modo) {
   const cat = state.catAtual[modo];
   const q = (document.getElementById(`${modo}-search`).value || '').toLowerCase();
   const itens = state.catalogo.filter(i =>
-    i.categoria === cat && (!q || i.nome.toLowerCase().includes(q) ||
-      (i.fornecedor_principal || '').toLowerCase().includes(q))
+    i.categoria === cat && itemAtendeBusca(i, q)
   );
   const cont = document.getElementById(`${modo}-items`);
   if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarExecCartBar(); return; }
@@ -1161,7 +1160,7 @@ function renderNiveisEst() {
   if (catFilt === 'camara')  filtrados = filtrados.filter(d => d.it.categoria === 'proteina' || d.it.categoria === 'laticinios');
   else if (catFilt)          filtrados = filtrados.filter(d => d.it.categoria === catFilt);
   if (stFilt) filtrados = filtrados.filter(d => d.semaforo === stFilt);
-  if (q) filtrados = filtrados.filter(d => d.it.nome.toLowerCase().includes(q));
+  if (q) filtrados = filtrados.filter(d => itemCasaBusca(d.it.nome, q));
   document.getElementById('nvCount').textContent = `${filtrados.length} item(ns)`;
 
   if (filtrados.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item nesses filtros.</div>'; return; }
@@ -1222,7 +1221,7 @@ function renderDivergencias() {
   if (st) lista = lista.filter(d => d.status === st);
   if (catFilt === 'camara') lista = lista.filter(d => d.itens && (d.itens.categoria === 'proteina' || d.itens.categoria === 'laticinios'));
   else if (catFilt)         lista = lista.filter(d => d.itens && d.itens.categoria === catFilt);
-  if (q) lista = lista.filter(d => (d.itens?.nome||'').toLowerCase().includes(q));
+  if (q) lista = lista.filter(d => itemCasaBusca(d.itens?.nome || '', q));
 
   document.getElementById('dvCount').textContent = `${lista.length} divergência(s)`;
   if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma divergência com esses filtros.</div>'; return; }

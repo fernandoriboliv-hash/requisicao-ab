@@ -703,8 +703,7 @@ function renderItens(aba) {
   const q = (document.getElementById(`${aba}-search`).value || '').toLowerCase();
   const itens = state.catalogo.filter(i =>
     i.categoria === cat &&
-    (!q || i.nome.toLowerCase().includes(q) ||
-     (i.fornecedor_principal || '').toLowerCase().includes(q))
+    itemAtendeBusca(i, q)
   );
 
   const cont = document.getElementById(`${aba}-items`);

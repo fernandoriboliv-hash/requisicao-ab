@@ -1618,7 +1618,7 @@ function renderItensManual() {
   const q = (document.getElementById('m-search').value || '').toLowerCase();
   const itens = state.catalogo.filter(i =>
     i.categoria === cat &&
-    (!q || i.nome.toLowerCase().includes(q) || (i.fornecedor_principal || '').toLowerCase().includes(q))
+    itemAtendeBusca(i, q)
   );
   const cont = document.getElementById('m-items');
   if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarManualCartBar(); return; }
@@ -1907,7 +1907,7 @@ function renderItensCompra() {
   const q = (document.getElementById('c-search').value || '').toLowerCase();
   const itens = state.catalogo.filter(i =>
     i.categoria === cat &&
-    (!q || i.nome.toLowerCase().includes(q) || (i.fornecedor_principal || '').toLowerCase().includes(q))
+    itemAtendeBusca(i, q)
   );
   const cont = document.getElementById('c-items');
   if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarCompraCartBar(); return; }
@@ -2485,8 +2485,7 @@ function renderChecklist() {
   else if (catFilt)               filtrados = filtrados.filter(d => d.it.categoria === catFilt);
   if (stFilt) filtrados = filtrados.filter(d => d.semaforo === stFilt);
   if (q)      filtrados = filtrados.filter(d =>
-    d.it.nome.toLowerCase().includes(q) ||
-    (d.it.fornecedor_principal || '').toLowerCase().includes(q));
+    itemAtendeBusca(d.it, q));
 
   document.getElementById('chkCount').textContent = `${filtrados.length} item(ns)`;
 
@@ -2650,8 +2649,7 @@ function renderItemAvulsoLista() {
     !state.chk.itensAvulsos.has(it.id)
   );
   if (q) lista = lista.filter(it =>
-    it.nome.toLowerCase().includes(q) ||
-    (it.fornecedor_principal || '').toLowerCase().includes(q)
+    itemAtendeBusca(it, q)
   );
   if (lista.length === 0) {
     cont.innerHTML = q
@@ -2809,8 +2807,7 @@ function renderNiveis() {
   else if (catFilt)          filtrados = filtrados.filter(d => d.it.categoria === catFilt);
   if (stFilt) filtrados = filtrados.filter(d => d.semaforo === stFilt);
   if (q)      filtrados = filtrados.filter(d =>
-    d.it.nome.toLowerCase().includes(q) ||
-    (d.it.fornecedor_principal || '').toLowerCase().includes(q));
+    itemAtendeBusca(d.it, q));
 
   document.getElementById('nvCount').textContent = `${filtrados.length} item(ns)`;
 
@@ -2890,7 +2887,7 @@ function renderDivergencias() {
   if (st) lista = lista.filter(d => d.status === st);
   if (catFilt === 'camara') lista = lista.filter(d => d.itens && (d.itens.categoria === 'proteina' || d.itens.categoria === 'laticinios'));
   else if (catFilt)        lista = lista.filter(d => d.itens && d.itens.categoria === catFilt);
-  if (q) lista = lista.filter(d => (d.itens?.nome||'').toLowerCase().includes(q));
+  if (q) lista = lista.filter(d => itemCasaBusca(d.itens?.nome || '', q));
 
   document.getElementById('dvCount').textContent = `${lista.length} divergência(s)`;
   if (lista.length === 0) {

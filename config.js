@@ -40,6 +40,55 @@ const LABEL_PERFIL = {
 };
 
 // =====================================================================
+// BUSCA DE ITENS
+// =====================================================================
+// A equipe procura pelo nome da planilha, que raramente é igual ao nome
+// cadastrado. A busca antiga era substring exata e falhava em dois casos
+// muito comuns:
+//
+//   acento     "CAMARÃO" não achava "CAMARAO ROSA FRESCO..."
+//   ordem      "CUBOS DE FILÉ MIGNON" não achava "FILE MIGNON EM CUBOS"
+//
+// Agora normaliza (tira acento e pontuação), quebra em palavras e exige
+// que todas apareçam, em qualquer ordem. Se não achar nada assim, tenta
+// de novo ignorando embalagem e gramatura (PCT, KG, 500g) — que a
+// planilha traz mas o cadastro nem sempre tem.
+
+function normalizarBusca(s) {
+  return String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+// Tokens de embalagem/gramatura: refinam a busca, mas não devem zerar o resultado
+const _TOKENS_EMBALAGEM = /^(pct|pc|pcs|po|und|unid|un|cx|bd|bl|rl|kg|kgs|g|gr|grs|ml|lt|l|peca|pecas|balde|lata|caixa|tablete|barra|bloco|rolo)$/;
+function _ehTokenEmbalagem(t) {
+  return _TOKENS_EMBALAGEM.test(t) || /^\d+[a-z]*$/.test(t);
+}
+
+// true se `texto` atende ao termo digitado
+function itemCasaBusca(texto, termo) {
+  const alvo = normalizarBusca(texto);
+  if (!alvo) return false;
+
+  const palavras = normalizarBusca(termo).split(' ').filter(t => t.length >= 3);
+  if (!palavras.length) return alvo.includes(normalizarBusca(termo));
+
+  if (palavras.every(t => alvo.includes(t))) return true;
+
+  const significativas = palavras.filter(t => !_ehTokenEmbalagem(t));
+  return significativas.length > 0 && significativas.every(t => alvo.includes(t));
+}
+
+// Busca no nome e no fornecedor — o que as telas usam
+function itemAtendeBusca(item, termo) {
+  if (!termo) return true;
+  return itemCasaBusca(item.nome, termo)
+      || itemCasaBusca(item.fornecedor_principal || '', termo);
+}
+
+// =====================================================================
 // IDEMPOTÊNCIA DE ENVIO
 // =====================================================================
 // Cada "carrinho" carrega um UUID. Ele vai no INSERT e o banco tem índice
