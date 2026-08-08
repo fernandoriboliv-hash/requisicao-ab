@@ -148,6 +148,31 @@ async function inserirIdempotente(sb, tabela, payload, chaveToken, selectStr = '
 // offline — então o mínimo é avisar o usuário antes que ele perca o que
 // digitou. Chame instalarAvisoConexao() no load de cada tela.
 
+// =====================================================================
+// SELEÇÃO AUTOMÁTICA EM CAMPO DE QUANTIDADE
+// =====================================================================
+// No celular, tocar num campo que já tem valor põe o cursor no meio do
+// número — a pessoa precisa apagar dígito por dígito antes de digitar o
+// certo. Selecionar o conteúdo ao focar faz o primeiro toque substituir
+// tudo, que é o que se espera de um campo de quantidade.
+//
+// O adiamento é necessário: no toque, o navegador dá o foco e SÓ DEPOIS
+// posiciona o cursor. Selecionar direto no focus seria desfeito em seguida.
+// Usamos setTimeout e não requestAnimationFrame porque o rAF não dispara
+// quando a aba está em segundo plano — o campo ficaria sem seleção.
+//
+// Listener único no document — vale para campo criado depois, que é o
+// caso de todas as listas montadas por innerHTML.
+document.addEventListener('focusin', e => {
+  const el = e.target;
+  if (el instanceof HTMLInputElement && el.type === 'number' && el.value !== '') {
+    setTimeout(() => {
+      // O campo pode ter perdido o foco entre o evento e agora
+      if (document.activeElement === el) { try { el.select(); } catch {} }
+    }, 0);
+  }
+});
+
 function instalarAvisoConexao() {
   const barra = document.createElement('div');
   barra.id = 'barra-offline';

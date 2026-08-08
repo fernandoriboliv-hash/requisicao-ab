@@ -50,6 +50,77 @@
     padding: 6px 8px; text-align: center; outline: none;
   }
   .qty-entrega:focus { border-color: rgba(184,150,62,0.4); }
+  .qty-wrap { display: inline-flex; align-items: center; gap: 6px; }
+  .qty-un { font-size: 12px; color: var(--muted); }
+
+  /* ---- Itens da requisição no celular ----------------------------
+     Cinco colunas não cabem numa tela de celular: a de Entregue ficava
+     fora da área visível e a Comissaria não conseguia nem tocar no campo.
+     Abaixo de 760px cada linha vira um card, com Solicitado e Entregue
+     lado a lado para comparar de relance. */
+  @media (max-width: 760px) {
+    .tabela-req-itens thead { display: none; }
+    .tabela-req-itens,
+    .tabela-req-itens tbody { display: block; width: 100%; }
+
+    .tabela-req-itens tr {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        "cat   cat"
+        "item  item"
+        "solic entr"
+        "div   div";
+      gap: 4px 12px;
+      /* start alinha os rótulos SOLICITADO e ENTREGUE na mesma altura;
+         com end eles ficavam desencontrados porque o campo é mais alto */
+      align-items: start;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border-subtle);
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+    .tabela-req-itens td {
+      display: block; border: none; padding: 0;
+    }
+    /* Rótulo da coluna vai para dentro da célula, já que não há cabeçalho */
+    .tabela-req-itens td[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      font-size: 10px; letter-spacing: 0.8px; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 4px;
+    }
+
+    .tabela-req-itens .td-cat   { grid-area: cat; }
+    .tabela-req-itens .td-item  { grid-area: item; }
+    .tabela-req-itens .td-solic { grid-area: solic; text-align: left; }
+    .tabela-req-itens .td-entr  { grid-area: entr; }
+    .tabela-req-itens .td-div   { grid-area: div; }
+
+    /* Nome do item é o que a equipe procura primeiro — equipe 50+ */
+    .tabela-req-itens .td-item {
+      font-size: 16px; font-weight: 600; line-height: 1.3;
+      margin: 2px 0 6px;
+      /* o catálogo tem nomes sem espaço, como CONTRAFILE/BIFE DE CHORIZO */
+      overflow-wrap: anywhere;
+    }
+    .tabela-req-itens .td-solic { font-size: 15px; color: var(--muted); }
+
+    /* Campo grande o bastante para acertar com o dedo.
+       16px é o mínimo que evita o zoom automático do navegador. */
+    .tabela-req-itens .qty-entrega {
+      width: 108px; font-size: 18px; padding: 12px 8px;
+      border-color: rgba(184,150,62,0.45);
+    }
+    .tabela-req-itens .qty-un { font-size: 13px; }
+
+    /* O traço de "sem divergência" só faz sentido alinhado numa coluna;
+       solto dentro do card é ruído */
+    .tabela-req-itens .div-vazia { display: none; }
+    .tabela-req-itens .motivo-wrap { max-width: none; margin-top: 8px; }
+    .tabela-req-itens .motivo-btn  { font-size: 13px; padding: 10px 12px; flex: 1 1 auto; }
+    .tabela-req-itens .motivo-obs  { font-size: 13px; padding: 9px 10px; }
+  }
   /* Divergência de requisição: motivos pré-definidos + observação opcional */
   .motivo-wrap {
     display: none; flex-direction: column; gap: 6px; max-width: 340px;
@@ -1346,14 +1417,19 @@ function renderFila() {
       const catTxt = it.item_livre ? '⚠ Livre' : it.item_categoria;
       return `
         <tr>
-          <td><span class="cat-pill ${catCls}">${catTxt}</span></td>
-          <td>${escapeHtml(it.item_nome)}${it.comentario ? `<br><em style="color:var(--muted);font-size:11px">${escapeHtml(it.comentario)}</em>` : ''}</td>
-          <td class="num">${it.quantidade_solicitada} ${it.item_unidade || ''}</td>
-          <td>${entregue
+          <td class="td-cat"><span class="cat-pill ${catCls}">${catTxt}</span></td>
+          <td class="td-item">${escapeHtml(it.item_nome)}${it.comentario ? `<br><em style="color:var(--muted);font-size:11px">${escapeHtml(it.comentario)}</em>` : ''}</td>
+          <td class="num td-solic" data-label="Solicitado">${it.quantidade_solicitada} ${it.item_unidade || ''}</td>
+          <td class="td-entr" data-label="Entregue">${entregue
             ? `${it.quantidade_entregue ?? '—'} ${it.item_unidade || ''}`
-            : `<input class="qty-entrega" type="number" step="0.1" min="0" value="${it.quantidade_solicitada}" id="qe-${r.id}-${idx}" oninput="checkDiv('${r.id}',${idx},${it.quantidade_solicitada},this.value)">`}
+            : `<span class="qty-wrap">
+                 <input class="qty-entrega" type="number" step="0.1" min="0" inputmode="decimal"
+                        value="${it.quantidade_solicitada}" id="qe-${r.id}-${idx}"
+                        oninput="checkDiv('${r.id}',${idx},${it.quantidade_solicitada},this.value)">
+                 <span class="qty-un">${escapeHtml(it.item_unidade || '')}</span>
+               </span>`}
           </td>
-          <td>${entregue && it.divergencia
+          <td class="td-div">${entregue && it.divergencia
             ? `<span class="text-error" style="font-size:12px">⚠ ${escapeHtml(it.motivo_divergencia || 'Divergência')}</span>`
             : (!entregue ? `
               <div class="motivo-wrap" id="motw-${r.id}-${idx}">
@@ -1364,7 +1440,7 @@ function renderFila() {
                 </div>
                 <input class="motivo-obs" type="text" placeholder="Observação (opcional)..." id="motobs-${r.id}-${idx}">
                 <input type="hidden" id="mot-${r.id}-${idx}" value="">
-              </div>` : '—')}
+              </div>` : '<span class="div-vazia">—</span>')}
           </td>
         </tr>`;
     }).join('');
@@ -1394,7 +1470,7 @@ function renderFila() {
       <div class="req-detail" id="detail-${r.id}">
         ${boxCancel}
         ${r.observacao ? `<div class="obs-box">💬 ${escapeHtml(r.observacao)}</div>` : ''}
-        <table class="data-table mt-3">
+        <table class="data-table tabela-req-itens mt-3">
           <thead><tr><th>Categoria</th><th>Item</th><th>Solicitado</th><th>Entregue</th><th>Divergência</th></tr></thead>
           <tbody>${linhasItens}</tbody>
         </table>
