@@ -741,12 +741,12 @@ function renderPendencias() {
 
   const linhas = state.pendencias.map(p => `
     <tr>
-      <td>${escapeHtml(p.item_nome)}</td>
-      <td class="num">${fmtQtd(p.quantidade)} ${escapeHtml(p.item_unidade || '')}</td>
-      <td>${escapeHtml(p.fornecedores?.nome || '—')}</td>
-      <td>${escapeHtml(rotuloMotivo(p.motivo_codigo))}</td>
-      <td>${ptDate(String(p.criada_em).slice(0, 10))}</td>
-      <td class="center">
+      <td class="td-titulo">${escapeHtml(p.item_nome)}</td>
+      <td class="num" data-label="Falta">${fmtQtd(p.quantidade)} ${escapeHtml(p.item_unidade || '')}</td>
+      <td data-label="Fornecedor">${escapeHtml(p.fornecedores?.nome || '—')}</td>
+      <td data-label="Motivo">${escapeHtml(rotuloMotivo(p.motivo_codigo))}</td>
+      <td data-label="Desde">${ptDate(String(p.criada_em).slice(0, 10))}</td>
+      <td class="td-acoes">
         <button class="btn btn-sm btn-secondary" onclick="resolverPendencia('${p.id}','cancelada')">Descartar</button>
       </td>
     </tr>`).join('');
@@ -761,7 +761,7 @@ function renderPendencias() {
           Vieram do Recebimento. Some à próxima ordem de compra do fornecedor —
           ao gerar a PO, o sistema pergunta se quer incluí-los.
         </div>
-        <table class="data-table">
+        <table class="data-table tabela-cards">
           <thead><tr><th>Item</th><th class="num">Falta</th><th>Fornecedor</th><th>Motivo</th><th>Desde</th><th class="center">Ação</th></tr></thead>
           <tbody>${linhas}</tbody>
         </table>
@@ -893,16 +893,16 @@ function renderFila() {
       const idade = idadePreco(l.opcao);
       return `
       <tr>
-        <td>${escapeHtml(l.nome)}
+        <td class="td-titulo">${escapeHtml(l.nome)}
           ${l.pdvs.length ? `<br><span class="linha-origem">${escapeHtml(l.pdvs.join(' · '))}</span>` : ''}
           ${ganho > 0 ? `<br><span class="mtz-econ">${escapeHtml(l.maisBarata.fornecedor)} cobra
              ${fmtMoeda(l.maisBarata.preco)} — economia de ${fmtMoeda(ganho)}</span>` : ''}
         </td>
-        <td class="num">${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}</td>
-        <td class="num">${l.preco ? fmtMoeda(l.preco) : '<span class="text-muted">sem preço</span>'}
+        <td class="num" data-label="Quantidade">${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}</td>
+        <td class="num" data-label="Preço un.">${l.preco ? fmtMoeda(l.preco) : '<span class="text-muted">sem preço</span>'}
           ${idade ? `<br><span class="opc-tag">${escapeHtml(idade)}</span>` : ''}
           ${nAlt > 1 ? `<br><span class="opc-tag">${nAlt} fornecedores</span>` : ''}</td>
-        <td class="num right">${l.preco ? fmtMoeda(l.qtd * l.preco) : '—'}</td>
+        <td class="num right" data-label="Total">${l.preco ? fmtMoeda(l.qtd * l.preco) : '—'}</td>
       </tr>`;
     }).join('');
 
@@ -922,7 +922,7 @@ function renderFila() {
             Comprando cada item no fornecedor mais barato, este bloco sairia
             <strong>${fmtMoeda(g.economia)}</strong> mais barato. A troca é feita item a item
             na tela de gerar a ordem.</div>` : ''}
-          <table class="data-table">
+          <table class="data-table tabela-cards">
             <thead><tr><th>Item</th><th class="num">Qtd</th><th class="num">Preço un.</th><th class="num right">Total</th></tr></thead>
             <tbody>${linhas}</tbody>
           </table>
@@ -1106,24 +1106,24 @@ function abrirAlternativas(i) {
       Quantidade desta linha: <strong>${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}</strong>.
       Os totais abaixo já consideram essa quantidade.
     </div>
-    <table class="data-table">
+    <table class="data-table tabela-cards">
       <thead><tr><th>Fornecedor</th><th class="num">Preço un.</th><th class="num">Total</th>
         <th class="center">Prazo</th><th class="center">Mín.</th><th class="center">Usar</th></tr></thead>
       <tbody>${l.alternativas.map(o => {
         const ehAtual = o.fornecedor_id === atual;
         const velha = !ehAtual && l.opcao && !cotacoesComparaveis(o, l.opcao);
         return `<tr>
-          <td>${escapeHtml(o.fornecedor)}
+          <td class="td-titulo">${escapeHtml(o.fornecedor)}
             ${o.preferencia === 1 ? '<span class="opc-tag">primário</span>' : ''}
             ${ehAtual ? '<span class="opc-tag">neste pedido</span>' : ''}
             ${velha ? '<span class="opc-tag" style="color:var(--orange)">outra época — recotizar</span>' : ''}
             ${o.codigo ? `<br><span class="linha-origem">cód. ${escapeHtml(o.codigo)}</span>` : ''}</td>
-          <td class="num">${o.preco != null ? fmtMoeda(o.preco) : '—'}
+          <td class="num" data-label="Preço un.">${o.preco != null ? fmtMoeda(o.preco) : '—'}
             ${o.preco_em ? `<br><span class="linha-origem">${ptDate(o.preco_em)}</span>` : ''}</td>
-          <td class="num">${o.preco != null ? fmtMoeda(o.preco * l.qtd) : '—'}</td>
-          <td class="center">${o.prazo}d</td>
-          <td class="center">${o.moq != null ? fmtQtd(o.moq) : '—'}</td>
-          <td class="center">${ehAtual ? '<span class="text-muted">—</span>' : `
+          <td class="num" data-label="Total desta linha">${o.preco != null ? fmtMoeda(o.preco * l.qtd) : '—'}</td>
+          <td class="center" data-label="Prazo">${o.prazo}d</td>
+          <td class="center" data-label="Pedido mínimo">${o.moq != null ? fmtQtd(o.moq) : '—'}</td>
+          <td class="td-acoes">${ehAtual ? '<span class="text-muted">em uso neste pedido</span>' : `
             <button class="btn btn-sm btn-secondary" onclick="trocarFornecedorLinha(${i},'${o.fornecedor_id}',false)">Só aqui</button>
             <button class="btn btn-sm btn-gold" onclick="trocarFornecedorLinha(${i},'${o.fornecedor_id}',true)">Tornar primário</button>`}</td>
         </tr>`;
@@ -1573,20 +1573,20 @@ function renderOrdens() {
     recebida_parcial:'Recebida parcial', recebida:'Recebida', cancelada:'Cancelada',
   };
 
-  cont.innerHTML = `<table class="data-table">
+  cont.innerHTML = `<table class="data-table tabela-cards">
     <thead><tr>
       <th>PO</th><th>Fornecedor</th><th class="center">Itens</th>
       <th class="num right">Valor</th><th>Entrega</th><th>Status</th><th class="center">Ações</th>
     </tr></thead>
     <tbody>${lista.map(o => `
       <tr>
-        <td class="po-num">${fmtPO(o.numero)}</td>
-        <td>${escapeHtml(o.fornecedores?.nome || '—')}</td>
-        <td class="center">${(o.ordem_compra_itens || []).length}</td>
-        <td class="num right">${fmtMoeda(o.valor_total)}</td>
-        <td>${o.data_entrega_prevista ? ptDate(o.data_entrega_prevista) : '—'}<br>${pillPrazo(o)}</td>
-        <td><span class="badge">${statusLabel[o.status] || o.status}</span></td>
-        <td class="center">
+        <td class="td-titulo">${escapeHtml(o.fornecedores?.nome || '—')}</td>
+        <td class="po-num" data-label="Nº da ordem">${fmtPO(o.numero)}</td>
+        <td class="center" data-label="Itens">${(o.ordem_compra_itens || []).length}</td>
+        <td class="num right" data-label="Valor">${fmtMoeda(o.valor_total)}</td>
+        <td data-label="Entrega">${o.data_entrega_prevista ? ptDate(o.data_entrega_prevista) : '—'} ${pillPrazo(o)}</td>
+        <td data-label="Status"><span class="badge">${statusLabel[o.status] || o.status}</span></td>
+        <td class="td-acoes">
           <button class="btn btn-sm btn-secondary" onclick="abrirEmail('${o.id}')">E-mail</button>
           ${['rascunho','enviada','confirmada'].includes(o.status)
             ? `<button class="btn btn-sm btn-secondary" onclick="cancelarOrdem('${o.id}', ${o.numero})">Cancelar</button>` : ''}
@@ -1992,7 +1992,7 @@ function renderFornecedores() {
   Object.values(state.matriz).flat().forEach(o =>
     itensPorForn[o.fornecedor_id] = (itensPorForn[o.fornecedor_id] || 0) + 1);
 
-  cont.innerHTML = `<table class="data-table">
+  cont.innerHTML = `<table class="data-table tabela-cards">
     <thead><tr><th>Nome</th><th>E-mail</th><th class="center">Itens</th><th class="center">Prazo</th>
       <th>Pagamento</th><th>Documentação</th><th class="center">Ações</th></tr></thead>
     <tbody>${lista.map(f => {
@@ -2004,14 +2004,14 @@ function renderFornecedores() {
         : '<span class="text-muted">não cadastrada</span>';
       return `
       <tr>
-        <td>${escapeHtml(f.nome)}
+        <td class="td-titulo">${escapeHtml(f.nome)}
           ${f.categorias?.length ? `<br><span class="opc-tag">${escapeHtml(f.categorias.join(' · '))}</span>` : ''}</td>
-        <td>${f.email ? escapeHtml(f.email) : '<span class="text-error">— sem e-mail —</span>'}</td>
-        <td class="center">${itensPorForn[f.id] || 0}</td>
-        <td class="center">${f.prazo_entrega_dias}d</td>
-        <td>${escapeHtml(f.condicao_pagamento || '—')}</td>
-        <td>${doc}</td>
-        <td class="center"><button class="btn btn-sm btn-secondary" onclick="abrirFornecedor('${f.id}')">Editar</button></td>
+        <td data-label="E-mail">${f.email ? escapeHtml(f.email) : '<span class="text-error">— sem e-mail —</span>'}</td>
+        <td class="center" data-label="Itens">${itensPorForn[f.id] || 0}</td>
+        <td class="center" data-label="Prazo">${f.prazo_entrega_dias}d</td>
+        <td data-label="Pagamento">${escapeHtml(f.condicao_pagamento || '—')}</td>
+        <td data-label="Documentação">${doc}</td>
+        <td class="td-acoes"><button class="btn btn-sm btn-secondary" onclick="abrirFornecedor('${f.id}')">Editar</button></td>
       </tr>`;
     }).join('')}
     </tbody></table>`;
@@ -2118,18 +2118,18 @@ async function carregarHistorico() {
       <div class="stat-card"><div class="stat-label">Valor total</div><div class="stat-val">${fmtMoeda(total)}</div></div>
       <div class="stat-card"><div class="stat-label">Recebidas</div><div class="stat-val">${histCache.filter(o=>o.status==='recebida').length}</div></div>
     </div>
-    <table class="data-table">
+    <table class="data-table tabela-cards">
       <thead><tr><th>PO</th><th>Emissão</th><th>Fornecedor</th><th class="num right">Valor</th><th>Prevista</th><th>Recebida</th><th>Status</th></tr></thead>
       <tbody>${histCache.map(o => {
         const rec = (o.recebimentos || [])[0];
         return `<tr>
-          <td class="po-num">${fmtPO(o.numero)}</td>
-          <td>${ptDate(o.data_emissao)}</td>
-          <td>${escapeHtml(o.fornecedores?.nome || '—')}</td>
-          <td class="num right">${fmtMoeda(o.valor_total)}</td>
-          <td>${o.data_entrega_prevista ? ptDate(o.data_entrega_prevista) : '—'}</td>
-          <td>${rec ? ptDate(rec.data_recebimento) : '—'}</td>
-          <td><span class="badge">${o.status}</span></td>
+          <td class="td-titulo">${escapeHtml(o.fornecedores?.nome || '—')}</td>
+          <td class="po-num" data-label="Nº da ordem">${fmtPO(o.numero)}</td>
+          <td data-label="Emissão">${ptDate(o.data_emissao)}</td>
+          <td class="num right" data-label="Valor">${fmtMoeda(o.valor_total)}</td>
+          <td data-label="Prevista">${o.data_entrega_prevista ? ptDate(o.data_entrega_prevista) : '—'}</td>
+          <td data-label="Recebida">${rec ? ptDate(rec.data_recebimento) : '—'}</td>
+          <td data-label="Status"><span class="badge">${o.status}</span></td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;

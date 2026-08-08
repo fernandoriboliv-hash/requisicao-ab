@@ -824,17 +824,17 @@ async function carregarComprasGeral() {
   const cont = document.getElementById('comprasGeralCont');
   if (!data || data.length === 0) { cont.innerHTML = '<div class="empty-text">Nada encontrado.</div>'; return; }
   const statusLabel = { rascunho:'Rascunho', enviada:'Aguardando aprov.', aprovada:'Aprovada', rejeitada:'Rejeitada', entregue:'Entregue' };
-  cont.innerHTML = `<table class="data-table">
+  cont.innerHTML = `<table class="data-table tabela-cards">
     <thead><tr><th>#</th><th>Data</th><th>PDV</th><th class="center">Itens</th><th>Entrega</th><th>Status</th></tr></thead>
     <tbody>${data.map(s => {
       const itens = s.solicitacao_compra_itens || [];
       return `<tr>
-        <td class="text-muted">#${String(s.id).slice(0,8)}</td>
-        <td class="text-muted">${ptDate(s.data_competencia)}</td>
-        <td>${escapeHtml(s.pdvs?.nome||'—')}</td>
-        <td class="center">${itens.length}</td>
-        <td class="text-muted">${s.data_entrega_desejada ? ptDate(s.data_entrega_desejada) : '—'}</td>
-        <td><span class="badge status-${s.status}">${statusLabel[s.status]||s.status}</span></td>
+        <td class="td-titulo">${escapeHtml(s.pdvs?.nome||'—')}</td>
+        <td class="text-muted" data-label="Nº">#${String(s.id).slice(0,8)}</td>
+        <td class="text-muted" data-label="Data">${ptDate(s.data_competencia)}</td>
+        <td class="center" data-label="Itens">${itens.length}</td>
+        <td class="text-muted" data-label="Entrega">${s.data_entrega_desejada ? ptDate(s.data_entrega_desejada) : '—'}</td>
+        <td data-label="Status"><span class="badge status-${s.status}">${statusLabel[s.status]||s.status}</span></td>
       </tr>`;
     }).join('')}</tbody></table>`;
 }
@@ -854,19 +854,19 @@ async function carregarReqsGeral() {
   const cont = document.getElementById('reqsGeralCont');
   if (!data || data.length === 0) { cont.innerHTML = '<div class="empty-text">Nada encontrado.</div>'; return; }
   const statusLabel = { enviado:'Aguardando', separacao:'Em Separação', entregue:'Entregue', cancelada:'Cancelada' };
-  cont.innerHTML = `<table class="data-table">
+  cont.innerHTML = `<table class="data-table tabela-cards">
     <thead><tr><th>#</th><th>Data</th><th>PDV</th><th class="center">Itens</th><th class="center">Diverg.</th><th>Status</th></tr></thead>
     <tbody>${data.map(r => {
       const itens = r.requisicao_itens || [];
       const divs = itens.filter(i => i.divergencia).length;
       const manualTag = r.criada_pelo_estoque ? ' <span class="badge badge-gold" style="font-size:9px">MANUAL</span>' : '';
       return `<tr>
-        <td class="text-muted">#${String(r.id).slice(0,8)}</td>
-        <td class="text-muted">${ptDate(r.data_competencia)}</td>
-        <td>${escapeHtml(r.pdvs?.nome||'—')}${manualTag}</td>
-        <td class="center">${itens.length}</td>
-        <td class="center ${divs>0?'text-error':'text-muted'}">${divs > 0 ? divs : '—'}</td>
-        <td><span class="badge status-${r.status}">${statusLabel[r.status]||r.status}</span></td>
+        <td class="td-titulo">${escapeHtml(r.pdvs?.nome||'—')}${manualTag}</td>
+        <td class="text-muted" data-label="Nº">#${String(r.id).slice(0,8)}</td>
+        <td class="text-muted" data-label="Data">${ptDate(r.data_competencia)}</td>
+        <td class="center" data-label="Itens">${itens.length}</td>
+        <td class="center ${divs>0?'text-error':'text-muted'}" data-label="Divergências">${divs > 0 ? divs : '—'}</td>
+        <td data-label="Status"><span class="badge status-${r.status}">${statusLabel[r.status]||r.status}</span></td>
       </tr>`;
     }).join('')}</tbody></table>`;
 }
@@ -1032,7 +1032,7 @@ function renderRelTabela(itens, fonte) {
       <div class="section-title" style="margin-top:20px">
         <span>${CAT_LABEL_REL[c]} <span class="text-muted" style="font-size:12px">· ${lista.length} itens · qtd ${fmtQty(subtotalQty)} · ${fmtBRL(subtotalVal)}</span></span>
       </div>
-      <table class="data-table">
+      <table class="data-table tabela-cards">
         <thead><tr>
           <th>Item</th><th>Fornecedor</th><th class="center">Un</th>
           ${showC ? '<th class="num">Comprada</th>' : ''}
@@ -1042,14 +1042,14 @@ function renderRelTabela(itens, fonte) {
           <th class="num">Valor total</th>
         </tr></thead>
         <tbody>${lista.map(x => `<tr>
-          <td>${escapeHtml(x.nome)}</td>
-          <td class="text-muted">${escapeHtml(x.forn)}</td>
-          <td class="center text-muted">${escapeHtml(x.unid || '')}</td>
-          ${showC ? `<td class="num">${x.qtyCompra > 0 ? fmtQty(x.qtyCompra) : '—'}</td>` : ''}
-          ${showR ? `<td class="num">${x.qtyReq > 0 ? fmtQty(x.qtyReq) : '—'}</td>` : ''}
-          <td class="num" style="font-weight:500">${fmtQty(x.qtyTotal)}</td>
-          <td class="num text-muted">${x.preco > 0 ? fmtBRL(x.preco) : '—'}</td>
-          <td class="num" style="font-weight:500">${x.preco > 0 ? fmtBRL(x.valorTotal) : '—'}</td>
+          <td class="td-titulo">${escapeHtml(x.nome)}</td>
+          <td class="text-muted" data-label="Fornecedor">${escapeHtml(x.forn)}</td>
+          <td class="center text-muted" data-label="Unidade">${escapeHtml(x.unid || '')}</td>
+          ${showC ? `<td class="num" data-label="Comprada">${x.qtyCompra > 0 ? fmtQty(x.qtyCompra) : '—'}</td>` : ''}
+          ${showR ? `<td class="num" data-label="Requisitada">${x.qtyReq > 0 ? fmtQty(x.qtyReq) : '—'}</td>` : ''}
+          <td class="num" style="font-weight:500" data-label="Total">${fmtQty(x.qtyTotal)}</td>
+          <td class="num text-muted" data-label="Preço un.">${x.preco > 0 ? fmtBRL(x.preco) : '—'}</td>
+          <td class="num" style="font-weight:500" data-label="Valor total">${x.preco > 0 ? fmtBRL(x.valorTotal) : '—'}</td>
         </tr>`).join('')}</tbody>
       </table>
     `;

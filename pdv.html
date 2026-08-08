@@ -1649,7 +1649,7 @@ function renderRelatorioTabela(itens, fonte) {
       <div class="section-title" style="margin-top:20px">
         <span>${CAT_LABEL[c]} <span class="text-muted" style="font-size:12px">· ${lista.length} itens · total ${fmtQty(subtotal)}</span></span>
       </div>
-      <table class="data-table">
+      <table class="data-table tabela-cards">
         <thead><tr>
           <th>Item</th><th>Fornecedor</th><th class="center">Un</th>
           ${showC ? '<th class="num">Comprada</th>' : ''}
@@ -1657,12 +1657,12 @@ function renderRelatorioTabela(itens, fonte) {
           <th class="num">Total</th>
         </tr></thead>
         <tbody>${lista.map(x => `<tr>
-          <td>${escapeHtml(x.nome)}</td>
-          <td class="text-muted">${escapeHtml(x.forn)}</td>
-          <td class="center text-muted">${escapeHtml(x.unid || '')}</td>
-          ${showC ? `<td class="num">${x.qtyCompra > 0 ? fmtQty(x.qtyCompra) : '—'}</td>` : ''}
-          ${showR ? `<td class="num">${x.qtyReq > 0 ? fmtQty(x.qtyReq) : '—'}</td>` : ''}
-          <td class="num" style="font-weight:500">${fmtQty(x.qtyTotal)}</td>
+          <td class="td-titulo">${escapeHtml(x.nome)}</td>
+          <td class="text-muted" data-label="Fornecedor">${escapeHtml(x.forn)}</td>
+          <td class="center text-muted" data-label="Unidade">${escapeHtml(x.unid || '')}</td>
+          ${showC ? `<td class="num" data-label="Comprada">${x.qtyCompra > 0 ? fmtQty(x.qtyCompra) : '—'}</td>` : ''}
+          ${showR ? `<td class="num" data-label="Requisitada">${x.qtyReq > 0 ? fmtQty(x.qtyReq) : '—'}</td>` : ''}
+          <td class="num" style="font-weight:500" data-label="Total">${fmtQty(x.qtyTotal)}</td>
         </tr>`).join('')}</tbody>
       </table>
     `;

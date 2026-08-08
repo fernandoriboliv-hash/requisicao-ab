@@ -2339,18 +2339,18 @@ function renderTabelaItens(divId, itens) {
       <div class="uppercase-label" style="margin-top:16px;margin-bottom:8px">
         ${CAT_LABEL_REL[c]} <span class="text-muted" style="text-transform:none;letter-spacing:0">· ${lista.length} itens · qtd ${fmtQty(subQty)} · ${fmtBRL(subVal)}</span>
       </div>
-      <table class="data-table">
+      <table class="data-table tabela-cards">
         <thead><tr>
           <th>Item</th><th>Fornecedor</th><th class="center">Un</th>
           <th class="num">Quantidade</th><th class="num">Preço un.</th><th class="num">Valor total</th>
         </tr></thead>
         <tbody>${lista.map(x => `<tr>
-          <td>${escapeHtml(x.nome)}</td>
-          <td class="text-muted">${escapeHtml(x.forn)}</td>
-          <td class="center text-muted">${escapeHtml(x.unid || '')}</td>
-          <td class="num" style="font-weight:500">${fmtQty(x.qty)}</td>
-          <td class="num text-muted">${x.preco > 0 ? fmtBRL(x.preco) : '—'}</td>
-          <td class="num" style="font-weight:500">${x.preco > 0 ? fmtBRL(x.valor) : '—'}</td>
+          <td class="td-titulo">${escapeHtml(x.nome)}</td>
+          <td class="text-muted" data-label="Fornecedor">${escapeHtml(x.forn)}</td>
+          <td class="center text-muted" data-label="Unidade">${escapeHtml(x.unid || '')}</td>
+          <td class="num" style="font-weight:500" data-label="Quantidade">${fmtQty(x.qty)}</td>
+          <td class="num text-muted" data-label="Preço un.">${x.preco > 0 ? fmtBRL(x.preco) : '—'}</td>
+          <td class="num" style="font-weight:500" data-label="Valor total">${x.preco > 0 ? fmtBRL(x.valor) : '—'}</td>
         </tr>`).join('')}</tbody>
       </table>
     `;

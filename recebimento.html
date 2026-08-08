@@ -1019,7 +1019,7 @@ async function carregarRecebidos() {
   if (!data?.length) { cont.innerHTML = '<div class="empty-text">Nenhum recebimento no período.</div>'; return; }
 
   // Os três vértices lado a lado — a conferência inteira numa linha só
-  cont.innerHTML = `<table class="data-table">
+  cont.innerHTML = `<table class="data-table tabela-cards">
     <thead><tr><th>Data</th><th>PO</th><th>Fornecedor</th><th>NF</th>
       <th class="num right">Pedido</th><th class="num right">Recebido</th><th class="num right">Nota</th>
       <th class="center">Match</th><th>Status</th><th class="center">Estoque</th></tr></thead>
@@ -1031,16 +1031,16 @@ async function carregarRecebidos() {
         : r.valor_confere === false ? '<span class="text-error">✕</span>' : '—';
       return `
       <tr>
-        <td>${ptDate(r.data_recebimento)}</td>
-        <td class="po-numero">${fmtPO(r.ordens_compra?.numero)}</td>
-        <td>${escapeHtml(r.ordens_compra?.fornecedores?.nome || '—')}</td>
-        <td>${escapeHtml(r.nota_fiscal_numero || '—')}</td>
-        <td class="num right">${fmtMoeda(r.valor_po)}</td>
-        <td class="num right">${r.valor_recebido != null ? fmtMoeda(r.valor_recebido) : '—'}</td>
-        <td class="num right">${r.nota_fiscal_valor != null ? fmtMoeda(r.nota_fiscal_valor) : '—'}</td>
-        <td class="center">${match}</td>
-        <td><span class="badge">${labelStatus(r.status)}</span></td>
-        <td class="center">${r.estoque_atualizado ? '✓' : '<span class="text-muted">—</span>'}</td>
+        <td class="td-titulo">${escapeHtml(r.ordens_compra?.fornecedores?.nome || '—')}</td>
+        <td data-label="Data">${ptDate(r.data_recebimento)}</td>
+        <td class="po-numero" data-label="Nº da ordem">${fmtPO(r.ordens_compra?.numero)}</td>
+        <td data-label="Nota fiscal">${escapeHtml(r.nota_fiscal_numero || '—')}</td>
+        <td class="num right" data-label="Pedido">${fmtMoeda(r.valor_po)}</td>
+        <td class="num right" data-label="Recebido">${r.valor_recebido != null ? fmtMoeda(r.valor_recebido) : '—'}</td>
+        <td class="num right" data-label="Nota">${r.nota_fiscal_valor != null ? fmtMoeda(r.nota_fiscal_valor) : '—'}</td>
+        <td class="center" data-label="Match">${match}</td>
+        <td data-label="Status"><span class="badge">${labelStatus(r.status)}</span></td>
+        <td class="center" data-label="Entrou no estoque">${r.estoque_atualizado ? '✓' : '<span class="text-muted">—</span>'}</td>
       </tr>`;
     }).join('')}
     </tbody></table>`;
@@ -1079,18 +1079,18 @@ async function carregarDivergencias() {
             NF ${escapeHtml(r.nota_fiscal_numero || '')} = ${fmtMoeda(r.nota_fiscal_valor)}
             · pedido = ${fmtMoeda(r.valor_po)}</div>` : ''}
           ${r.divergencia ? `<div class="obs-box">${escapeHtml(r.divergencia)}</div>` : ''}
-          ${itensDiv.length ? `<table class="data-table mt-2">
+          ${itensDiv.length ? `<table class="data-table tabela-cards mt-2">
             <thead><tr><th>Item</th><th class="num">Pedido</th><th class="num">Recebido</th>
               <th>Motivo</th><th class="center">Temp.</th><th class="center">Validade</th><th>Lote</th></tr></thead>
             <tbody>${itensDiv.map(i => `<tr>
-              <td>${escapeHtml(i.item_nome)}</td>
-              <td class="num">${fmtQtd(i.quantidade_pedida)} ${escapeHtml(i.item_unidade || '')}</td>
-              <td class="num text-error">${fmtQtd(i.quantidade_recebida)} ${escapeHtml(i.item_unidade || '')}</td>
-              <td>${escapeHtml(i.motivo_divergencia || '—')}</td>
-              <td class="center">${i.temperatura_c != null
+              <td class="td-titulo">${escapeHtml(i.item_nome)}</td>
+              <td class="num" data-label="Pedido">${fmtQtd(i.quantidade_pedida)} ${escapeHtml(i.item_unidade || '')}</td>
+              <td class="num text-error" data-label="Recebido">${fmtQtd(i.quantidade_recebida)} ${escapeHtml(i.item_unidade || '')}</td>
+              <td data-label="Motivo">${escapeHtml(i.motivo_divergencia || '—')}</td>
+              <td class="center" data-label="Temperatura">${i.temperatura_c != null
                 ? `<span class="${i.temperatura_ok === false ? 'text-error' : ''}">${i.temperatura_c}°C</span>` : '—'}</td>
-              <td class="center">${i.validade ? ptDate(i.validade) : '—'}</td>
-              <td>${escapeHtml(i.lote || '—')}</td>
+              <td class="center" data-label="Validade">${i.validade ? ptDate(i.validade) : '—'}</td>
+              <td data-label="Lote">${escapeHtml(i.lote || '—')}</td>
             </tr>`).join('')}</tbody></table>` : ''}
         </div>
       </div>`;

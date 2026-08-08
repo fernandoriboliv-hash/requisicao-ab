@@ -346,14 +346,14 @@ async function carregarPDVs() {
 function renderPDVs() {
   const cont = document.getElementById('pdvsContainer');
   if (state.pdvs.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum PDV cadastrado.</div>'; return; }
-  cont.innerHTML = `<table class="data-table">
+  cont.innerHTML = `<table class="data-table tabela-cards">
     <thead><tr><th>Nome</th><th>Tipo</th><th class="center">Ordem</th><th>Status</th><th class="center">Ações</th></tr></thead>
     <tbody>${state.pdvs.map(p => `<tr>
-      <td>${escapeHtml(p.nome)}</td>
-      <td><span class="badge ${p.tipo === 'comissaria' ? 'badge-orange' : 'badge-blue'}">${p.tipo}</span></td>
-      <td class="center text-muted">${p.ordem}</td>
-      <td><span class="badge ${p.ativo?'badge-green':'badge-muted'}">${p.ativo?'Ativo':'Inativo'}</span></td>
-      <td class="center"><button class="btn btn-sm ${p.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoPdv('${p.id}',${p.ativo})">${p.ativo?'Desativar':'Ativar'}</button></td>
+      <td class="td-titulo">${escapeHtml(p.nome)}</td>
+      <td data-label="Tipo"><span class="badge ${p.tipo === 'comissaria' ? 'badge-orange' : 'badge-blue'}">${p.tipo}</span></td>
+      <td class="center text-muted" data-label="Ordem">${p.ordem}</td>
+      <td data-label="Status"><span class="badge ${p.ativo?'badge-green':'badge-muted'}">${p.ativo?'Ativo':'Inativo'}</span></td>
+      <td class="td-acoes"><button class="btn btn-sm ${p.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoPdv('${p.id}',${p.ativo})">${p.ativo?'Desativar':'Ativar'}</button></td>
     </tr>`).join('')}</tbody></table>`;
 }
 
@@ -395,15 +395,15 @@ function renderUsuarios() {
   const cont = document.getElementById('usuariosContainer');
   if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum usuário.</div>'; return; }
   const labelPerfil = LABEL_PERFIL;   // definido em config.js
-  cont.innerHTML = `<table class="data-table">
+  cont.innerHTML = `<table class="data-table tabela-cards">
     <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>PDV</th><th>Status</th><th class="center">Ações</th></tr></thead>
     <tbody>${lista.map(u => `<tr>
-      <td>${escapeHtml(u.nome||'—')}</td>
-      <td class="text-muted">${escapeHtml(u.email||'—')}</td>
-      <td><span class="perfil-tag perfil-${u.perfil}">${labelPerfil[u.perfil] || u.perfil}</span></td>
-      <td>${escapeHtml(u.pdvs?.nome || '—')}</td>
-      <td><span class="badge ${u.ativo?'badge-green':'badge-muted'}">${u.ativo?'Ativo':'Inativo'}</span></td>
-      <td class="center"><button class="btn btn-sm ${u.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoUsuario('${u.id}',${u.ativo})">${u.ativo?'Desativar':'Ativar'}</button></td>
+      <td class="td-titulo">${escapeHtml(u.nome||'—')}</td>
+      <td class="text-muted" data-label="E-mail">${escapeHtml(u.email||'—')}</td>
+      <td data-label="Perfil"><span class="perfil-tag perfil-${u.perfil}">${labelPerfil[u.perfil] || u.perfil}</span></td>
+      <td data-label="PDV">${escapeHtml(u.pdvs?.nome || '—')}</td>
+      <td data-label="Status"><span class="badge ${u.ativo?'badge-green':'badge-muted'}">${u.ativo?'Ativo':'Inativo'}</span></td>
+      <td class="td-acoes"><button class="btn btn-sm ${u.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoUsuario('${u.id}',${u.ativo})">${u.ativo?'Desativar':'Ativar'}</button></td>
     </tr>`).join('')}</tbody></table>`;
 }
 

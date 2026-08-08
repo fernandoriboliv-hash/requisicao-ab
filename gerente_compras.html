@@ -901,25 +901,25 @@ async function carregarDashboard() {
 
 function tabelaSolicitacoes(list) {
   const statusLabel = { rascunho:'Rascunho', enviada:'Aguardando aprov.', aprovada:'Aprovada', rejeitada:'Rejeitada', entregue:'Entregue' };
-  return `<table class="data-table"><thead><tr>
+  return `<table class="data-table tabela-cards"><thead><tr>
     <th>#</th><th>PDV</th><th>Hora</th><th class="center">Itens</th><th>Entrega desejada</th><th>Status</th>
   </tr></thead><tbody>${list.map(s => {
     const itens = s.solicitacao_compra_itens || [];
     const hora = new Date(s.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     return `<tr>
-      <td class="text-muted">#${String(s.id).slice(0,8)}</td>
-      <td>${escapeHtml(s.pdvs?.nome||'—')}</td>
-      <td class="text-muted">${hora}</td>
-      <td class="center">${itens.length}</td>
-      <td class="text-muted">${s.data_entrega_desejada ? ptDate(s.data_entrega_desejada) : '—'}</td>
-      <td><span class="badge status-${s.status}">${statusLabel[s.status]||s.status}</span></td>
+      <td class="td-titulo">${escapeHtml(s.pdvs?.nome||'—')}</td>
+      <td class="text-muted" data-label="Nº">#${String(s.id).slice(0,8)}</td>
+      <td class="text-muted" data-label="Hora">${hora}</td>
+      <td class="center" data-label="Itens">${itens.length}</td>
+      <td class="text-muted" data-label="Entrega desejada">${s.data_entrega_desejada ? ptDate(s.data_entrega_desejada) : '—'}</td>
+      <td data-label="Status"><span class="badge status-${s.status}">${statusLabel[s.status]||s.status}</span></td>
     </tr>`;
   }).join('')}</tbody></table>`;
 }
 
 function tabelaRequisicoes(list) {
   const statusLabel = { enviado:'Aguardando', separacao:'Em Separação', entregue:'Entregue', cancelada:'Cancelada' };
-  return `<table class="data-table"><thead><tr>
+  return `<table class="data-table tabela-cards"><thead><tr>
     <th>#</th><th>PDV</th><th>Hora</th><th class="center">Itens</th><th class="center">Diverg.</th><th>Status</th>
   </tr></thead><tbody>${list.map(r => {
     const itens = r.requisicao_itens || [];
@@ -927,12 +927,12 @@ function tabelaRequisicoes(list) {
     const hora = new Date(r.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     const manualTag = r.criada_pelo_estoque ? ' <span class="badge badge-gold" style="font-size:9px">MANUAL</span>' : '';
     return `<tr>
-      <td class="text-muted">#${String(r.id).slice(0,8)}</td>
-      <td>${escapeHtml(r.pdvs?.nome||'—')}${manualTag}</td>
-      <td class="text-muted">${hora}</td>
-      <td class="center">${itens.length}</td>
-      <td class="center ${divs>0?'text-error':'text-muted'}">${divs > 0 ? divs : '—'}</td>
-      <td><span class="badge status-${r.status}">${statusLabel[r.status]||r.status}</span></td>
+      <td class="td-titulo">${escapeHtml(r.pdvs?.nome||'—')}${manualTag}</td>
+      <td class="text-muted" data-label="Nº">#${String(r.id).slice(0,8)}</td>
+      <td class="text-muted" data-label="Hora">${hora}</td>
+      <td class="center" data-label="Itens">${itens.length}</td>
+      <td class="center ${divs>0?'text-error':'text-muted'}" data-label="Divergências">${divs > 0 ? divs : '—'}</td>
+      <td data-label="Status"><span class="badge status-${r.status}">${statusLabel[r.status]||r.status}</span></td>
     </tr>`;
   }).join('')}</tbody></table>`;
 }
@@ -1524,7 +1524,7 @@ function renderRelatorio() {
   html += `<div class="card">
     <div class="uppercase-label mb-3">Detalhamento por Item</div>
     <div style="overflow-x:auto">
-    <table class="data-table">
+    <table class="data-table tabela-cards">
       <thead><tr>
         <th>Categoria</th><th>Item</th><th>Unid.</th>
         ${buckets.map(b => `<th class="center">${escapeHtml(b)}</th>`).join('')}
@@ -1534,13 +1534,13 @@ function renderRelatorio() {
       </tr></thead>
       <tbody>
       ${itensArr.map(it => `<tr>
-        <td><span class="cat-pill cat-${it.categoria}">${CAT_LABEL_REL[it.categoria]||it.categoria}</span></td>
-        <td>${escapeHtml(it.item)}</td>
-        <td class="text-muted">${it.unidade}</td>
-        ${buckets.map(b => `<td class="center num">${fmtQtyRel(it.buckets[b]||0)}</td>`).join('')}
-        <td class="center num text-gold" style="font-weight:500">${fmtQtyRel(it.total)}</td>
-        <td class="num text-muted">${it.preco > 0 ? fmtBRL(it.preco) : '—'}</td>
-        <td class="num" style="font-weight:500">${it.preco > 0 ? fmtBRL(it.valorTotal) : '—'}</td>
+        <td class="td-titulo">${escapeHtml(it.item)}</td>
+        <td data-label="Categoria"><span class="cat-pill cat-${it.categoria}">${CAT_LABEL_REL[it.categoria]||it.categoria}</span></td>
+        <td class="text-muted" data-label="Unidade">${it.unidade}</td>
+        ${buckets.map(b => `<td class="center num" data-label="${escapeHtml(b)}">${fmtQtyRel(it.buckets[b]||0)}</td>`).join('')}
+        <td class="center num text-gold" style="font-weight:500" data-label="Total">${fmtQtyRel(it.total)}</td>
+        <td class="num text-muted" data-label="Preço un.">${it.preco > 0 ? fmtBRL(it.preco) : '—'}</td>
+        <td class="num" style="font-weight:500" data-label="Valor total">${it.preco > 0 ? fmtBRL(it.valorTotal) : '—'}</td>
       </tr>`).join('')}
       </tbody>
     </table>
@@ -1583,7 +1583,7 @@ function renderCatalogoTable() {
   const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
   const comPreco = lista.filter(i => state.precosMap && state.precosMap[i.id]).length;
   document.getElementById('catCount').textContent = `${lista.length} itens · ${comPreco} com preço`;
-  cont.innerHTML = `<table class="data-table">
+  cont.innerHTML = `<table class="data-table tabela-cards">
     <thead><tr><th>Nome</th><th>Categoria</th><th>Unid.</th><th>Fornecedor</th><th class="center">Inventário</th><th class="center" title="Aparece por padrão no checklist de contagem da Comissaria">No checklist?</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
     <tbody>${lista.map(it => {
       const p = state.precosMap ? state.precosMap[it.id] : null;
@@ -1592,16 +1592,16 @@ function renderCatalogoTable() {
         : `<span class="text-muted">sem preço</span>`;
       const noChk = it.no_checklist_estoque === true;
       return `<tr>
-      <td>${escapeHtml(it.nome)}</td>
-      <td><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
-      <td>${it.unidade}</td>
-      <td class="text-muted">${escapeHtml(p?.fornecedor || it.fornecedor_principal||'—')}</td>
-      <td class="center">${it.inventario ? '<span class="text-green">Sim</span>' : '<span class="text-muted">—</span>'}</td>
-      <td class="center"><input type="checkbox" ${noChk?'checked':''} onchange="toggleNoChecklist('${it.id}',this.checked)" title="Marcar/desmarcar do checklist da Comissaria"></td>
-      <td>${precoTxt} <button class="btn btn-sm btn-outline" style="margin-left:6px" onclick="editarPreco('${it.id}')">${p ? '✎' : '+ Definir'}</button></td>
-      <td class="center num">${it.media_diaria ? parseFloat(it.media_diaria).toFixed(1) : '—'}</td>
-      <td><span class="badge ${it.ativo?'badge-green':'badge-muted'}">${it.ativo?'Ativo':'Inativo'}</span></td>
-      <td class="center"><button class="btn btn-sm ${it.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoItem('${it.id}',${it.ativo})">${it.ativo?'Desativar':'Ativar'}</button></td>
+      <td class="td-titulo">${escapeHtml(it.nome)}</td>
+      <td data-label="Categoria"><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
+      <td data-label="Unidade">${it.unidade}</td>
+      <td class="text-muted" data-label="Fornecedor">${escapeHtml(p?.fornecedor || it.fornecedor_principal||'—')}</td>
+      <td class="center" data-label="Inventário">${it.inventario ? '<span class="text-green">Sim</span>' : '<span class="text-muted">—</span>'}</td>
+      <td class="center" data-label="No checklist?"><input type="checkbox" ${noChk?'checked':''} onchange="toggleNoChecklist('${it.id}',this.checked)" title="Marcar/desmarcar do checklist da Comissaria"></td>
+      <td data-label="Preço atual">${precoTxt} <button class="btn btn-sm btn-outline" style="margin-left:6px" onclick="editarPreco('${it.id}')">${p ? '✎' : '+ Definir'}</button></td>
+      <td class="center num" data-label="Média/dia">${it.media_diaria ? parseFloat(it.media_diaria).toFixed(1) : '—'}</td>
+      <td data-label="Status"><span class="badge ${it.ativo?'badge-green':'badge-muted'}">${it.ativo?'Ativo':'Inativo'}</span></td>
+      <td class="td-acoes"><button class="btn btn-sm ${it.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoItem('${it.id}',${it.ativo})">${it.ativo?'Desativar':'Ativar'}</button></td>
     </tr>`;
     }).join('')}</tbody></table>`;
 }
@@ -1657,18 +1657,18 @@ function renderPrecos() {
   const cont = document.getElementById('precosContainer');
   if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
   const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
-  cont.innerHTML = `<table class="data-table">
+  cont.innerHTML = `<table class="data-table tabela-cards">
     <thead><tr><th>Item</th><th>Categoria</th><th>Unid.</th><th>Fornecedor</th><th>Preço atual</th><th>Atualizado em</th><th>Ações</th></tr></thead>
     <tbody>${lista.map(it => {
       const p = state.precosMap[it.id];
       return `<tr>
-        <td>${escapeHtml(it.nome)}</td>
-        <td><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
-        <td>${it.unidade}</td>
-        <td class="text-muted">${escapeHtml(p?.fornecedor || it.fornecedor_principal || '—')}</td>
-        <td>${p ? `R$ ${parseFloat(p.preco_unitario).toFixed(2).replace('.',',')}` : '<span class="text-muted">sem preço</span>'}</td>
-        <td class="text-muted">${p ? new Date(p.atualizado_em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '—'}</td>
-        <td><button class="btn btn-sm btn-outline" onclick="editarPreco('${it.id}')">${p ? 'Atualizar' : '+ Definir'}</button></td>
+        <td class="td-titulo">${escapeHtml(it.nome)}</td>
+        <td data-label="Categoria"><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
+        <td data-label="Unidade">${it.unidade}</td>
+        <td class="text-muted" data-label="Fornecedor">${escapeHtml(p?.fornecedor || it.fornecedor_principal || '—')}</td>
+        <td data-label="Preço atual">${p ? `R$ ${parseFloat(p.preco_unitario).toFixed(2).replace('.',',')}` : '<span class="text-muted">sem preço</span>'}</td>
+        <td class="text-muted" data-label="Atualizado em">${p ? new Date(p.atualizado_em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '—'}</td>
+        <td class="td-acoes"><button class="btn btn-sm btn-outline" onclick="editarPreco('${it.id}')">${p ? 'Atualizar' : '+ Definir'}</button></td>
       </tr>`;
     }).join('')}</tbody></table>`;
 }

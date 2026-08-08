@@ -461,6 +461,105 @@ main, .main {
 .data-table .right { text-align: right; }
 .data-table .num { font-variant-numeric: tabular-nums; }
 
+/* ------------------- TABELA QUE VIRA CARD NO CELULAR -------------------
+   Tabela de 6, 7, 10 colunas não cabe numa tela de celular: as últimas
+   colunas ficam fora da área visível e o usuário nem sabe que existem.
+   Foi o que aconteceu com o campo "Entregue" da requisição — a Comissaria
+   não conseguia tocar nele.
+
+   Como usar:
+     <table class="data-table tabela-cards">
+     <td data-label="Fornecedor">...</td>   rótulo aparece antes do valor
+     <td class="td-titulo">NOME DO ITEM</td> ocupa a linha toda, sem rótulo
+     <td class="td-acoes">botões</td>        ocupa a linha toda, no rodapé
+
+   Acima de 760px nada muda: continua tabela normal. */
+@media (max-width: 760px) {
+  .tabela-cards thead { display: none; }
+  .tabela-cards,
+  .tabela-cards tbody { display: block; width: 100%; }
+
+  .tabela-cards tr {
+    display: block;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border-subtle);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .tabela-cards tr:hover td { background: none; }
+
+  /* Rótulo à esquerda, valor à direita — leitura de ficha */
+  .tabela-cards td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 14px;
+    border: none;
+    padding: 5px 0;
+    font-size: 14px;
+    text-align: right;
+  }
+  .tabela-cards td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+  }
+  /* Alinhamentos da tabela não valem no card: tudo vira flex */
+  .tabela-cards td.center,
+  .tabela-cards td.right { text-align: right; }
+
+  /* Identificação do registro: ocupa a linha inteira, em destaque.
+     A equipe procura por este texto primeiro. */
+  .tabela-cards .td-titulo {
+    display: block;
+    text-align: left;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 8px;
+    /* o catálogo tem nomes sem espaço, como CONTRAFILE/BIFE DE CHORIZO */
+    overflow-wrap: anywhere;
+  }
+  .tabela-cards .td-titulo::before { display: none; }
+
+  /* Botões no rodapé do card, com área de toque cheia */
+  .tabela-cards .td-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 10px;
+    margin-top: 6px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .tabela-cards .td-acoes::before { display: none; }
+  .tabela-cards .td-acoes .btn { flex: 1 1 auto; padding: 10px 14px; font-size: 13px; }
+
+  /* Campo editável dentro do card precisa de alvo de toque de verdade.
+     16px é o mínimo que evita o zoom automático do navegador. */
+  .tabela-cards input:not([type=checkbox]):not([type=radio]),
+  .tabela-cards select {
+    font-size: 16px;
+    padding: 10px;
+    min-height: 42px;
+  }
+  /* Checkbox nasce com ~13px — acertar isso com o dedo é sorte.
+     transform em vez de width/height para não deformar a marca de seleção. */
+  .tabela-cards input[type=checkbox],
+  .tabela-cards input[type=radio] {
+    transform: scale(1.6);
+    transform-origin: right center;
+    margin: 8px 6px 8px 0;
+  }
+
+  /* Célula vazia não deve ocupar linha no card */
+  .tabela-cards td:empty { display: none; }
+}
+
 /* ============================== BADGES E PILLS ============================== */
 .badge {
   font-size: 10px;
