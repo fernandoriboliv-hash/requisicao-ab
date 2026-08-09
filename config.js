@@ -89,6 +89,55 @@ function itemAtendeBusca(item, termo) {
 }
 
 // =====================================================================
+// BUSCA POR ITEM DENTRO DO HISTÓRICO
+// =====================================================================
+// "Quando foi que a gente pediu morango?" é uma pergunta sobre o ITEM,
+// mas a lista é de PEDIDOS. Então a busca precisa olhar dentro dos
+// filhos (requisicao_itens / solicitacao_compra_itens) e a linha
+// precisa mostrar O QUE casou — senão o resultado não explica por que
+// aquele pedido apareceu. Reaproveita itemCasaBusca: acha sem acento e
+// com as palavras fora de ordem, que é como a equipe digita.
+
+// O histórico filtra por created_at, não por data_competencia. Parecem a
+// mesma coisa e não são: pela regra das 10h, uma compra feita hoje à tarde
+// tem competência amanhã. Filtrando por competência, o pedido que a pessoa
+// acabou de fazer não aparecia num histórico "até hoje".
+//
+// created_at é timestamptz (UTC) e a data escolhida na tela é local, então
+// os limites do dia precisam ser convertidos — senão o filtro come três
+// horas de cada ponta.
+function inicioDoDiaISO(d) { return new Date(d + 'T00:00:00').toISOString(); }
+function fimDoDiaISO(d)    { return new Date(d + 'T23:59:59.999').toISOString(); }
+
+// Itens do registro que atendem ao termo (vazio = termo em branco)
+function itensQueCasam(registro, termo, campoItens) {
+  if (!termo) return [];
+  return (registro[campoItens] || []).filter(i => itemCasaBusca(i.item_nome, termo));
+}
+
+// true se o registro tem pelo menos um item que casa
+function registroCasaItem(registro, termo, campoItens) {
+  if (!termo) return true;
+  return itensQueCasam(registro, termo, campoItens).length > 0;
+}
+
+// Linha "o que casou" exibida abaixo do registro no resultado da busca.
+// Mostra a quantidade entregue quando ela existe — é a informação que
+// falta quando alguém procura o histórico de um item específico.
+function resumoItensCasados(itens) {
+  if (!itens || !itens.length) return '';
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  return `<div class="itens-casados">${itens.map(i => {
+    const un = i.item_unidade ? ' ' + esc(i.item_unidade) : '';
+    const ent = i.quantidade_entregue != null && +i.quantidade_entregue !== +i.quantidade_solicitada
+      ? ` <span class="text-error">→ ${+i.quantidade_entregue}${un}</span>` : '';
+    return `<span class="ic-chip"><b>${esc(i.item_nome)}</b> ${
+      +i.quantidade_solicitada}${un}${ent}</span>`;
+  }).join('')}</div>`;
+}
+
+// =====================================================================
 // IDEMPOTÊNCIA DE ENVIO
 // =====================================================================
 // Cada "carrinho" carrega um UUID. Ele vai no INSERT e o banco tem índice

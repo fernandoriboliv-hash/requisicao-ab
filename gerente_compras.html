@@ -198,7 +198,17 @@
       </div>
     </div>
 
-    <div class="nav-item" onclick="goTab('compras',this)"><span class="nav-icon">$</span> Solicitações Compra</div>
+    <div class="nav-group" id="grp-historico">
+      <div class="nav-group-head" onclick="toggleNavGroup(this)">
+        <span class="nav-icon">⏱</span> Histórico
+        <span class="chev">▸</span>
+      </div>
+      <div class="nav-group-items">
+        <div class="nav-item" onclick="goTab('compras',this)"><span class="nav-icon">$</span> Solicitações de Compra</div>
+        <div class="nav-item" onclick="goTab('requisicoes',this)"><span class="nav-icon">↔</span> Requisições Internas</div>
+      </div>
+    </div>
+
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
     <div class="nav-item" onclick="goTab('catalogo',this)"><span class="nav-icon">◎</span> Catálogo &amp; Preços</div>
     <div class="nav-item" onclick="goTab('pendentes',this)">
@@ -315,6 +325,10 @@
         <button class="btn btn-sm btn-outline" onclick="carregarHistoricoCompras()">Buscar</button>
         <button class="btn btn-sm btn-outline" onclick="exportarHistoricoCompras()" style="margin-left:auto">⤓ Excel</button>
       </div>
+      <div style="margin-bottom:14px">
+        <input class="input" id="cp-item" oninput="renderHistoricoCompras()"
+               placeholder="Buscar item dentro das solicitações — ex.: file mignon, morango...">
+      </div>
       <div id="comprasContainer"><div class="loading-text">Carregando...</div></div>
     </div>
   </div>
@@ -337,6 +351,10 @@
         </select>
         <button class="btn btn-sm btn-outline" onclick="carregarHistoricoReqs()">Buscar</button>
         <button class="btn btn-sm btn-outline" onclick="exportarHistoricoReqs()" style="margin-left:auto">⤓ Excel</button>
+      </div>
+      <div style="margin-bottom:14px">
+        <input class="input" id="rq-item" oninput="renderHistoricoReqs()"
+               placeholder="Buscar item dentro das requisições — ex.: file mignon, morango...">
       </div>
       <div id="reqsContainer"><div class="loading-text">Carregando...</div></div>
     </div>
@@ -903,17 +921,20 @@ async function carregarDashboard() {
     : tabelaRequisicoes(reqs);
 }
 
-function tabelaSolicitacoes(list) {
+// `termo` só chega quando a lista veio de uma busca por item: nesse caso
+// a linha mostra o que casou, senão o resultado não explica por que veio.
+function tabelaSolicitacoes(list, termo = '') {
   const statusLabel = { rascunho:'Rascunho', enviada:'Aguardando aprov.', aprovada:'Aprovada', rejeitada:'Rejeitada', entregue:'Entregue' };
   return `<table class="data-table tabela-cards"><thead><tr>
-    <th>#</th><th>PDV</th><th>Hora</th><th class="center">Itens</th><th>Entrega desejada</th><th>Status</th>
+    <th>#</th><th>PDV</th><th>Data</th><th class="center">Itens</th><th>Entrega desejada</th><th>Status</th>
   </tr></thead><tbody>${list.map(s => {
     const itens = s.solicitacao_compra_itens || [];
     const hora = new Date(s.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     return `<tr class="clicavel" onclick="verSolicitacao('${s.id}')">
-      <td class="td-titulo">${escapeHtml(s.pdvs?.nome||'—')}</td>
+      <td class="td-titulo">${escapeHtml(s.pdvs?.nome||'—')}${
+        resumoItensCasados(itensQueCasam(s, termo, 'solicitacao_compra_itens'))}</td>
       <td class="text-muted" data-label="Nº">#${String(s.id).slice(0,8)}</td>
-      <td class="text-muted" data-label="Hora">${hora}</td>
+      <td class="text-muted" data-label="Data">${new Date(s.created_at).toLocaleDateString('pt-BR')} ${hora}</td>
       <td class="center" data-label="Itens">${itens.length}</td>
       <td class="text-muted" data-label="Entrega desejada">${s.data_entrega_desejada ? ptDate(s.data_entrega_desejada) : '—'}</td>
       <td data-label="Status"><span class="badge status-${s.status}">${statusLabel[s.status]||s.status}</span></td>
@@ -921,19 +942,20 @@ function tabelaSolicitacoes(list) {
   }).join('')}</tbody></table>`;
 }
 
-function tabelaRequisicoes(list) {
+function tabelaRequisicoes(list, termo = '') {
   const statusLabel = { enviado:'Aguardando', separacao:'Em Separação', entregue:'Entregue', cancelada:'Cancelada' };
   return `<table class="data-table tabela-cards"><thead><tr>
-    <th>#</th><th>PDV</th><th>Hora</th><th class="center">Itens</th><th class="center">Diverg.</th><th>Status</th>
+    <th>#</th><th>PDV</th><th>Data</th><th class="center">Itens</th><th class="center">Diverg.</th><th>Status</th>
   </tr></thead><tbody>${list.map(r => {
     const itens = r.requisicao_itens || [];
     const divs = itens.filter(i => i.divergencia).length;
     const hora = new Date(r.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     const manualTag = r.criada_pelo_estoque ? ' <span class="badge badge-gold" style="font-size:9px">MANUAL</span>' : '';
     return `<tr class="clicavel" onclick="verRequisicao('${r.id}')">
-      <td class="td-titulo">${escapeHtml(r.pdvs?.nome||'—')}${manualTag}</td>
+      <td class="td-titulo">${escapeHtml(r.pdvs?.nome||'—')}${manualTag}${
+        resumoItensCasados(itensQueCasam(r, termo, 'requisicao_itens'))}</td>
       <td class="text-muted" data-label="Nº">#${String(r.id).slice(0,8)}</td>
-      <td class="text-muted" data-label="Hora">${hora}</td>
+      <td class="text-muted" data-label="Data">${new Date(r.created_at).toLocaleDateString('pt-BR')} ${hora}</td>
       <td class="center" data-label="Itens">${itens.length}</td>
       <td class="center ${divs>0?'text-error':'text-muted'}" data-label="Divergências">${divs > 0 ? divs : '—'}</td>
       <td data-label="Status"><span class="badge status-${r.status}">${statusLabel[r.status]||r.status}</span></td>
@@ -1301,17 +1323,35 @@ async function carregarHistoricoCompras() {
   const ate = document.getElementById('cp-ate').value;
   const pdv = document.getElementById('cp-pdv').value;
   const status = document.getElementById('cp-status').value;
+  // Por created_at, não por competência — ver o comentário em config.js
   let q = sb.from('solicitacoes_compra')
     .select('*, pdvs(nome), solicitacao_compra_itens(*)')
-    .gte('data_competencia', de).lte('data_competencia', ate)
+    .gte('created_at', inicioDoDiaISO(de)).lte('created_at', fimDoDiaISO(ate))
     .order('created_at', { ascending: false });
   if (pdv) q = q.eq('pdv_id', pdv);
   if (status) q = q.eq('status', status);
   const { data } = await q;
+  state.historicoCompras = data || [];
+  renderHistoricoCompras();
+}
+
+// A busca por item é separada da consulta: filtra o que já veio, então
+// responde a cada tecla sem ir ao banco. O casamento é o mesmo do
+// catálogo — sem acento e com as palavras em qualquer ordem.
+function renderHistoricoCompras() {
+  const termo = document.getElementById('cp-item').value.trim();
+  const todos = state.historicoCompras || [];
+  const lista = todos.filter(s => registroCasaItem(s, termo, 'solicitacao_compra_itens'));
   const cont = document.getElementById('comprasContainer');
-  if (!data || data.length === 0) { cont.innerHTML = '<div class="empty-text">Nada encontrado.</div>'; return; }
-  state.historicoCompras = data;
-  cont.innerHTML = tabelaSolicitacoes(data);
+  if (!lista.length) {
+    cont.innerHTML = `<div class="empty-text">${termo
+      ? `Nenhuma solicitação do período contém "${escapeHtml(termo)}". Tente ampliar as datas.`
+      : 'Nada encontrado.'}</div>`;
+    return;
+  }
+  cont.innerHTML = (termo ? `<div class="text-muted" style="font-size:12px;margin-bottom:8px">${
+    lista.length} de ${todos.length} solicitações contêm "${escapeHtml(termo)}"</div>` : '')
+    + tabelaSolicitacoes(lista, termo);
 }
 
 function exportarHistoricoCompras() {
@@ -1338,15 +1378,29 @@ async function carregarHistoricoReqs() {
   const status = document.getElementById('rq-status').value;
   let q = sb.from('requisicoes')
     .select('*, pdvs(nome), requisicao_itens(*)')
-    .gte('data_competencia', de).lte('data_competencia', ate)
+    .gte('created_at', inicioDoDiaISO(de)).lte('created_at', fimDoDiaISO(ate))
     .order('created_at', { ascending: false });
   if (pdv) q = q.eq('pdv_id', pdv);
   if (status) q = q.eq('status', status);
   const { data } = await q;
+  state.historicoReqs = data || [];
+  renderHistoricoReqs();
+}
+
+function renderHistoricoReqs() {
+  const termo = document.getElementById('rq-item').value.trim();
+  const todos = state.historicoReqs || [];
+  const lista = todos.filter(r => registroCasaItem(r, termo, 'requisicao_itens'));
   const cont = document.getElementById('reqsContainer');
-  if (!data || data.length === 0) { cont.innerHTML = '<div class="empty-text">Nada encontrado.</div>'; return; }
-  state.historicoReqs = data;
-  cont.innerHTML = tabelaRequisicoes(data);
+  if (!lista.length) {
+    cont.innerHTML = `<div class="empty-text">${termo
+      ? `Nenhuma requisição do período contém "${escapeHtml(termo)}". Tente ampliar as datas.`
+      : 'Nada encontrado.'}</div>`;
+    return;
+  }
+  cont.innerHTML = (termo ? `<div class="text-muted" style="font-size:12px;margin-bottom:8px">${
+    lista.length} de ${todos.length} requisições contêm "${escapeHtml(termo)}"</div>` : '')
+    + tabelaRequisicoes(lista, termo);
 }
 
 function exportarHistoricoReqs() {

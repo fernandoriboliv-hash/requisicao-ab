@@ -20,7 +20,7 @@
   .req-head {
     padding: 16px 20px;
     display: grid;
-    grid-template-columns: auto 1fr auto auto auto auto;
+    grid-template-columns: auto 1fr auto auto auto auto auto;
     align-items: center;
     gap: 16px;
     cursor: pointer;
@@ -38,6 +38,30 @@
   }
   .req-meta { font-size: 12px; color: var(--muted); }
   .req-count { font-size: 12px; color: var(--muted); }
+  /* Data que o PDV pediu. É por ela que a fila é ordenada, então ela
+     precisa estar visível — a hora do envio não diz quando separar. */
+  .req-entrega {
+    font-size: 12px;
+    color: var(--gold);
+    border: 1px solid rgba(184,150,62,0.28);
+    background: rgba(184,150,62,0.08);
+    padding: 3px 8px;
+    white-space: nowrap;
+  }
+  .req-entrega.atrasada {
+    color: var(--error);
+    border-color: rgba(176,59,59,0.5);
+    background: rgba(176,59,59,0.10);
+    font-weight: 600;
+  }
+  .req-card.atrasada { border-left: 3px solid var(--error); }
+  @media (max-width: 760px) {
+    /* Sete colunas não cabem num celular — vira lista que quebra linha,
+       com o nome do PDV sozinho em cima porque é o que se procura. */
+    .req-head { display: flex; flex-wrap: wrap; gap: 8px 10px; padding: 14px 16px; }
+    .req-pdv { order: -1; flex: 1 1 100%; font-size: 17px; }
+    .req-head .chevron { margin-left: auto; }
+  }
   .chevron { color: var(--muted2); transition: transform 0.2s; }
   .chevron.open { transform: rotate(180deg); }
 
@@ -737,6 +761,7 @@
       <div class="nav-group-items">
         <div class="nav-item active" onclick="goTab('fila',this)"><span class="nav-icon">≡</span> Requisições a Separar</div>
         <div class="nav-item" onclick="goTab('manual',this)"><span class="nav-icon">＋</span> Criar Requisição</div>
+        <div class="nav-item" onclick="goTab('historico',this)"><span class="nav-icon">⏱</span> Histórico</div>
       </div>
     </div>
 
@@ -786,10 +811,10 @@
   <div class="tab-content active" id="tab-fila">
 
     <div class="stats-grid">
-      <div class="stat-card"><div class="stat-label">Aguardando</div><div class="stat-val orange" id="stAg">—</div><div class="stat-sub">requisições enviadas</div></div>
-      <div class="stat-card"><div class="stat-label">Em Separação</div><div class="stat-val" id="stSep">—</div></div>
-      <div class="stat-card"><div class="stat-label">Entregues Hoje</div><div class="stat-val green" id="stEnt">—</div></div>
-      <div class="stat-card"><div class="stat-label">Divergências</div><div class="stat-val error" id="stDiv">—</div><div class="stat-sub">itens com diferença</div></div>
+      <div class="stat-card clicavel" onclick="irParaFila('pendentes')"><div class="stat-label">Aguardando</div><div class="stat-val orange" id="stAg">—</div><div class="stat-sub">ver as requisições</div></div>
+      <div class="stat-card clicavel" onclick="irParaFila('separacao')"><div class="stat-label">Em Separação</div><div class="stat-val" id="stSep">—</div><div class="stat-sub">ver as requisições</div></div>
+      <div class="stat-card clicavel" onclick="irParaFila('entregues')"><div class="stat-label">Entregues na data</div><div class="stat-val green" id="stEnt">—</div><div class="stat-sub">ver as requisições</div></div>
+      <div class="stat-card clicavel" onclick="irParaFila('divergencias')"><div class="stat-label">Divergências</div><div class="stat-val error" id="stDiv">—</div><div class="stat-sub">itens com diferença</div></div>
     </div>
 
     <div class="filters-bar">
@@ -799,15 +824,16 @@
       <select class="select" id="f-pdv" style="max-width:200px" onchange="renderFila()">
         <option value="">Todos os PDVs</option>
       </select>
-      <span class="text-muted" style="margin-left:8px;font-size:12px">Data:</span>
+      <span class="text-muted" style="margin-left:8px;font-size:12px">Entregues do dia:</span>
       <input class="input" type="date" id="f-data" style="max-width:160px" onchange="carregarFila()">
       <button class="btn btn-sm btn-outline" onclick="carregarFila()">Buscar</button>
     </div>
 
-    <div class="section-title">
+    <div class="section-title" id="filaAncora">
       <span id="filaTitle">Pendentes</span>
       <span id="filaCount" class="text-muted" style="font-size:12px"></span>
     </div>
+    <div class="aviso aviso-info" id="filaAviso" style="display:none"></div>
     <div id="filaContainer"><div class="loading-text">Carregando...</div></div>
   </div>
 
@@ -848,6 +874,43 @@
     <div id="m-items"><div class="loading-text">Carregando catálogo...</div></div>
   </div>
 
+
+  <!-- ========================================================== -->
+  <!-- ABA HISTÓRICO — o que já passou pela Comissaria             -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-historico">
+    <div class="aviso aviso-info">
+      Tudo o que já passou pela Comissaria, incluindo o que foi cancelado.
+      A <b>busca por item</b> procura <b>dentro</b> dos pedidos — é ela que responde
+      "quando foi que a gente separou filé mignon?".
+    </div>
+
+    <div class="filters-bar">
+      <button class="btn btn-sm btn-outline"   id="h-tipo-req"    onclick="setTipoHist('req')">Requisições dos PDVs</button>
+      <button class="btn btn-sm btn-secondary" id="h-tipo-compra" onclick="setTipoHist('compra')">Compras da Comissaria</button>
+    </div>
+
+    <div class="filters-bar">
+      <span class="text-muted" style="font-size:12px">De</span>
+      <input class="input" type="date" id="h-de" style="max-width:150px">
+      <span class="text-muted" style="font-size:12px">até</span>
+      <input class="input" type="date" id="h-ate" style="max-width:150px">
+      <select class="select" id="h-pdv" style="max-width:190px"><option value="">Todos os PDVs</option></select>
+      <select class="select" id="h-status" style="max-width:180px"></select>
+      <button class="btn btn-sm btn-outline" onclick="carregarHistorico()">Buscar</button>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <input class="input" id="h-item" oninput="renderHistorico()"
+             placeholder="Buscar item dentro dos pedidos — ex.: file mignon, morango...">
+    </div>
+
+    <div class="section-title">
+      <span id="histTitle">Requisições</span>
+      <span id="histCount" class="text-muted" style="font-size:12px"></span>
+    </div>
+    <div id="histContainer"><div class="loading-text">Carregando...</div></div>
+  </div>
 
   <!-- ========================================================== -->
   <!-- ABA SOLICITAR COMPRA (COMISSARIA)                          -->
@@ -1242,13 +1305,15 @@ const state = {
   abaAtual: 'fila',
   // Fila
   filtro: 'pendentes',
-  reqs: [],
+  reqs: [], pendentes: [], fechadas: [],
   // Manual
   manual: { pdvId: null, cat: 'proteina', search: '', selecionados: {}, qtdInputs: {} },
   // Compra Comissaria
   compra: { cat: 'proteina', search: '', selecionados: {}, qtdInputs: {} },
   // Checklist
   chk: { itens: [], contagens: {}, dirty: {}, historico: {}, itensAvulsos: new Set() },
+  // Histórico
+  hist: { pronto: false, tipo: 'req', req: [], compra: [] },
 };
 
 window.addEventListener('load', async () => {
@@ -1297,9 +1362,18 @@ window.addEventListener('load', async () => {
 
 function isoDate(d) { return d.toISOString().split('T')[0]; }
 
+// 'YYYY-MM-DD' → '09/08/2026'. O T00:00:00 evita o deslocamento de um dia
+// que o Date faz quando lê a data pura como UTC.
+function ptDate(d) {
+  if (!d) return '—';
+  const s = String(d);
+  return new Date(s.length <= 10 ? s + 'T00:00:00' : s).toLocaleDateString('pt-BR');
+}
+
 const tabTitles = {
   fila:         ['Requisições a Separar', ''],
   manual:       ['Criar Requisição', ''],
+  historico:    ['Histórico', 'Requisições atendidas e compras da Comissaria'],
   compra:       ['Solicitar Compra', ''],
   checklist:    ['Checklist do Estoque', ''],
   niveis:       ['Níveis do Estoque', ''],
@@ -1342,6 +1416,7 @@ function goTab(aba, el) {
   atualizarManualCartBar();
   atualizarCompraCartBar();
   if (aba === 'relatorios') setupRelatorios();
+  if (aba === 'historico') setupHistorico();
   if (aba === 'checklist') carregarChecklist();
   if (aba === 'niveis') carregarNiveis();
   if (aba === 'divergencias') carregarDivergencias();
@@ -1349,26 +1424,54 @@ function goTab(aba, el) {
   document.getElementById('chkSaveBar').classList.toggle('visible',
     aba === 'checklist' && Object.keys(state.chk.dirty).length > 0);
 }
-// Compat: alias pra chamadas internas que ainda usam switchAba
+// Compat: alias pra chamadas internas que ainda usam switchAba.
+// Acha o item de menu pelo próprio onclick em vez de por índice fixo —
+// o índice quebrava calado toda vez que uma aba nova entrava no meio.
 const switchAba = (aba) => {
-  const map = { fila: 0, manual: 1, compra: 2, relatorios: 3 };
-  const nav = document.querySelectorAll('.nav-item')[map[aba] ?? 0];
+  const nav = [...document.querySelectorAll('.nav-item')]
+    .find(n => (n.getAttribute('onclick') || '').includes(`goTab('${aba}'`));
   goTab(aba, nav);
 };
 
 // =====================================================================
 // FILA
 // =====================================================================
+// A fila carrega DOIS conjuntos, por um motivo prático: uma requisição
+// pendente não deixa de existir só porque virou o dia. Antes o filtro era
+// .eq('data_competencia', data) e o que não foi separado ontem sumia da
+// tela — a Comissaria só reencontrava voltando a data manualmente.
+//
+//   pendentes   qualquer data, sempre visíveis, na ordem da entrega pedida
+//   fechadas    só as da data escolhida (entregue/cancelada é histórico)
 async function carregarFila() {
   const data = document.getElementById('f-data').value;
-  const { data: reqs } = await sb.from('requisicoes')
-    .select('*, pdvs(nome,tipo), requisicao_itens(*)')
-    .eq('data_competencia', data)
-    .order('created_at', { ascending: true });
-  state.reqs = reqs || [];
+  const [pend, fech] = await Promise.all([
+    sb.from('requisicoes')
+      .select('*, pdvs(nome,tipo), requisicao_itens(*)')
+      .in('status', ['enviado', 'separacao']),
+    sb.from('requisicoes')
+      .select('*, pdvs(nome,tipo), requisicao_itens(*)')
+      .in('status', ['entregue', 'cancelada'])
+      .eq('data_competencia', data),
+  ]);
+  state.pendentes = ordenarPorEntrega(pend.data || []);
+  state.fechadas = (fech.data || []).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  state.reqs = [...state.pendentes, ...state.fechadas];
   atualizarStats();
   renderFila();
 }
+
+// Data que a Comissaria precisa respeitar: a que o PDV pediu. Nem toda
+// requisição tem — as antigas e as criadas no balcão não têm — então a
+// competência serve de piso.
+function dataAlvo(r) { return r.data_entrega_desejada || r.data_competencia; }
+
+function ordenarPorEntrega(lista) {
+  return lista.sort((a, b) =>
+    dataAlvo(a).localeCompare(dataAlvo(b)) || a.created_at.localeCompare(b.created_at));
+}
+
+function isoHoje() { return isoDate(new Date()); }
 
 function setFiltro(f) {
   state.filtro = f;
@@ -1379,11 +1482,29 @@ function setFiltro(f) {
   renderFila();
 }
 
+// Clique no KPI: aplica o filtro e leva até a lista. O número sozinho
+// não resolve — quem lê "3 aguardando" quer ver quais são as três.
+//
+// O 'smooth' depende da animação do navegador, que não roda quando a aba
+// está em segundo plano — o mesmo motivo que derrubou o rAF na seleção do
+// campo de quantidade. Se em 250ms a página não saiu do lugar, vai direto.
+function irParaFila(filtro) {
+  setFiltro(filtro);
+  const alvo = document.getElementById('filaAncora');
+  if (!alvo) return;
+  const antes = window.scrollY;
+  alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => {
+    if (window.scrollY === antes) alvo.scrollIntoView({ block: 'start' });
+  }, 250);
+}
+
 function atualizarStats() {
-  const ag = state.reqs.filter(r => r.status === 'enviado').length;
-  const sep = state.reqs.filter(r => r.status === 'separacao').length;
-  const ent = state.reqs.filter(r => r.status === 'entregue').length;
-  const divs = state.reqs.reduce((acc, r) => acc + (r.requisicao_itens||[]).filter(i => i.divergencia).length, 0);
+  const ag  = state.pendentes.filter(r => r.status === 'enviado').length;
+  const sep = state.pendentes.filter(r => r.status === 'separacao').length;
+  const ent = state.fechadas.filter(r => r.status === 'entregue').length;
+  const divs = state.fechadas.reduce((acc, r) =>
+    acc + (r.requisicao_itens || []).filter(i => i.divergencia).length, 0);
   document.getElementById('stAg').textContent = ag;
   document.getElementById('stSep').textContent = sep;
   document.getElementById('stEnt').textContent = ent;
@@ -1392,14 +1513,34 @@ function atualizarStats() {
 
 function renderFila() {
   const pdvFiltro = document.getElementById('f-pdv').value;
-  let lista = state.reqs;
-  if (state.filtro === 'pendentes') lista = lista.filter(r => r.status === 'enviado' || r.status === 'separacao');
-  if (state.filtro === 'entregues') lista = lista.filter(r => r.status === 'entregue');
+  const hoje = isoHoje();
+  let lista;
+  switch (state.filtro) {
+    case 'pendentes':    lista = state.pendentes; break;
+    case 'separacao':    lista = state.pendentes.filter(r => r.status === 'separacao'); break;
+    case 'entregues':    lista = state.fechadas.filter(r => r.status === 'entregue'); break;
+    case 'divergencias': lista = state.fechadas.filter(r =>
+                           (r.requisicao_itens || []).some(i => i.divergencia)); break;
+    default:             lista = state.reqs;
+  }
   if (pdvFiltro) lista = lista.filter(r => r.pdv_id === pdvFiltro);
 
-  const titles = { pendentes:'Pendentes', todos:'Todas as requisições', entregues:'Entregues' };
-  document.getElementById('filaTitle').textContent = titles[state.filtro];
+  const titles = {
+    pendentes:'Pendentes', todos:'Todas as requisições', entregues:'Entregues na data',
+    separacao:'Em separação', divergencias:'Entregas com divergência',
+  };
+  document.getElementById('filaTitle').textContent = titles[state.filtro] || 'Requisições';
   document.getElementById('filaCount').textContent = `${lista.length} requisição(ões)`;
+
+  // Atrasada = a data pedida já passou e ninguém entregou
+  const atrasadas = state.pendentes.filter(r => dataAlvo(r) < hoje).length;
+  const aviso = document.getElementById('filaAviso');
+  const mostraAviso = atrasadas > 0 && ['pendentes','todos','separacao'].includes(state.filtro);
+  aviso.style.display = mostraAviso ? '' : 'none';
+  if (mostraAviso) {
+    aviso.innerHTML = `<b>${atrasadas} requisição(ões) com a data de entrega já vencida.</b>
+      Aparecem no topo da lista, marcadas em vermelho.`;
+  }
 
   const cont = document.getElementById('filaContainer');
   if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma requisição encontrada.</div>'; return; }
@@ -1408,6 +1549,12 @@ function renderFila() {
   cont.innerHTML = lista.map(r => {
     const itens = r.requisicao_itens || [];
     const hora = new Date(r.created_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+    const alvo = dataAlvo(r);
+    const aberta = r.status === 'enviado' || r.status === 'separacao';
+    const atrasada = aberta && alvo < hoje;
+    const entregaTag = `<span class="req-entrega${atrasada ? ' atrasada' : ''}">${
+      atrasada ? '⚠ ' : ''}entrega ${ptDate(alvo)}${
+      aberta && alvo === hoje ? ' · hoje' : ''}</span>`;
     // Cancelada não recebe formulário de entrega nem botões de ação
     const entregue = r.status === 'entregue' || r.status === 'cancelada';
     const manualTag = r.criada_pelo_estoque ? '<span class="manual-tag">MANUAL</span>' : '';
@@ -1458,11 +1605,12 @@ function renderFila() {
         ✕ Cancelada — ${escapeHtml(r.motivo_cancelamento || 'sem motivo registrado')}
       </div>` : '';
 
-    return `<div class="req-card${cancelada ? ' cancelada' : ''}" id="card-${r.id}">
+    return `<div class="req-card${cancelada ? ' cancelada' : ''}${atrasada ? ' atrasada' : ''}" id="card-${r.id}">
       <div class="req-head" onclick="toggleDetail('${r.id}')">
         <span class="req-num">#${String(r.id).slice(0,8)}</span>
         <span class="req-pdv">${escapeHtml(r.pdvs?.nome || '—')}${manualTag}</span>
         <span class="req-meta">${hora}</span>
+        ${entregaTag}
         <span class="req-count">${itens.length} item(ns)</span>
         <span class="badge status-${r.status}">${statusLabel[r.status] || r.status}</span>
         <span class="chevron" id="chev-${r.id}">▼</span>
@@ -1643,6 +1791,139 @@ async function carregarCatalogo() {
   state.catalogo = catR.data || [];
   state.prazoPorCategoria = {};
   (prazoR.data || []).forEach(c => { state.prazoPorCategoria[c.categoria] = c.prazo_reposicao_horas; });
+}
+
+// =====================================================================
+// HISTÓRICO — o que já passou pela Comissaria
+// =====================================================================
+// A aba Relatórios responde "quanto" — totais por PDV, por período. Não
+// responde "qual pedido": quem precisa conferir uma entrega específica,
+// ou lembrar quando pediu determinado item, não tinha por onde. É o que
+// esta aba faz, e a busca por item é o motivo dela existir.
+
+const STATUS_HIST = {
+  req: [['', 'Todos os status'], ['enviado','Aguardando'], ['separacao','Em separação'],
+        ['entregue','Entregue'], ['cancelada','Cancelada']],
+  compra: [['', 'Todos os status'], ['enviada','Aguardando aprovação'], ['aprovada','Aprovada'],
+           ['rejeitada','Rejeitada'], ['entregue','Entregue']],
+};
+
+function setupHistorico() {
+  if (state.hist.pronto) return;
+  state.hist.pronto = true;
+  const ate = new Date();
+  const de = new Date(); de.setDate(de.getDate() - 30);
+  document.getElementById('h-de').value = isoDate(de);
+  document.getElementById('h-ate').value = isoDate(ate);
+  const sel = document.getElementById('h-pdv');
+  state.pdvs.forEach(p => {
+    const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; sel.appendChild(o);
+  });
+  setTipoHist('req');
+}
+
+function setTipoHist(tipo) {
+  state.hist.tipo = tipo;
+  document.getElementById('h-tipo-req').className =
+    'btn btn-sm ' + (tipo === 'req' ? 'btn-outline' : 'btn-secondary');
+  document.getElementById('h-tipo-compra').className =
+    'btn btn-sm ' + (tipo === 'compra' ? 'btn-outline' : 'btn-secondary');
+  // O filtro de PDV não faz sentido nas compras: todas são da Comissaria
+  document.getElementById('h-pdv').style.display = tipo === 'req' ? '' : 'none';
+  document.getElementById('h-status').innerHTML = STATUS_HIST[tipo]
+    .map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  document.getElementById('histTitle').textContent =
+    tipo === 'req' ? 'Requisições dos PDVs' : 'Compras da Comissaria';
+  carregarHistorico();
+}
+
+async function carregarHistorico() {
+  const de = document.getElementById('h-de').value;
+  const ate = document.getElementById('h-ate').value;
+  const status = document.getElementById('h-status').value;
+  const pdv = document.getElementById('h-pdv').value;
+  const tipo = state.hist.tipo;
+  document.getElementById('histContainer').innerHTML = '<div class="loading-text">Carregando...</div>';
+
+  // Por created_at, não por competência — ver o comentário em config.js
+  let q;
+  if (tipo === 'req') {
+    q = sb.from('requisicoes').select('*, pdvs(nome), requisicao_itens(*)');
+    if (pdv) q = q.eq('pdv_id', pdv);
+  } else {
+    q = sb.from('solicitacoes_compra')
+      .select('*, solicitacao_compra_itens(*)')
+      .eq('pdv_id', state.pdvComissariaId)
+      .neq('status', 'rascunho');
+  }
+  q = q.gte('created_at', inicioDoDiaISO(de)).lte('created_at', fimDoDiaISO(ate));
+  if (status) q = q.eq('status', status);
+  const { data, error } = await q.order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('histContainer').innerHTML =
+      `<div class="empty-text">Erro: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  state.hist[tipo] = data || [];
+  renderHistorico();
+}
+
+function renderHistorico() {
+  const tipo = state.hist.tipo;
+  const termo = document.getElementById('h-item').value.trim();
+  const campo = tipo === 'req' ? 'requisicao_itens' : 'solicitacao_compra_itens';
+  const todos = state.hist[tipo] || [];
+  const lista = todos.filter(r => registroCasaItem(r, termo, campo));
+
+  document.getElementById('histCount').textContent = termo
+    ? `${lista.length} de ${todos.length} contêm "${termo}"`
+    : `${lista.length} registro(s)`;
+
+  const cont = document.getElementById('histContainer');
+  if (!lista.length) {
+    cont.innerHTML = `<div class="empty-text">${termo
+      ? `Nenhum pedido do período contém "${escapeHtml(termo)}". Tente ampliar as datas.`
+      : 'Nada no período escolhido.'}</div>`;
+    return;
+  }
+
+  const statusLabel = Object.fromEntries(STATUS_HIST[tipo]);
+  cont.innerHTML = tipo === 'req'
+    ? `<table class="data-table tabela-cards"><thead><tr>
+         <th>PDV</th><th>Pedido em</th><th>Entrega</th><th class="center">Itens</th>
+         <th class="center">Diverg.</th><th>Status</th>
+       </tr></thead><tbody>${lista.map(r => {
+         const itens = r.requisicao_itens || [];
+         const divs = itens.filter(i => i.divergencia).length;
+         return `<tr class="clicavel" onclick="verRequisicaoInterna(sb,'${r.id}')">
+           <td class="td-titulo">${escapeHtml(r.pdvs?.nome || '—')}${
+             r.criada_pelo_estoque ? ' <span class="badge badge-gold" style="font-size:9px">MANUAL</span>' : ''}
+             ${resumoItensCasados(itensQueCasam(r, termo, campo))}</td>
+           <td class="text-muted" data-label="Pedido em">${ptDate(r.created_at)}</td>
+           <td class="text-muted" data-label="Entrega">${ptDate(dataAlvo(r))}</td>
+           <td class="center" data-label="Itens">${itens.length}</td>
+           <td class="center ${divs ? 'text-error' : 'text-muted'}" data-label="Divergências">${divs || '—'}</td>
+           <td data-label="Status"><span class="badge status-${r.status}">${
+             statusLabel[r.status] || r.status}</span></td>
+         </tr>`;
+       }).join('')}</tbody></table>`
+    : `<table class="data-table tabela-cards"><thead><tr>
+         <th>Solicitação</th><th>Entra na lista de</th><th>Entrega pedida</th>
+         <th class="center">Itens</th><th>Status</th>
+       </tr></thead><tbody>${lista.map(s => {
+         const itens = s.solicitacao_compra_itens || [];
+         return `<tr class="clicavel" onclick="verSolicitacaoCompra(sb,'${s.id}')">
+           <td class="td-titulo">#${String(s.id).slice(0,8)} · ${
+             new Date(s.created_at).toLocaleDateString('pt-BR')}
+             ${resumoItensCasados(itensQueCasam(s, termo, campo))}</td>
+           <td class="text-muted" data-label="Entra na lista de">${ptDate(s.data_competencia)}</td>
+           <td class="text-muted" data-label="Entrega pedida">${
+             s.data_entrega_desejada ? ptDate(s.data_entrega_desejada) : '—'}</td>
+           <td class="center" data-label="Itens">${itens.length}</td>
+           <td data-label="Status"><span class="badge status-${s.status}">${
+             statusLabel[s.status] || s.status}</span></td>
+         </tr>`;
+       }).join('')}</tbody></table>`;
 }
 
 // =====================================================================

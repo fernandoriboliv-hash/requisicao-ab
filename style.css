@@ -343,6 +343,12 @@ main, .main {
 .stat-val.error { color: var(--error); }
 .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
+/* KPI que leva à lista correspondente. O número sozinho não resolve nada:
+   quem lê "3 aguardando" quer ver quais são as três. */
+.stat-card.clicavel { cursor: pointer; transition: border-color .12s, background .12s; }
+.stat-card.clicavel:hover { border-color: var(--gold); background: rgba(184,150,62,0.05); }
+.stat-card.clicavel .stat-sub::after { content: ' ›'; color: var(--gold); font-weight: 700; }
+
 /* ============================== BOTÕES ============================== */
 .btn {
   background: rgba(255,255,255,0.04);
@@ -487,6 +493,26 @@ main, .main {
     line-height: 1;
   }
 }
+
+/* Itens que casaram com a busca, mostrados dentro da própria linha.
+   Quem procura "morango" precisa ver o morango — não só o pedido que
+   por acaso o continha. */
+.itens-casados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.ic-chip {
+  background: rgba(184,150,62,0.10);
+  border: 1px solid rgba(184,150,62,0.28);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--text);
+  letter-spacing: 0.2px;
+}
+.ic-chip b { font-weight: 700; }
 
 /* ------------------- TABELA QUE VIRA CARD NO CELULAR -------------------
    Tabela de 6, 7, 10 colunas não cabe numa tela de celular: as últimas

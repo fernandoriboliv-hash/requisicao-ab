@@ -282,6 +282,7 @@
       <span class="nav-icon">✎</span> Rascunhos
       <span class="nav-badge" id="badgeRascunhos"></span>
     </div>
+    <div class="nav-item" onclick="goTab('historico',this)"><span class="nav-icon">⏱</span> Histórico</div>
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
   </div>
   <div class="sidebar-foot">
@@ -443,6 +444,42 @@
       <span id="rascunhos-count" class="text-muted" style="font-size:12px"></span>
     </div>
     <div id="rascunhos-lista"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- ABA HISTÓRICO — tudo o que o PDV já pediu                  -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-historico">
+    <div class="aviso aviso-info">
+      Tudo o que <b>o seu PDV</b> já pediu — inclusive o que outra pessoa da sua cozinha pediu.
+      A <b>busca por item</b> procura <b>dentro</b> dos pedidos: digite "morango" e veja quando foi
+      pedido, quanto e o que a Comissaria entregou. Clique na linha para abrir o pedido inteiro.
+    </div>
+
+    <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-outline"   id="h-tipo-req"    onclick="setTipoHist('req')">Requisições</button>
+      <button class="btn btn-sm btn-secondary" id="h-tipo-compra" onclick="setTipoHist('compra')">Solicitações de Compra</button>
+    </div>
+
+    <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <span class="text-muted" style="font-size:12px">De</span>
+      <input class="input" type="date" id="h-de" style="max-width:150px">
+      <span class="text-muted" style="font-size:12px">até</span>
+      <input class="input" type="date" id="h-ate" style="max-width:150px">
+      <select class="select" id="h-status" style="max-width:190px"></select>
+      <button class="btn btn-sm btn-outline" onclick="carregarHistoricoTab()">Buscar</button>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <input class="input" id="h-item" oninput="renderHistoricoTab()"
+             placeholder="Buscar item dentro dos pedidos — ex.: file mignon, morango...">
+    </div>
+
+    <div class="section-title">
+      <span id="histTitle">Requisições</span>
+      <span id="histCount" class="text-muted" style="font-size:12px"></span>
+    </div>
+    <div id="histContainer"><div class="loading-text">Carregando...</div></div>
   </div>
 
   <!-- ========================================================== -->
@@ -915,6 +952,7 @@ const tabTitles = {
   compra:     ['Solicitar Compra', 'Pedido para compra externa (aprovação do Gerente)'],
   req:        ['Requisição da Comissaria', 'Pedido de itens do estoque interno — sem aprovação'],
   rascunhos:  ['Rascunhos', 'Solicitações salvas pra continuar depois'],
+  historico:  ['Histórico', 'Tudo o que o seu PDV já pediu'],
   relatorios: ['Relatórios', 'Aquisições finalizadas do seu PDV'],
 };
 
@@ -939,15 +977,18 @@ function goTab(aba, el) {
   atualizarCarrinho();
   if (aba === 'relatorios') setupRelatorio();
   if (aba === 'rascunhos') carregarRascunhos();
+  if (aba === 'historico') setupHistoricoTab();
   if (window.innerWidth <= 900) {
     document.querySelector('.sidebar')?.classList.remove('open');
     document.getElementById('sbOverlay')?.classList.remove('open');
   }
 }
-// Compat: manter switchAba como alias pra chamadas internas (ex: novoPedido, load inicial)
+// Compat: manter switchAba como alias pra chamadas internas (ex: novoPedido, load inicial).
+// Acha o item de menu pelo próprio onclick em vez de por índice fixo — o índice
+// quebrava calado toda vez que uma aba nova entrava no meio.
 const switchAba = (aba) => {
-  const map = { compra: 0, req: 1, rascunhos: 2, relatorios: 3 };
-  const nav = document.querySelectorAll('.nav-item')[map[aba] ?? 0];
+  const nav = [...document.querySelectorAll('.nav-item')]
+    .find(n => (n.getAttribute('onclick') || '').includes(`goTab('${aba}'`));
   goTab(aba, nav);
 };
 
@@ -1497,7 +1538,127 @@ async function carregarRascunhos() {
 }
 
 // =====================================================================
-// HISTÓRICO
+// ABA HISTÓRICO — tudo o que o PDV já pediu, com busca por item
+// =====================================================================
+// O histórico embutido nas abas de pedido mostra os 30 últimos e serve
+// pra conferir o que acabou de ser enviado. Não serve pra "quando foi
+// que a gente pediu morango?" — que é uma pergunta sobre o ITEM, não
+// sobre o pedido. Daí esta aba: período aberto e busca dentro dos itens.
+
+const STATUS_HIST_PDV = {
+  req: [['', 'Todos os status'], ['enviado','Aguardando'], ['separacao','Em separação'],
+        ['entregue','Entregue'], ['cancelada','Cancelada']],
+  compra: [['', 'Todos os status'], ['enviada','Aguardando aprovação'], ['aprovada','Aprovada'],
+           ['rejeitada','Rejeitada'], ['entregue','Entregue']],
+};
+const histTab = { pronto: false, tipo: 'req', req: [], compra: [] };
+
+function setupHistoricoTab() {
+  if (histTab.pronto) return;
+  histTab.pronto = true;
+  const ate = new Date();
+  const de = new Date(); de.setDate(de.getDate() - 60);
+  document.getElementById('h-de').value = isoDate(de);
+  document.getElementById('h-ate').value = isoDate(ate);
+  setTipoHist('req');
+}
+
+function setTipoHist(tipo) {
+  histTab.tipo = tipo;
+  document.getElementById('h-tipo-req').className =
+    'btn btn-sm ' + (tipo === 'req' ? 'btn-outline' : 'btn-secondary');
+  document.getElementById('h-tipo-compra').className =
+    'btn btn-sm ' + (tipo === 'compra' ? 'btn-outline' : 'btn-secondary');
+  document.getElementById('h-status').innerHTML = STATUS_HIST_PDV[tipo]
+    .map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  document.getElementById('histTitle').textContent =
+    tipo === 'req' ? 'Requisições da Comissaria' : 'Solicitações de compra';
+  carregarHistoricoTab();
+}
+
+async function carregarHistoricoTab() {
+  const de = document.getElementById('h-de').value;
+  const ate = document.getElementById('h-ate').value;
+  const status = document.getElementById('h-status').value;
+  const tipo = histTab.tipo;
+  document.getElementById('histContainer').innerHTML = '<div class="loading-text">Carregando...</div>';
+
+  // Por created_at, não por competência — ver o comentário em config.js
+  let q = tipo === 'req'
+    ? sb.from('requisicoes').select('*, requisicao_itens(*)')
+    : sb.from('solicitacoes_compra').select('*, solicitacao_compra_itens(*)').neq('status', 'rascunho');
+  q = q.eq('pdv_id', state.pdvId)
+       .gte('created_at', inicioDoDiaISO(de)).lte('created_at', fimDoDiaISO(ate));
+  if (status) q = q.eq('status', status);
+
+  const { data, error } = await q.order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('histContainer').innerHTML =
+      `<div class="empty-text">Erro: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  histTab[tipo] = data || [];
+  renderHistoricoTab();
+}
+
+function renderHistoricoTab() {
+  const tipo = histTab.tipo;
+  const termo = document.getElementById('h-item').value.trim();
+  const campo = tipo === 'req' ? 'requisicao_itens' : 'solicitacao_compra_itens';
+  const todos = histTab[tipo] || [];
+  const lista = todos.filter(r => registroCasaItem(r, termo, campo));
+
+  document.getElementById('histCount').textContent = termo
+    ? `${lista.length} de ${todos.length} contêm "${termo}"`
+    : `${lista.length} pedido(s)`;
+
+  const cont = document.getElementById('histContainer');
+  if (!lista.length) {
+    cont.innerHTML = `<div class="empty-text">${termo
+      ? `Nenhum pedido do período contém "${escapeHtml(termo)}". Tente ampliar as datas.`
+      : 'Nada no período escolhido.'}</div>`;
+    return;
+  }
+
+  const statusLabel = Object.fromEntries(STATUS_HIST_PDV[tipo]);
+  cont.innerHTML = tipo === 'req'
+    ? `<table class="data-table tabela-cards"><thead><tr>
+         <th>Pedido</th><th>Entrega pedida</th><th class="center">Itens</th>
+         <th class="center">Diverg.</th><th>Status</th>
+       </tr></thead><tbody>${lista.map(r => {
+         const itens = r.requisicao_itens || [];
+         const divs = itens.filter(i => i.divergencia).length;
+         return `<tr class="clicavel" onclick="verRequisicaoInterna(sb,'${r.id}')">
+           <td class="td-titulo">${ptDate(r.created_at)} · #${String(r.id).slice(0,8)}
+             ${resumoItensCasados(itensQueCasam(r, termo, campo))}</td>
+           <td class="text-muted" data-label="Entrega pedida">${
+             r.data_entrega_desejada ? ptDate(r.data_entrega_desejada) : '—'}</td>
+           <td class="center" data-label="Itens">${itens.length}</td>
+           <td class="center ${divs ? 'text-error' : 'text-muted'}" data-label="Divergências">${divs || '—'}</td>
+           <td data-label="Status"><span class="badge status-${r.status}">${
+             statusLabel[r.status] || r.status}</span></td>
+         </tr>`;
+       }).join('')}</tbody></table>`
+    : `<table class="data-table tabela-cards"><thead><tr>
+         <th>Pedido</th><th>Entra na lista de</th><th>Entrega pedida</th>
+         <th class="center">Itens</th><th>Status</th>
+       </tr></thead><tbody>${lista.map(s => {
+         const itens = s.solicitacao_compra_itens || [];
+         return `<tr class="clicavel" onclick="verSolicitacaoCompra(sb,'${s.id}')">
+           <td class="td-titulo">${ptDate(s.created_at)} · #${String(s.id).slice(0,8)}
+             ${resumoItensCasados(itensQueCasam(s, termo, campo))}</td>
+           <td class="text-muted" data-label="Entra na lista de">${ptDate(s.data_competencia)}</td>
+           <td class="text-muted" data-label="Entrega pedida">${
+             s.data_entrega_desejada ? ptDate(s.data_entrega_desejada) : '—'}</td>
+           <td class="center" data-label="Itens">${itens.length}</td>
+           <td data-label="Status"><span class="badge status-${s.status}">${
+             statusLabel[s.status] || s.status}</span></td>
+         </tr>`;
+       }).join('')}</tbody></table>`;
+}
+
+// =====================================================================
+// HISTÓRICO EMBUTIDO NAS ABAS DE PEDIDO (últimos 30)
 // =====================================================================
 async function carregarHistorico(aba) {
   const cont = document.getElementById(`${aba}-historico`);
