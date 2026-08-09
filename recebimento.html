@@ -93,13 +93,23 @@
   .conf-faixa { font-size: 10px; color: var(--muted); align-self: flex-end; padding-bottom: 7px; }
 
   /* ---- Motivos estruturados ---- */
+  /* Sem underline: em fonte pequena a linha pontilhada passa perto do meio
+     das letras e o texto parece riscado, como se o item tivesse sido
+     descartado. Borda embaixo dá o mesmo "é clicável" sem a confusão. */
   .conf-problema {
     grid-column: 2 / -1; margin-top: 6px;
     font-size: 12px; color: var(--muted); cursor: pointer;
-    text-decoration: underline dotted; width: fit-content;
+    width: fit-content; padding-bottom: 2px;
+    border-bottom: 1px dotted var(--muted2);
   }
-  .conf-problema:hover { color: var(--orange); }
-  .conf-problema.ativo { color: var(--error); }
+  .conf-problema:hover { color: var(--orange); border-bottom-color: var(--orange); }
+  .conf-problema.ativo { color: var(--error); border-bottom-color: rgba(224,82,82,0.5); }
+
+  /* Campo obrigatório que ficou em branco na hora de aceitar */
+  .input.faltando {
+    border-color: var(--error) !important;
+    box-shadow: 0 0 0 3px rgba(224,82,82,0.15);
+  }
 
   .motivos-wrap {
     grid-column: 2 / -1; margin-top: 8px;
@@ -821,7 +831,16 @@ async function finalizar(decisao) {
   const obs     = (state.conf.obsGeral || '').trim();
 
   if (decisao === 'aceito' && (!nfNum || isNaN(nfValor))) {
+    // O bloco da NF fica no fim de uma lista longa: só o aviso no canto
+    // deixava o conferente sem saber o que faltava. Leva até o campo.
     showToast('Informe número e valor da nota fiscal para aceitar.', 'error');
+    const alvo = document.getElementById(!nfNum ? 'nf-num' : 'nf-valor');
+    if (alvo) {
+      alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      alvo.classList.add('faltando');
+      alvo.focus({ preventScroll: true });
+      setTimeout(() => alvo.classList.remove('faltando'), 2500);
+    }
     return;
   }
 

@@ -954,10 +954,50 @@ const switchAba = (aba) => {
 // =====================================================================
 // CÁLCULO DE DATA DE COMPETÊNCIA (data que entra na lista do Gerente)
 // =====================================================================
-// Regra:
-//   1) Se data_entrega_desejada vazia/passada/hoje/amanhã → regra 10h (hoje ou amanhã)
-//   2) Se data_entrega_desejada futura → data_competencia = data_entrega - MAX(prazo dos itens)
-//      (nunca antes de hoje)
+// Vale só para COMPRA. Requisição interna de estoque não tem corte —
+// a Comissaria atende no mesmo dia.
+//
+// Regra do hotel:
+//   · pedidos de compra rodam de segunda a sexta
+//   · até as 10h o pedido entra no dia
+//   · a partir das 10h vai para o PRÓXIMO DIA ÚTIL
+//   · sexta depois das 10h cai na segunda; sábado e domingo também
+//
+// Com data de entrega escolhida, a competência recua o prazo dos itens a
+// partir da entrega — mas nunca antes da primeira competência possível,
+// que é o que a regra das 10h define.
+
+function ehFimDeSemana(d) { const w = d.getDay(); return w === 0 || w === 6; }
+
+// Empurra para segunda se cair em sábado ou domingo
+function proximoDiaUtil(d) {
+  const x = new Date(d);
+  while (ehFimDeSemana(x)) x.setDate(x.getDate() + 1);
+  return x;
+}
+
+// Soma dias ÚTEIS (o fim de semana não conta como prazo de fornecedor)
+function somarDiasUteis(d, n) {
+  const x = new Date(d);
+  let faltam = n;
+  while (faltam > 0) {
+    x.setDate(x.getDate() + 1);
+    if (!ehFimDeSemana(x)) faltam--;
+  }
+  return x;
+}
+
+// Subtrai dias úteis — usado para recuar da entrega até a competência
+function subtrairDiasUteis(d, n) {
+  const x = new Date(d);
+  let faltam = n;
+  while (faltam > 0) {
+    x.setDate(x.getDate() - 1);
+    if (!ehFimDeSemana(x)) faltam--;
+  }
+  return x;
+}
+
 function prazoItemDias(item) {
   const horas = item.prazo_reposicao_horas
              ?? (state.prazoPorCategoria || {})[item.categoria]
@@ -966,13 +1006,15 @@ function prazoItemDias(item) {
   return Math.max(1, Math.ceil(horas / 24));
 }
 
+// A primeira competência possível para um pedido feito AGORA
 function getCompetenciaCompra() {
-  // Sem itens ou compra normal → regra 10h atual
   const agora = new Date();
   const corte = new Date(); corte.setHours(10, 0, 0, 0);
-  const data = new Date();
-  if (agora >= corte) data.setDate(data.getDate() + 1);
-  return data;
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  // Passou das 10h de um dia útil: vai para o dia seguinte.
+  // No fim de semana o horário não importa — proximoDiaUtil resolve.
+  if (agora >= corte && !ehFimDeSemana(d)) d.setDate(d.getDate() + 1);
+  return proximoDiaUtil(d);
 }
 
 function isoParaData(iso) {
@@ -983,24 +1025,29 @@ function isoParaData(iso) {
 }
 
 function calcularCompetenciaFinal(dataEntregaIso, itens) {
+  const minima = getCompetenciaCompra();      // piso: a regra das 10h
+  minima.setHours(0, 0, 0, 0);
+
   const entrega = isoParaData(dataEntregaIso);
-  const hoje = new Date(); hoje.setHours(0,0,0,0);
-  if (!entrega) return getCompetenciaCompra();
+  if (!entrega) return minima;
 
-  // Se entrega é hoje ou passado → cai na regra 10h
-  if (entrega <= hoje) return getCompetenciaCompra();
+  const prazos = itens.map(prazoItemDias).filter(p => p != null);
+  const prazoMax = prazos.length ? Math.max(...prazos) : 1;
 
-  // Prazo máximo dos itens (dias)
-  const prazos = itens
-    .map(prazoItemDias)
-    .filter(p => p !== null && p !== undefined);
-  const prazoMax = prazos.length > 0 ? Math.max(...prazos) : 1; // fallback 1d
+  // Recua o prazo a partir da entrega desejada
+  const ideal = subtrairDiasUteis(entrega, prazoMax);
+  ideal.setHours(0, 0, 0, 0);
 
-  // Data ideal = entrega - prazoMax
-  const ideal = new Date(entrega);
-  ideal.setDate(ideal.getDate() - prazoMax);
-  // Não pode ser antes de hoje
-  return ideal < hoje ? hoje : ideal;
+  // Nunca antes da primeira competência possível — era aqui que a regra
+  // das 10h se perdia: o piso usado era "hoje", então um pedido feito às
+  // 22h de sábado com entrega para domingo caía na competência de hoje.
+  return ideal < minima ? minima : proximoDiaUtil(ideal);
+}
+
+// Quando o item chega, dada a competência e o prazo
+function previsaoEntrega(competencia, itens) {
+  const prazos = itens.map(prazoItemDias).filter(p => p != null);
+  return somarDiasUteis(competencia, prazos.length ? Math.max(...prazos) : 1);
 }
 
 function atualizarAvisoCorte() {
@@ -1009,28 +1056,38 @@ function atualizarAvisoCorte() {
   const txt = document.getElementById('avisoCorteTxt');
   if (!aviso || !txt) return;
 
+  const itens = Object.values(state.selecionados.compra || {}).map(s => s.item);
+  const competencia = calcularCompetenciaFinal(dataEntrega, itens);
   const entrega = isoParaData(dataEntrega);
+  const dia = d => d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+
   if (entrega && entrega > new Date()) {
-    // Data futura escolhida — só confirma a data de entrega
     aviso.className = 'aviso aviso-info';
-    txt.textContent = `Entrega prevista para ${entrega.toLocaleDateString('pt-BR')}.`;
+    txt.textContent = `Entrega pedida para ${dia(entrega)}. `
+      + `O pedido entra na lista de ${dia(competencia)}.`;
     return;
   }
 
-  // Modo regra 10h (sem entrega ou entrega hoje)
+  // Sem data escolhida: manda a regra das 10h, em dias úteis
   const agora = new Date();
   const corte = new Date(); corte.setHours(10, 0, 0, 0);
-  const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
-  if (agora < corte) {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const chega = previsaoEntrega(competencia, itens);
+
+  if (ehFimDeSemana(hoje)) {
+    aviso.className = 'aviso aviso-warn';
+    txt.textContent = `Fim de semana — o pedido entra na lista de ${dia(competencia)} `
+      + `e a entrega fica prevista para ${dia(chega)}.`;
+  } else if (agora < corte) {
     aviso.className = 'aviso aviso-success';
     const ms = corte - agora;
-    const h = Math.floor(ms / 3600000);
-    const m = Math.floor((ms % 3600000) / 60000);
-    txt.textContent = `Entrega prevista para amanhã (${amanha.toLocaleDateString('pt-BR')}). Corte de pedidos em ${h}h${String(m).padStart(2,'0')}.`;
+    const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    txt.textContent = `Entra na lista de hoje — entrega prevista para ${dia(chega)}. `
+      + `Corte em ${h}h${String(m).padStart(2, '0')}.`;
   } else {
     aviso.className = 'aviso aviso-warn';
-    const depois = new Date(); depois.setDate(depois.getDate() + 2);
-    txt.textContent = `Após as 10h00 — entrega prevista para ${depois.toLocaleDateString('pt-BR')}.`;
+    txt.textContent = `Depois das 10h — o pedido entra na lista de ${dia(competencia)} `
+      + `e a entrega fica prevista para ${dia(chega)}.`;
   }
 }
 
