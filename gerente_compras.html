@@ -1642,7 +1642,7 @@ function renderCatalogoTable() {
   const comPreco = lista.filter(i => state.precosMap && state.precosMap[i.id]).length;
   document.getElementById('catCount').textContent = `${lista.length} itens · ${comPreco} com preço`;
   cont.innerHTML = `<table class="data-table tabela-cards">
-    <thead><tr><th>Nome</th><th>Categoria</th><th>Unid.</th><th>Fornecedor</th><th class="center">Inventário</th><th class="center" title="Aparece por padrão no checklist de contagem da Comissaria">No checklist?</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
+    <thead><tr><th>Nome</th><th>Categoria</th><th>Unid.</th><th class="center" title="Pacote = embalagem de peso variável. O PDV pede em pacotes e a Comissaria pesa na separação.">Pede por</th><th>Fornecedor</th><th class="center">Inventário</th><th class="center" title="Aparece por padrão no checklist de contagem da Comissaria">No checklist?</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
     <tbody>${lista.map(it => {
       const p = state.precosMap ? state.precosMap[it.id] : null;
       const precoTxt = p
@@ -1653,6 +1653,16 @@ function renderCatalogoTable() {
       <td class="td-titulo">${escapeHtml(it.nome)}</td>
       <td data-label="Categoria"><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
       <td data-label="Unidade">${it.unidade}</td>
+      <td class="center" data-label="Pede por">
+        <select class="select" style="font-size:11px;padding:4px" onchange="setPedePor('${it.id}',this.value)">
+          <option value="peso"${it.pede_por === 'pacote' ? '' : ' selected'}>Peso</option>
+          <option value="pacote"${it.pede_por === 'pacote' ? ' selected' : ''}>Pacote</option>
+        </select>
+        ${it.pede_por === 'pacote' ? `<input class="input" type="number" step="0.001" min="0"
+          style="width:82px;font-size:11px;padding:4px;margin-top:4px" placeholder="${escapeHtml(it.unidade)}/pct"
+          value="${it.peso_medio_pacote ?? ''}" onchange="setPesoPacote('${it.id}',this.value)"
+          title="Peso médio de UM pacote. Deixe em branco — o sistema aprende na primeira pesagem.">` : ''}
+      </td>
       <td class="text-muted" data-label="Fornecedor">${escapeHtml(p?.fornecedor || it.fornecedor_principal||'—')}</td>
       <td class="center" data-label="Inventário">${it.inventario ? '<span class="text-green">Sim</span>' : '<span class="text-muted">—</span>'}</td>
       <td class="center" data-label="No checklist?"><input type="checkbox" ${noChk?'checked':''} onchange="toggleNoChecklist('${it.id}',this.checked)" title="Marcar/desmarcar do checklist da Comissaria"></td>
@@ -1662,6 +1672,41 @@ function renderCatalogoTable() {
       <td class="td-acoes"><button class="btn btn-sm ${it.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoItem('${it.id}',${it.ativo})">${it.ativo?'Desativar':'Ativar'}</button></td>
     </tr>`;
     }).join('')}</tbody></table>`;
+}
+
+// "Pede por" é o que separa 2 pacotes de 2 quilos. Muda só daqui pra
+// frente: o snapshot em cada pedido preserva como o item era na hora.
+async function setPedePor(id, valor) {
+  const patch = { pede_por: valor };
+  // Sair de pacote sem limpar o peso deixaria um número órfão que voltaria
+  // a valer se alguém remarcasse o item depois.
+  if (valor !== 'pacote') { patch.peso_medio_pacote = null; patch.pesagens_pacote = 0; }
+  const { error } = await sb.from('itens').update(patch).eq('id', id);
+  if (error) { showToast(msgErroPacote(error), 'error'); return; }
+  const it = state.catalogo.find(x => x.id === id);
+  if (it) Object.assign(it, patch);
+  renderCatalogoTable();
+  showToast(valor === 'pacote'
+    ? 'Item passa a ser pedido em pacotes.'
+    : 'Item volta a ser pedido por peso.', 'success');
+}
+
+// Enquanto a migration 28 não rodar, a coluna não existe e o Postgres
+// devolve um erro que não diz nada a quem está usando a tela.
+function msgErroPacote(err) {
+  return (err.code === 'PGRST204' || err.code === '42703' || /pede_por|peso_medio_pacote/.test(err.message || ''))
+    ? 'Recurso ainda não habilitado no banco — falta rodar a migration 28.'
+    : 'Erro: ' + err.message;
+}
+
+async function setPesoPacote(id, valor) {
+  const peso = parseFloat(valor);
+  const patch = { peso_medio_pacote: isNaN(peso) || peso <= 0 ? null : peso };
+  const { error } = await sb.from('itens').update(patch).eq('id', id);
+  if (error) { showToast(msgErroPacote(error), 'error'); return; }
+  const it = state.catalogo.find(x => x.id === id);
+  if (it) Object.assign(it, patch);
+  showToast('Peso médio atualizado.', 'success');
 }
 
 async function toggleNoChecklist(id, val) {
@@ -2167,6 +2212,7 @@ async function enviarReqCreate() {
       item_categoria: s.item.categoria,
       item_unidade: s.item.unidade,
       quantidade_solicitada: s.qty,
+      ...snapshotPacote(s.item),
     }));
     const { error: ei } = await sb.from('requisicao_itens').insert(itensPayload);
     if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }

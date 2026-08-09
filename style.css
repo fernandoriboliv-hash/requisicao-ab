@@ -494,6 +494,31 @@ main, .main {
   }
 }
 
+/* Item pedido em pacote de peso variável. O rótulo precisa estar visível
+   no momento de pedir: "2" de um item por pacote não é a mesma coisa que
+   "2" de um item por quilo, e quem digita tem que saber qual dos dois é. */
+.pct-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--blue);
+  background: rgba(37,99,168,0.12);
+  border: 1px solid rgba(37,99,168,0.45);
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+/* Estimativa de peso — deliberadamente discreta: é aproximação, não fato */
+.est-peso {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+  white-space: nowrap;
+}
+/* Segundo campo da entrega (o peso da balança), abaixo do de pacotes */
+.qty-wrap.qty-peso { margin-top: 6px; }
+
 /* Itens que casaram com a busca, mostrados dentro da própria linha.
    Quem procura "morango" precisa ver o morango — não só o pedido que
    por acaso o continha. */

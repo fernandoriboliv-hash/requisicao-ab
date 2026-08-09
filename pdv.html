@@ -714,17 +714,27 @@ function renderItemRow(item, aba) {
       estoqueBadge = ` <span class="est-badge est-yellow" title="Estoque baixo na Comissaria">⚠ estoque baixo</span>`;
     }
   }
+  // Item de pacote: o pedido é em pacotes e o peso vem depois, na pesagem
+  // da Comissaria. A estimativa serve pro cozinheiro saber a ordem de
+  // grandeza do que está pedindo — quando ela já existe.
+  const pacote = ehPacote(item);
+  const estimativa = pacote
+    ? `<span class="est-peso" id="est-${aba}-${item.id}">${
+        estimativaPeso(qty, item.peso_medio_pacote, item.unidade)}</span>`
+    : '';
   return `
     <div class="item-row ${sel ? 'selected' : ''}" id="row-${aba}-${item.id}">
       <div class="item-check">${sel ? '✓' : ''}</div>
-      <div class="item-name">${escapeHtml(item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
-      <div class="item-unit">${item.unidade}</div>
+      <div class="item-name">${escapeHtml(item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}${
+        pacote ? ` <span class="pct-badge" title="Pedido em pacotes — a Comissaria pesa na separação">por ${escapeHtml(rotuloPacote(item))}</span>` : ''}</div>
+      <div class="item-unit">${pacote ? escapeHtml(rotuloPacote(item)) : item.unidade}</div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
           <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',-1)">−</button>
-          <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQty('${aba}','${item.id}',this.value)" onclick="this.select()">
+          <input class="qty-input" type="number" min="0.1" step="${pacote ? '1' : '0.1'}" value="${qty}" onchange="setQty('${aba}','${item.id}',this.value)" oninput="atualizarEstimativa('${aba}','${item.id}',this.value)" onclick="this.select()">
           <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',1)">+</button>
         </div>
+        ${estimativa}
         ${alerta}
         <button class="item-action add" onclick="adicionarItem('${aba}','${item.id}')">+ Adicionar</button>
         <button class="item-action remove" onclick="removerItem('${aba}','${item.id}')">Remover</button>
@@ -818,9 +828,20 @@ function changeQty(aba, itemId, delta) {
   const cur = parseFloat(input.value) || 1;
   const novo = Math.max(0.1, Math.round((cur + delta) * 10) / 10);
   input.value = novo;
+  atualizarEstimativa(aba, itemId, novo);
   // Se já está no carrinho, sincroniza state (sem re-render pra não perder valores digitados em outras linhas).
   const sel = state.selecionados[aba][itemId];
   if (sel) { sel.qty = novo; atualizarCarrinho(); }
+}
+
+// O "≈ X kg" acompanha o número digitado. Fica fora do renderItens de
+// propósito: changeQty não re-renderiza a lista, pra não apagar o que a
+// pessoa já digitou nas outras linhas.
+function atualizarEstimativa(aba, itemId, valor) {
+  const el = document.getElementById(`est-${aba}-${itemId}`);
+  if (!el) return;
+  const item = state.catalogo.find(i => i.id === itemId);
+  el.textContent = estimativaPeso(valor, item?.peso_medio_pacote, item?.unidade);
 }
 
 function setQty(aba, itemId, val) {
@@ -1316,6 +1337,7 @@ async function inserirItensSolicitacao(solcId, aba) {
     quantidade_solicitada: s.qty,
     comentario: s.comentario || null,
     item_livre: false,
+    ...snapshotPacote(s.item),
   }));
   const itensLivres = livres.map(l => ({
     solicitacao_id: solcId,
@@ -1358,6 +1380,7 @@ async function inserirItensRequisicao(reqId) {
     quantidade_solicitada: s.qty,
     comentario: s.comentario || null,
     item_livre: false,
+    ...snapshotPacote(s.item),
   }));
   const itensLivres = livres.map(l => ({
     requisicao_id: reqId,

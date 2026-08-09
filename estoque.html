@@ -1562,28 +1562,66 @@ function renderFila() {
     const linhasItens = itens.map((it, idx) => {
       const catCls = it.item_livre ? 'cat-livre' : `cat-${it.item_categoria}`;
       const catTxt = it.item_livre ? '⚠ Livre' : it.item_categoria;
+      // Item de pacote: o PDV pediu em pacotes e o peso só existe depois da
+      // balança. São duas grandezas diferentes, então são dois campos — e a
+      // divergência é medida em PACOTES, não no peso. Pesar 4,4 kg num pacote
+      // de "mais ou menos 4 kg" não é falta de nada.
+      const pacote = ehPacote(it);
+      const rot = escapeHtml(rotuloPacote(it));
+      const est = estimativaPeso(it.quantidade_solicitada, it.peso_medio_pacote, it.item_unidade);
+      const solicitado = pacote
+        ? `${it.quantidade_solicitada} ${rot}${est ? `<br><span class="est-peso">${est}</span>` : ''}`
+        : `${it.quantidade_solicitada} ${it.item_unidade || ''}`;
+
+      let campoEntrega;
+      if (entregue) {
+        campoEntrega = pacote
+          ? `${it.pacotes_entregues ?? '—'} ${rot}${it.quantidade_entregue != null
+              ? ` <span class="est-peso">· ${it.quantidade_entregue} ${escapeHtml(it.item_unidade || 'kg')}</span>` : ''}`
+          : `${it.quantidade_entregue ?? '—'} ${it.item_unidade || ''}`;
+      } else if (pacote) {
+        campoEntrega = `
+          <span class="qty-wrap">
+            <input class="qty-entrega" type="number" step="1" min="0" inputmode="decimal"
+                   value="${it.quantidade_solicitada}" id="qp-${r.id}-${idx}"
+                   oninput="checkDiv('${r.id}',${idx},${it.quantidade_solicitada},this.value)">
+            <span class="qty-un">${rot}</span>
+          </span>
+          <span class="qty-wrap qty-peso">
+            <input class="qty-entrega" type="number" step="0.001" min="0" inputmode="decimal"
+                   placeholder="peso" id="qe-${r.id}-${idx}">
+            <span class="qty-un">${escapeHtml(it.item_unidade || 'kg')} pesado</span>
+          </span>`;
+      } else {
+        campoEntrega = `
+          <span class="qty-wrap">
+            <input class="qty-entrega" type="number" step="0.1" min="0" inputmode="decimal"
+                   value="${it.quantidade_solicitada}" id="qe-${r.id}-${idx}"
+                   oninput="checkDiv('${r.id}',${idx},${it.quantidade_solicitada},this.value)">
+            <span class="qty-un">${escapeHtml(it.item_unidade || '')}</span>
+          </span>`;
+      }
+
+      // "Ajuste de Peso" some no item de pacote: lá o peso diferente é o
+      // esperado, e oferecer o botão convidava a registrar como problema.
+      const motivos = pacote
+        ? ['Estoque Zerado', 'Quantidade Insuficiente']
+        : ['Estoque Zerado', 'Quantidade Insuficiente', 'Ajuste de Peso'];
+
       return `
         <tr>
           <td class="td-cat"><span class="cat-pill ${catCls}">${catTxt}</span></td>
-          <td class="td-item">${escapeHtml(it.item_nome)}${it.comentario ? `<br><em style="color:var(--muted);font-size:11px">${escapeHtml(it.comentario)}</em>` : ''}</td>
-          <td class="num td-solic" data-label="Solicitado">${it.quantidade_solicitada} ${it.item_unidade || ''}</td>
-          <td class="td-entr" data-label="Entregue">${entregue
-            ? `${it.quantidade_entregue ?? '—'} ${it.item_unidade || ''}`
-            : `<span class="qty-wrap">
-                 <input class="qty-entrega" type="number" step="0.1" min="0" inputmode="decimal"
-                        value="${it.quantidade_solicitada}" id="qe-${r.id}-${idx}"
-                        oninput="checkDiv('${r.id}',${idx},${it.quantidade_solicitada},this.value)">
-                 <span class="qty-un">${escapeHtml(it.item_unidade || '')}</span>
-               </span>`}
-          </td>
+          <td class="td-item">${escapeHtml(it.item_nome)}${pacote
+            ? ` <span class="pct-badge">por ${rot}</span>` : ''}${it.comentario
+            ? `<br><em style="color:var(--muted);font-size:11px">${escapeHtml(it.comentario)}</em>` : ''}</td>
+          <td class="num td-solic" data-label="Solicitado">${solicitado}</td>
+          <td class="td-entr" data-label="Entregue">${campoEntrega}</td>
           <td class="td-div">${entregue && it.divergencia
             ? `<span class="text-error" style="font-size:12px">⚠ ${escapeHtml(it.motivo_divergencia || 'Divergência')}</span>`
             : (!entregue ? `
               <div class="motivo-wrap" id="motw-${r.id}-${idx}">
-                <div class="motivo-btns">
-                  <button type="button" class="motivo-btn" data-motivo="Estoque Zerado" onclick="setMotivo('${r.id}',${idx},'Estoque Zerado')">Estoque Zerado</button>
-                  <button type="button" class="motivo-btn" data-motivo="Quantidade Insuficiente" onclick="setMotivo('${r.id}',${idx},'Quantidade Insuficiente')">Quantidade Insuficiente</button>
-                  <button type="button" class="motivo-btn" data-motivo="Ajuste de Peso" onclick="setMotivo('${r.id}',${idx},'Ajuste de Peso')">Ajuste de Peso</button>
+                <div class="motivo-btns">${motivos.map(m =>
+                  `<button type="button" class="motivo-btn" data-motivo="${m}" onclick="setMotivo('${r.id}',${idx},'${m}')">${m}</button>`).join('')}
                 </div>
                 <input class="motivo-obs" type="text" placeholder="Observação (opcional)..." id="motobs-${r.id}-${idx}">
                 <input type="hidden" id="mot-${r.id}-${idx}" value="">
@@ -1729,21 +1767,51 @@ async function confirmarCancelamento() {
   }
 }
 
+// Lê o que a Comissaria preencheu para um item. Devolve as duas grandezas
+// separadas — é a leitura única que a validação e a gravação compartilham,
+// pra não existirem duas interpretações do mesmo formulário.
+function lerEntregaItem(reqId, idx, it) {
+  const pedido = parseFloat(it.quantidade_solicitada);
+  const pacote = ehPacote(it);
+  const peso = parseFloat(document.getElementById(`qe-${reqId}-${idx}`)?.value);
+  if (!pacote) {
+    const q = isNaN(peso) ? pedido : peso;
+    return { pacote: false, pedido, qtdEntregue: q, pacotesEntregues: null,
+             divergencia: q !== pedido };
+  }
+  const pacotes = parseFloat(document.getElementById(`qp-${reqId}-${idx}`)?.value);
+  const pct = isNaN(pacotes) ? pedido : pacotes;
+  return {
+    pacote: true, pedido, pacotesEntregues: pct,
+    qtdEntregue: isNaN(peso) ? null : peso,
+    pesoFaltando: pct > 0 && isNaN(peso),
+    // Divergência é sobre PACOTE. O peso diferente do estimado é o normal.
+    divergencia: pct !== pedido,
+  };
+}
+
 async function registrarEntrega(reqId) {
   const req = state.reqs.find(r => r.id === reqId);
   if (!req) return;
   const itens = req.requisicao_itens || [];
 
-  // Validar divergências antes de submeter: toda divergência precisa de motivo pré-definido.
+  // Validar antes de submeter: divergência precisa de motivo, e item de
+  // pacote precisa do peso — sem ele o estoque e o inventário ficam cegos.
   for (let idx = 0; idx < itens.length; idx++) {
     const it = itens[idx];
-    const qeEl = document.getElementById(`qe-${reqId}-${idx}`);
+    const e = lerEntregaItem(reqId, idx, it);
+    if (e.pesoFaltando) {
+      showToast(`Informe o peso pesado de "${it.item_nome}".`, 'error');
+      const alvo = document.getElementById(`qe-${reqId}-${idx}`);
+      if (alvo) {
+        alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        alvo.focus({ preventScroll: true });
+      }
+      return;
+    }
     const motEl = document.getElementById(`mot-${reqId}-${idx}`);
     const wrapEl = document.getElementById(`motw-${reqId}-${idx}`);
-    const qEntregue = qeEl ? parseFloat(qeEl.value) : parseFloat(it.quantidade_solicitada);
-    const divergencia = qEntregue !== parseFloat(it.quantidade_solicitada);
-    const motivo = motEl?.value.trim() || '';
-    if (divergencia && !motivo) {
+    if (e.divergencia && !(motEl?.value.trim())) {
       showToast(`Selecione o motivo da divergência para "${it.item_nome}".`, 'error');
       if (wrapEl) {
         wrapEl.classList.add('visible', 'pulse');
@@ -1757,19 +1825,25 @@ async function registrarEntrega(reqId) {
   // Tudo validado → grava.
   for (let idx = 0; idx < itens.length; idx++) {
     const it = itens[idx];
-    const qeEl = document.getElementById(`qe-${reqId}-${idx}`);
-    const motEl = document.getElementById(`mot-${reqId}-${idx}`);
-    const obsEl = document.getElementById(`motobs-${reqId}-${idx}`);
-    const qEntregue = qeEl ? parseFloat(qeEl.value) : parseFloat(it.quantidade_solicitada);
-    const motivoBase = motEl?.value.trim() || '';
-    const obs = obsEl?.value.trim() || '';
+    const e = lerEntregaItem(reqId, idx, it);
+    const motivoBase = document.getElementById(`mot-${reqId}-${idx}`)?.value.trim() || '';
+    const obs = document.getElementById(`motobs-${reqId}-${idx}`)?.value.trim() || '';
     const motivoFinal = motivoBase + (obs ? ' — ' + obs : '');
-    const divergencia = qEntregue !== parseFloat(it.quantidade_solicitada);
-    await sb.from('requisicao_itens').update({
-      quantidade_entregue: qEntregue,
-      divergencia,
-      motivo_divergencia: divergencia ? motivoFinal : null,
-    }).eq('id', it.id);
+    const payload = {
+      quantidade_entregue: e.qtdEntregue,
+      divergencia: e.divergencia,
+      motivo_divergencia: e.divergencia ? motivoFinal : null,
+    };
+    if (e.pacote) payload.pacotes_entregues = e.pacotesEntregues;
+    await sb.from('requisicao_itens').update(payload).eq('id', it.id);
+
+    // O peso médio do pacote é aprendido daqui: ninguém tem essa tabela
+    // pronta, mas toda pesagem real melhora a estimativa do próximo pedido.
+    if (e.pacote && it.item_id && e.pacotesEntregues > 0 && e.qtdEntregue > 0) {
+      await sb.rpc('registrar_peso_pacote', {
+        p_item_id: it.item_id, p_pacotes: e.pacotesEntregues, p_peso: e.qtdEntregue,
+      });
+    }
   }
   await sb.from('requisicoes').update({
     status: 'entregue',
@@ -2139,6 +2213,8 @@ async function enviarManual() {
       return;
     }
 
+    // Saída de balcão: o que foi pedido é o que saiu, então pacotes
+    // entregues = pacotes pedidos e não há divergência a apurar.
     const itens = sel.map(s => ({
       requisicao_id: req.id,
       item_id: s.item.id,
@@ -2149,6 +2225,8 @@ async function enviarManual() {
       quantidade_entregue: s.qty,
       divergencia: false,
       item_livre: false,
+      ...snapshotPacote(s.item),
+      ...(ehPacote(s.item) ? { pacotes_entregues: s.qty } : {}),
     }));
     const { error: ei } = await sb.from('requisicao_itens').insert(itens);
     if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }

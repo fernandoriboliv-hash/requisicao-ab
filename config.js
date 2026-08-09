@@ -138,6 +138,52 @@ function resumoItensCasados(itens) {
 }
 
 // =====================================================================
+// PEDIDO POR PACOTE × CONSUMO POR PESO
+// =====================================================================
+// Boa parte das proteínas é pedida em pacote de peso variável: o
+// cozinheiro pede "2 pacotes de filé mignon", a Comissaria pesa e o peso
+// real nunca bate. Enquanto existia um campo só para as duas coisas, isso
+// era registrado como divergência — 58% das divergências do piloto eram
+// só isso, e nenhuma era falta de nada.
+//
+// Regra: a unidade do pedido é propriedade do ITEM, não escolha de quem
+// pede. Se fosse escolha, "2" às vezes seria pacote e às vezes quilo, e
+// nenhum relatório posterior conseguiria somar os dois.
+//
+//   quantidade_solicitada   pacotes      ← o que o PDV pediu
+//   pacotes_entregues       pacotes      ← divergência é medida AQUI
+//   quantidade_entregue     peso real    ← relatório e inventário usam ISTO
+//
+// Enquanto a migration 28 não roda, pede_por vem indefinido e tudo se
+// comporta como antes — as telas continuam funcionando sem a coluna.
+
+function ehPacote(x) {
+  return x?.pede_por === 'pacote' || x?.pedido_por === 'pacote';
+}
+function rotuloPacote(x) { return x?.rotulo_pacote || 'PCT'; }
+
+// "≈ 4,4 kg". Devolve vazio quando ninguém informou nem pesou ainda —
+// é melhor não mostrar estimativa nenhuma do que mostrar uma inventada.
+function estimativaPeso(qtd, pesoMedio, unidade) {
+  const p = parseFloat(pesoMedio), q = parseFloat(qtd);
+  if (!p || !(q > 0)) return '';
+  const total = q * p;
+  return `≈ ${total.toLocaleString('pt-BR', { maximumFractionDigits: total < 10 ? 2 : 1 })} ${unidade || 'kg'}`;
+}
+
+// Congela no item do pedido como ele era na hora: se o catálogo mudar de
+// regime depois, o pedido antigo continua sendo lido do jeito que foi feito.
+// Devolve {} para item comum — assim o INSERT não menciona as colunas
+// novas e continua funcionando antes da migration 28.
+function snapshotPacote(item) {
+  if (!ehPacote(item)) return {};
+  return {
+    pedido_por: 'pacote',
+    peso_medio_pacote: item.peso_medio_pacote ?? null,
+  };
+}
+
+// =====================================================================
 // IDEMPOTÊNCIA DE ENVIO
 // =====================================================================
 // Cada "carrinho" carrega um UUID. Ele vai no INSERT e o banco tem índice
@@ -372,17 +418,33 @@ async function verRequisicaoInterna(sb, id) {
        <thead><tr><th>Item</th><th>Categoria</th><th class="num">Pedido</th>
          ${entregue ? '<th class="num">Entregue</th><th>Divergência</th>' : ''}</tr></thead>
        <tbody>${itens.map(i => {
-         const falta = entregue && i.quantidade_entregue != null
-           ? (+i.quantidade_solicitada) - (+i.quantidade_entregue) : 0;
+         // Item de pacote tem duas grandezas: pacotes (o que foi pedido) e
+         // peso (o que a balança disse). A falta se mede nos pacotes.
+         const pct = ehPacote(i);
+         const rot = _esc(rotuloPacote(i));
+         const un = _esc(i.item_unidade || '');
+         const falta = pct
+           ? (entregue && i.pacotes_entregues != null
+               ? (+i.quantidade_solicitada) - (+i.pacotes_entregues) : 0)
+           : (entregue && i.quantidade_entregue != null
+               ? (+i.quantidade_solicitada) - (+i.quantidade_entregue) : 0);
+         const est = estimativaPeso(i.quantidade_solicitada, i.peso_medio_pacote, i.item_unidade);
          return `<tr>
-           <td class="td-titulo">${_esc(i.item_nome)}${i.comentario
-             ? `<br><em style="color:var(--muted);font-size:11px">${_esc(i.comentario)}</em>` : ''}</td>
+           <td class="td-titulo">${_esc(i.item_nome)}${pct ? ` <span class="pct-badge">por ${rot}</span>` : ''}${
+             i.comentario ? `<br><em style="color:var(--muted);font-size:11px">${_esc(i.comentario)}</em>` : ''}</td>
            <td data-label="Categoria">${_esc(i.item_categoria || '—')}</td>
-           <td class="num" data-label="Pedido">${_qtd(i.quantidade_solicitada)} ${_esc(i.item_unidade || '')}</td>
+           <td class="num" data-label="Pedido">${_qtd(i.quantidade_solicitada)} ${pct ? rot : un}${
+             pct && est ? `<br><span class="est-peso">${est}</span>` : ''}</td>
            ${entregue ? `
-             <td class="num" data-label="Entregue">${i.quantidade_entregue != null
-               ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${_qtd(i.quantidade_entregue)} ${
-                   _esc(i.item_unidade || '')}</span>` : '—'}</td>
+             <td class="num" data-label="Entregue">${pct
+               ? (i.pacotes_entregues != null
+                   ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${_qtd(i.pacotes_entregues)} ${rot}</span>${
+                       i.quantidade_entregue != null
+                         ? `<br><span class="est-peso">${_qtd(i.quantidade_entregue)} ${un} pesado</span>` : ''}`
+                   : '—')
+               : (i.quantidade_entregue != null
+                   ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${_qtd(i.quantidade_entregue)} ${un}</span>`
+                   : '—')}</td>
              <td data-label="Divergência">${i.motivo_divergencia
                ? '<span class="text-error">' + _esc(i.motivo_divergencia) + '</span>'
                : '<span class="text-muted">—</span>'}</td>` : ''}
