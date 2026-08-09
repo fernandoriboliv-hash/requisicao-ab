@@ -162,6 +162,16 @@ function ehPacote(x) {
 }
 function rotuloPacote(x) { return x?.rotulo_pacote || 'PCT'; }
 
+// Unidade em que o peso é medido. Metade dos itens de pacote tem
+// unidade = 'PCT' no catálogo — mostrar "≈ 3,06 PCT" não quer dizer nada.
+// A balança pesa em quilo, então quando a unidade cadastrada é a própria
+// embalagem, o peso vai em kg.
+const _UNIDADES_DE_PESO = new Set(['kg', 'g', 'gr', 'l', 'lt', 'ml']);
+function unidadePeso(x) {
+  const u = String(x?.unidade ?? x?.item_unidade ?? '').trim().toLowerCase();
+  return _UNIDADES_DE_PESO.has(u) ? u : 'kg';
+}
+
 // "≈ 4,4 kg". Devolve vazio quando ninguém informou nem pesou ainda —
 // é melhor não mostrar estimativa nenhuma do que mostrar uma inventada.
 function estimativaPeso(qtd, pesoMedio, unidade) {
@@ -173,14 +183,16 @@ function estimativaPeso(qtd, pesoMedio, unidade) {
 
 // Congela no item do pedido como ele era na hora: se o catálogo mudar de
 // regime depois, o pedido antigo continua sendo lido do jeito que foi feito.
-// Devolve {} para item comum — assim o INSERT não menciona as colunas
-// novas e continua funcionando antes da migration 28.
+//
+// Devolve pedido_por SEMPRE, inclusive 'peso'. Não é redundância: o
+// PostgREST monta um INSERT em lote com a UNIÃO das chaves de todas as
+// linhas e preenche com NULL o que faltar numa delas — não com o DEFAULT.
+// Omitir a chave nos itens comuns fazia um pedido misto (um item de pacote
+// + um item normal) violar o NOT NULL da coluna e falhar inteiro.
 function snapshotPacote(item) {
-  if (!ehPacote(item)) return {};
-  return {
-    pedido_por: 'pacote',
-    peso_medio_pacote: item.peso_medio_pacote ?? null,
-  };
+  return ehPacote(item)
+    ? { pedido_por: 'pacote', peso_medio_pacote: item.peso_medio_pacote ?? null }
+    : { pedido_por: 'peso',   peso_medio_pacote: null };
 }
 
 // =====================================================================
@@ -428,7 +440,8 @@ async function verRequisicaoInterna(sb, id) {
                ? (+i.quantidade_solicitada) - (+i.pacotes_entregues) : 0)
            : (entregue && i.quantidade_entregue != null
                ? (+i.quantidade_solicitada) - (+i.quantidade_entregue) : 0);
-         const est = estimativaPeso(i.quantidade_solicitada, i.peso_medio_pacote, i.item_unidade);
+         const uPeso = _esc(unidadePeso(i));
+         const est = estimativaPeso(i.quantidade_solicitada, i.peso_medio_pacote, unidadePeso(i));
          return `<tr>
            <td class="td-titulo">${_esc(i.item_nome)}${pct ? ` <span class="pct-badge">por ${rot}</span>` : ''}${
              i.comentario ? `<br><em style="color:var(--muted);font-size:11px">${_esc(i.comentario)}</em>` : ''}</td>
@@ -440,7 +453,7 @@ async function verRequisicaoInterna(sb, id) {
                ? (i.pacotes_entregues != null
                    ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${_qtd(i.pacotes_entregues)} ${rot}</span>${
                        i.quantidade_entregue != null
-                         ? `<br><span class="est-peso">${_qtd(i.quantidade_entregue)} ${un} pesado</span>` : ''}`
+                         ? `<br><span class="est-peso">${_qtd(i.quantidade_entregue)} ${uPeso} pesado</span>` : ''}`
                    : '—')
                : (i.quantidade_entregue != null
                    ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${_qtd(i.quantidade_entregue)} ${un}</span>`

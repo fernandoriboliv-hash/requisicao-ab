@@ -1568,7 +1568,8 @@ function renderFila() {
       // de "mais ou menos 4 kg" não é falta de nada.
       const pacote = ehPacote(it);
       const rot = escapeHtml(rotuloPacote(it));
-      const est = estimativaPeso(it.quantidade_solicitada, it.peso_medio_pacote, it.item_unidade);
+      const uPeso = escapeHtml(unidadePeso(it));
+      const est = estimativaPeso(it.quantidade_solicitada, it.peso_medio_pacote, unidadePeso(it));
       const solicitado = pacote
         ? `${it.quantidade_solicitada} ${rot}${est ? `<br><span class="est-peso">${est}</span>` : ''}`
         : `${it.quantidade_solicitada} ${it.item_unidade || ''}`;
@@ -1577,7 +1578,7 @@ function renderFila() {
       if (entregue) {
         campoEntrega = pacote
           ? `${it.pacotes_entregues ?? '—'} ${rot}${it.quantidade_entregue != null
-              ? ` <span class="est-peso">· ${it.quantidade_entregue} ${escapeHtml(it.item_unidade || 'kg')}</span>` : ''}`
+              ? ` <span class="est-peso">· ${it.quantidade_entregue} ${uPeso}</span>` : ''}`
           : `${it.quantidade_entregue ?? '—'} ${it.item_unidade || ''}`;
       } else if (pacote) {
         campoEntrega = `
@@ -1590,7 +1591,7 @@ function renderFila() {
           <span class="qty-wrap qty-peso">
             <input class="qty-entrega" type="number" step="0.001" min="0" inputmode="decimal"
                    placeholder="peso" id="qe-${r.id}-${idx}">
-            <span class="qty-un">${escapeHtml(it.item_unidade || 'kg')} pesado</span>
+            <span class="qty-un">${uPeso} pesado</span>
           </span>`;
       } else {
         campoEntrega = `

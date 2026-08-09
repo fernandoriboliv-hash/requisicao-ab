@@ -720,7 +720,7 @@ function renderItemRow(item, aba) {
   const pacote = ehPacote(item);
   const estimativa = pacote
     ? `<span class="est-peso" id="est-${aba}-${item.id}">${
-        estimativaPeso(qty, item.peso_medio_pacote, item.unidade)}</span>`
+        estimativaPeso(qty, item.peso_medio_pacote, unidadePeso(item))}</span>`
     : '';
   return `
     <div class="item-row ${sel ? 'selected' : ''}" id="row-${aba}-${item.id}">
@@ -841,7 +841,7 @@ function atualizarEstimativa(aba, itemId, valor) {
   const el = document.getElementById(`est-${aba}-${itemId}`);
   if (!el) return;
   const item = state.catalogo.find(i => i.id === itemId);
-  el.textContent = estimativaPeso(valor, item?.peso_medio_pacote, item?.unidade);
+  el.textContent = estimativaPeso(valor, item?.peso_medio_pacote, unidadePeso(item));
 }
 
 function setQty(aba, itemId, val) {
