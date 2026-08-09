@@ -1579,7 +1579,7 @@ function renderOrdens() {
       <th class="num right">Valor</th><th>Entrega</th><th>Status</th><th class="center">Ações</th>
     </tr></thead>
     <tbody>${lista.map(o => `
-      <tr>
+      <tr class="clicavel" onclick="verOrdem('${o.id}')">
         <td class="td-titulo">${escapeHtml(o.fornecedores?.nome || '—')}</td>
         <td class="po-num" data-label="Nº da ordem">${fmtPO(o.numero)}</td>
         <td class="center" data-label="Itens">${(o.ordem_compra_itens || []).length}</td>
@@ -1587,12 +1587,106 @@ function renderOrdens() {
         <td data-label="Entrega">${o.data_entrega_prevista ? ptDate(o.data_entrega_prevista) : '—'} ${pillPrazo(o)}</td>
         <td data-label="Status"><span class="badge">${statusLabel[o.status] || o.status}</span></td>
         <td class="td-acoes">
-          <button class="btn btn-sm btn-secondary" onclick="abrirEmail('${o.id}')">E-mail</button>
+          <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();abrirEmail('${o.id}')">E-mail</button>
           ${['rascunho','enviada','confirmada'].includes(o.status)
-            ? `<button class="btn btn-sm btn-secondary" onclick="cancelarOrdem('${o.id}', ${o.numero})">Cancelar</button>` : ''}
+            ? `<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();cancelarOrdem('${o.id}', ${o.numero})">Cancelar</button>` : ''}
         </td>
       </tr>`).join('')}
     </tbody></table>`;
+}
+
+// =====================================================================
+// DETALHE DE UMA ORDEM DE COMPRA
+// =====================================================================
+// A lista mostrava número, fornecedor e valor. Para saber O QUE foi pedido,
+// e o que chegou depois, não havia caminho — nem na aba de ordens nem no
+// histórico. Aqui vai o pedido item a item e, se já foi recebido, o
+// resultado da conferência ao lado.
+async function verOrdem(id) {
+  abrirDetalhe('Carregando...', null);
+
+  const { data: o, error } = await sb.from('ordens_compra')
+    .select(`*, fornecedores(nome, email, contato_nome, telefone, condicao_pagamento),
+             ordem_compra_itens(*),
+             recebimentos(id, data_recebimento, status, nota_fiscal_numero,
+                          valor_po, valor_recebido, nota_fiscal_valor,
+                          match_nf_receb, recebimento_itens(*))`)
+    .eq('id', id).single();
+
+  if (error) { abrirDetalhe('Erro', '<div class="empty-text">' + escapeHtml(error.message) + '</div>'); return; }
+
+  const itens = (o.ordem_compra_itens || []).sort((a, b) => a.item_nome.localeCompare(b.item_nome));
+  const rec = (o.recebimentos || [])[0];
+  // o que chegou de cada item, para pôr lado a lado com o que foi pedido
+  const recebidoDe = {};
+  (rec?.recebimento_itens || []).forEach(ri => {
+    if (ri.ordem_item_id) recebidoDe[ri.ordem_item_id] = ri;
+  });
+
+  const temCodigo = itens.some(i => i.codigo_fornecedor);
+  const statusLabel = {
+    rascunho:'Rascunho', enviada:'Enviada', confirmada:'Confirmada',
+    recebida_parcial:'Recebida parcial', recebida:'Recebida', cancelada:'Cancelada',
+  };
+
+  const linhas = itens.map(i => {
+    const r = recebidoDe[i.id];
+    const falta = r ? (+i.quantidade) - (+r.quantidade_recebida || 0) : 0;
+    const un = escapeHtml(i.item_unidade || '');
+    return `<tr>
+      <td class="td-titulo">${escapeHtml(i.item_nome)}
+        ${i.origem_pdvs ? `<br><span class="linha-origem">${escapeHtml(i.origem_pdvs)}</span>` : ''}</td>
+      ${temCodigo ? `<td data-label="Código">${escapeHtml(i.codigo_fornecedor || '—')}</td>` : ''}
+      <td class="num" data-label="Pedido">${fmtQtd(i.quantidade)} ${un}</td>
+      <td class="num" data-label="Recebido">${r
+        ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${fmtQtd(r.quantidade_recebida)} ${un}</span>`
+          + (falta > 0.0001 ? `<br><span class="linha-origem" style="color:var(--error)">faltou ${fmtQtd(falta)}</span>` : '')
+        : '<span class="text-muted">—</span>'}</td>
+      <td class="num" data-label="Preço un.">${i.preco_unitario != null ? fmtMoeda(i.preco_unitario) : '—'}</td>
+      <td class="num right" data-label="Total">${i.valor_linha != null ? fmtMoeda(i.valor_linha) : '—'}</td>
+      ${rec ? `<td data-label="Ocorrência">${r?.motivo_divergencia
+        ? '<span class="text-error">' + escapeHtml(r.motivo_divergencia) + '</span>'
+        : '<span class="text-muted">—</span>'}</td>` : ''}
+    </tr>`;
+  }).join('');
+
+  const f = o.fornecedores;
+  const blocoRec = rec ? `
+    <div class="section-title mt-3"><span>Conferência do recebimento</span></div>
+    <div class="email-campo"><b>Recebido</b><span>${ptDate(rec.data_recebimento)} ·
+      NF ${escapeHtml(rec.nota_fiscal_numero || '—')}</span></div>
+    <div class="match-3">
+      <div class="match-cel"><div class="match-rot">PEDIDO</div>
+        <div class="match-val">${fmtMoeda(rec.valor_po)}</div></div>
+      <div class="match-cel"><div class="match-rot">RECEBIDO</div>
+        <div class="match-val">${rec.valor_recebido != null ? fmtMoeda(rec.valor_recebido) : '—'}</div></div>
+      <div class="match-cel"><div class="match-rot">NOTA</div>
+        <div class="match-val ${rec.match_nf_receb === false ? 'ruim' : 'ok'}">${
+          rec.nota_fiscal_valor != null ? fmtMoeda(rec.nota_fiscal_valor) : '—'}</div></div>
+    </div>` : '';
+
+  abrirDetalhe(fmtPO(o.numero) + ' — ' + (f?.nome || ''), `
+    <div class="email-campo"><b>Situação</b><span>${statusLabel[o.status] || o.status}</span></div>
+    <div class="email-campo"><b>Emissão</b><span>${ptDate(o.data_emissao)}${
+      o.data_entrega_prevista ? ' · entrega prevista ' + ptDate(o.data_entrega_prevista) : ''}</span></div>
+    <div class="email-campo"><b>Valor</b><span>${fmtMoeda(o.valor_total)}${
+      f?.condicao_pagamento ? ' · ' + escapeHtml(f.condicao_pagamento) : ''}</span></div>
+    ${o.enviada_em ? `<div class="email-campo"><b>Enviada</b><span>${ptDateTime(o.enviada_em)}</span></div>` : ''}
+    ${f?.contato_nome || f?.telefone ? `<div class="email-campo"><b>Contato</b><span>${
+      escapeHtml([f.contato_nome, f.telefone, f.email].filter(Boolean).join(' · '))}</span></div>` : ''}
+    ${o.observacao ? `<div class="obs-box mt-2">${escapeHtml(o.observacao)}</div>` : ''}
+    ${o.motivo_cancelamento ? `<div class="aviso aviso-warn mt-2">Cancelada — ${
+      escapeHtml(o.motivo_cancelamento)}</div>` : ''}
+
+    <div class="section-title mt-3"><span>Itens do pedido (${itens.length})</span></div>
+    <table class="data-table tabela-cards">
+      <thead><tr><th>Item</th>${temCodigo ? '<th>Código</th>' : ''}
+        <th class="num">Pedido</th><th class="num">Recebido</th>
+        <th class="num">Preço un.</th><th class="num right">Total</th>
+        ${rec ? '<th>Ocorrência</th>' : ''}</tr></thead>
+      <tbody>${linhas}</tbody>
+    </table>
+    ${blocoRec}`);
 }
 
 async function cancelarOrdem(id, numero) {
@@ -2100,7 +2194,7 @@ async function carregarHistorico() {
   cont.innerHTML = '<div class="loading-text">Carregando...</div>';
 
   let q = sb.from('ordens_compra')
-    .select('numero, data_emissao, data_entrega_prevista, status, valor_total, fornecedores(nome), recebimentos(data_recebimento, status)')
+    .select('id, numero, data_emissao, data_entrega_prevista, status, valor_total, fornecedores(nome), recebimentos(data_recebimento, status)')
     .gte('data_emissao', de).lte('data_emissao', ate)
     .order('numero', { ascending: false });
   if (fornId) q = q.eq('fornecedor_id', fornId);
@@ -2122,7 +2216,7 @@ async function carregarHistorico() {
       <thead><tr><th>PO</th><th>Emissão</th><th>Fornecedor</th><th class="num right">Valor</th><th>Prevista</th><th>Recebida</th><th>Status</th></tr></thead>
       <tbody>${histCache.map(o => {
         const rec = (o.recebimentos || [])[0];
-        return `<tr>
+        return `<tr class="clicavel" onclick="verOrdem('${o.id}')">
           <td class="td-titulo">${escapeHtml(o.fornecedores?.nome || '—')}</td>
           <td class="po-num" data-label="Nº da ordem">${fmtPO(o.numero)}</td>
           <td data-label="Emissão">${ptDate(o.data_emissao)}</td>

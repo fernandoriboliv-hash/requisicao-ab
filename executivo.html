@@ -442,6 +442,11 @@ window.addEventListener('load', async () => {
 
 function isoDate(d) { return d.toISOString().split('T')[0]; }
 function escapeHtml(s) { if (s==null) return ''; return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// Abrir o registro para ver os itens — o detalhe em si vive em config.js,
+// compartilhado com o Gerente
+const verSolicitacao = id => verSolicitacaoCompra(sb, id);
+const verRequisicao  = id => verRequisicaoInterna(sb, id);
 function ptDate(d) { const date = new Date(typeof d === 'string' && d.length === 10 ? d + 'T12:00:00' : d); return date.toLocaleDateString('pt-BR'); }
 
 const tabTitles = {
@@ -828,7 +833,7 @@ async function carregarComprasGeral() {
     <thead><tr><th>#</th><th>Data</th><th>PDV</th><th class="center">Itens</th><th>Entrega</th><th>Status</th></tr></thead>
     <tbody>${data.map(s => {
       const itens = s.solicitacao_compra_itens || [];
-      return `<tr>
+      return `<tr class="clicavel" onclick="verSolicitacao('${s.id}')">
         <td class="td-titulo">${escapeHtml(s.pdvs?.nome||'—')}</td>
         <td class="text-muted" data-label="Nº">#${String(s.id).slice(0,8)}</td>
         <td class="text-muted" data-label="Data">${ptDate(s.data_competencia)}</td>
@@ -860,7 +865,7 @@ async function carregarReqsGeral() {
       const itens = r.requisicao_itens || [];
       const divs = itens.filter(i => i.divergencia).length;
       const manualTag = r.criada_pelo_estoque ? ' <span class="badge badge-gold" style="font-size:9px">MANUAL</span>' : '';
-      return `<tr>
+      return `<tr class="clicavel" onclick="verRequisicao('${r.id}')">
         <td class="td-titulo">${escapeHtml(r.pdvs?.nome||'—')}${manualTag}</td>
         <td class="text-muted" data-label="Nº">#${String(r.id).slice(0,8)}</td>
         <td class="text-muted" data-label="Data">${ptDate(r.data_competencia)}</td>

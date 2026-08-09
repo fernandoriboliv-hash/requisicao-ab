@@ -1049,7 +1049,7 @@ async function carregarRecebidos() {
         : r.valor_confere === true ? '<span class="text-muted">✓</span>'
         : r.valor_confere === false ? '<span class="text-error">✕</span>' : '—';
       return `
-      <tr>
+      <tr class="clicavel" onclick="verRecebimento('${r.id}')">
         <td class="td-titulo">${escapeHtml(r.ordens_compra?.fornecedores?.nome || '—')}</td>
         <td data-label="Data">${ptDate(r.data_recebimento)}</td>
         <td class="po-numero" data-label="Nº da ordem">${fmtPO(r.ordens_compra?.numero)}</td>
@@ -1063,6 +1063,101 @@ async function carregarRecebidos() {
       </tr>`;
     }).join('')}
     </tbody></table>`;
+}
+
+// =====================================================================
+// DETALHE DE UM RECEBIMENTO
+// =====================================================================
+// A lista de recebidos mostrava só a linha. Para conferir item a item —
+// o que chegou, o que faltou, temperatura, validade, lote — não havia
+// caminho: o conferente via um número de PO e mais nada.
+async function verRecebimento(id) {
+  abrirDetalhe('Carregando...', null);
+
+  const { data: r, error } = await sb.from('recebimentos')
+    .select(`*, ordens_compra(numero, data_emissao, data_entrega_prevista, fornecedores(nome, contato_nome, telefone)),
+             recebimento_itens(*), usuarios!recebimentos_conferido_por_fkey(nome)`)
+    .eq('id', id).single();
+
+  if (error) { abrirDetalhe('Erro', '<div class="empty-text">' + escapeHtml(error.message) + '</div>'); return; }
+
+  const itens = (r.recebimento_itens || []).sort((a, b) => a.item_nome.localeCompare(b.item_nome));
+  const comProblema = itens.filter(i => i.divergencia).length;
+
+  // Os três vértices do match, do jeito que aparecem na conferência
+  const cel = (rot, val, sub, cls) => `
+    <div class="match-cel">
+      <div class="match-rot">${rot}</div>
+      <div class="match-val ${cls || ''}">${val}</div>
+      <div class="match-sub">${sub}</div>
+    </div>`;
+
+  const veredito = r.match_nf_receb === false
+    ? `<div class="nf-veredito difere">✕ A nota cobra
+         ${fmtMoeda(Math.abs((+r.nota_fiscal_valor || 0) - (+r.valor_recebido || 0)))}
+         a mais do que foi entregue</div>`
+    : r.match_po_receb === false
+    ? `<div class="nf-veredito parcial">⚠ Entrega parcial — a nota cobra o que chegou</div>`
+    : `<div class="nf-veredito bate">✓ Pedido, entrega e nota fiscal conferem</div>`;
+
+  const linhas = itens.map(i => {
+    const falta = (+i.quantidade_pedida) - (+i.quantidade_recebida || 0);
+    const un = escapeHtml(i.item_unidade || '');
+    return `<tr>
+      <td class="td-titulo">${escapeHtml(i.item_nome)}</td>
+      <td class="num" data-label="Pedido">${fmtQtd(i.quantidade_pedida)} ${un}</td>
+      <td class="num" data-label="Recebido">
+        <span class="${falta > 0.0001 ? 'text-error' : ''}">${fmtQtd(i.quantidade_recebida)} ${un}</span>
+        ${falta > 0.0001 ? `<br><span class="conf-pedido" style="color:var(--error)">faltou ${fmtQtd(falta)}</span>` : ''}
+      </td>
+      <td data-label="Motivo">${(() => {
+        // o texto guarda o rótulo legível, mas registro antigo pode ter o
+        // código cru — traduz nos dois casos
+        const t = i.motivo_divergencia || i.motivo_codigo;
+        if (!t) return '<span class="text-muted">—</span>';
+        return escapeHtml(ROTULO_MOTIVO[t] || t);
+      })()}</td>
+      <td class="center" data-label="Temperatura">${i.temperatura_c != null
+        ? `<span class="${i.temperatura_ok === false ? 'text-error' : 'text-green'}">${i.temperatura_c}°C</span>`
+        : '<span class="text-muted">—</span>'}</td>
+      <td class="center" data-label="Validade">${i.validade ? ptDate(i.validade) : '<span class="text-muted">—</span>'}</td>
+      <td data-label="Lote">${escapeHtml(i.lote || '—')}</td>
+      <td class="num right" data-label="Valor">${i.valor_recebido != null ? fmtMoeda(i.valor_recebido) : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  const f = r.ordens_compra?.fornecedores;
+  abrirDetalhe(
+    fmtPO(r.ordens_compra?.numero) + ' — ' + (f?.nome || ''),
+    `<div class="email-campo"><b>Recebido</b><span>${ptDate(r.data_recebimento)}
+       ${r.usuarios?.nome ? ' por ' + escapeHtml(r.usuarios.nome) : ''}</span></div>
+     <div class="email-campo"><b>Nota</b><span>${escapeHtml(r.nota_fiscal_numero || '—')}</span></div>
+     <div class="email-campo"><b>Situação</b><span>${labelStatus(r.status)}${
+       comProblema ? ' · ' + comProblema + ' item(ns) com problema' : ''}</span></div>
+     ${f?.contato_nome || f?.telefone ? `<div class="email-campo"><b>Contato</b><span>${
+       escapeHtml([f.contato_nome, f.telefone].filter(Boolean).join(' · '))}</span></div>` : ''}
+
+     <div class="match-3">
+       ${cel('PEDIDO (PO)', fmtMoeda(r.valor_po), 'o que foi encomendado', '')}
+       ${cel('RECEBIDO', r.valor_recebido != null ? fmtMoeda(r.valor_recebido) : '—',
+             'o que desceu do caminhão', r.match_po_receb === false ? 'ruim' : 'ok')}
+       ${cel('NOTA FISCAL', r.nota_fiscal_valor != null ? fmtMoeda(r.nota_fiscal_valor) : '—',
+             'o que foi cobrado', r.match_nf_receb === false ? 'ruim' : 'ok')}
+     </div>
+     ${veredito}
+
+     ${r.divergencia ? `<div class="obs-box mt-3">${escapeHtml(r.divergencia)}</div>` : ''}
+
+     <div class="section-title mt-3"><span>Itens conferidos (${itens.length})</span></div>
+     <table class="data-table tabela-cards">
+       <thead><tr><th>Item</th><th class="num">Pedido</th><th class="num">Recebido</th>
+         <th>Motivo</th><th class="center">Temp.</th><th class="center">Validade</th>
+         <th>Lote</th><th class="num right">Valor</th></tr></thead>
+       <tbody>${linhas}</tbody>
+     </table>
+     ${!r.estoque_atualizado ? `<div class="text-muted mt-2" style="font-size:11px">
+       Este recebimento não somou no saldo de estoque — a entrada automática está desligada.</div>` : ''}`
+  );
 }
 
 // =====================================================================

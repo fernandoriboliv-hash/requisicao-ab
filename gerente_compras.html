@@ -765,6 +765,10 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Abrir o registro para ver os itens — detalhe compartilhado em config.js
+const verSolicitacao = id => verSolicitacaoCompra(sb, id);
+const verRequisicao  = id => verRequisicaoInterna(sb, id);
+
 async function carregarPDVs() {
   const { data } = await sb.from('pdvs').select('*').eq('ativo', true).order('ordem');
   state.pdvs = data || [];
@@ -906,7 +910,7 @@ function tabelaSolicitacoes(list) {
   </tr></thead><tbody>${list.map(s => {
     const itens = s.solicitacao_compra_itens || [];
     const hora = new Date(s.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-    return `<tr>
+    return `<tr class="clicavel" onclick="verSolicitacao('${s.id}')">
       <td class="td-titulo">${escapeHtml(s.pdvs?.nome||'—')}</td>
       <td class="text-muted" data-label="Nº">#${String(s.id).slice(0,8)}</td>
       <td class="text-muted" data-label="Hora">${hora}</td>
@@ -926,7 +930,7 @@ function tabelaRequisicoes(list) {
     const divs = itens.filter(i => i.divergencia).length;
     const hora = new Date(r.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     const manualTag = r.criada_pelo_estoque ? ' <span class="badge badge-gold" style="font-size:9px">MANUAL</span>' : '';
-    return `<tr>
+    return `<tr class="clicavel" onclick="verRequisicao('${r.id}')">
       <td class="td-titulo">${escapeHtml(r.pdvs?.nome||'—')}${manualTag}</td>
       <td class="text-muted" data-label="Nº">#${String(r.id).slice(0,8)}</td>
       <td class="text-muted" data-label="Hora">${hora}</td>

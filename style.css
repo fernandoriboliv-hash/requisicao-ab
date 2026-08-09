@@ -461,6 +461,33 @@ main, .main {
 .data-table .right { text-align: right; }
 .data-table .num { font-variant-numeric: tabular-nums; }
 
+/* Linha que abre o detalhe do registro. O cursor e o realce indicam que
+   há algo dentro — sem isso a lista parece um beco sem saída. */
+.data-table tr.clicavel { cursor: pointer; }
+.data-table tr.clicavel:hover td { background: rgba(184,150,62,0.07); }
+.data-table tr.clicavel .td-titulo,
+.data-table tr.clicavel td:first-child { position: relative; }
+/* seta discreta na última célula, para indicar "abre" */
+.data-table tr.clicavel td:last-child::after {
+  content: '›';
+  float: right;
+  color: var(--muted2);
+  font-size: 16px;
+  line-height: 1;
+  margin-left: 8px;
+}
+@media (max-width: 760px) {
+  /* no card a seta iria para o meio do conteúdo */
+  .tabela-cards tr.clicavel td:last-child::after { content: none; }
+  .tabela-cards tr.clicavel .td-titulo::after {
+    content: '›';
+    float: right;
+    color: var(--gold);
+    font-size: 20px;
+    line-height: 1;
+  }
+}
+
 /* ------------------- TABELA QUE VIRA CARD NO CELULAR -------------------
    Tabela de 6, 7, 10 colunas não cabe numa tela de celular: as últimas
    colunas ficam fora da área visível e o usuário nem sabe que existem.

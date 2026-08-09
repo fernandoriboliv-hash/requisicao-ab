@@ -173,6 +173,176 @@ document.addEventListener('focusin', e => {
   }
 });
 
+// =====================================================================
+// DETALHE DE UM REGISTRO
+// =====================================================================
+// As listas mostravam a linha (data, PDV, status, nº de itens) mas não
+// deixavam abrir: para saber O QUE tinha dentro do pedido, não havia
+// caminho. Isso valia para quase toda tela — só a fila da Comissaria
+// abria. Aqui fica o modal, criado uma vez e reaproveitado; cada tela
+// só monta o conteúdo.
+//
+//   abrirDetalhe('PO-00012 — FABENE', '<table>...</table>')
+//   abrirDetalhe('Carregando...', null)   → mostra o estado de carga
+
+function abrirDetalhe(titulo, corpoHtml) {
+  let mod = document.getElementById('detalheModal');
+  if (!mod) {
+    mod = document.createElement('div');
+    mod.className = 'modal-overlay';
+    mod.id = 'detalheModal';
+    mod.innerHTML = `
+      <div class="modal" style="width:840px;max-width:96vw">
+        <div class="modal-header">
+          <span id="detalheTitulo"></span>
+          <button class="modal-close" onclick="fecharDetalhe()">✕</button>
+        </div>
+        <div class="modal-body" id="detalheCorpo"></div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="fecharDetalhe()">Fechar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mod);
+    // fechar clicando fora e com Esc — o usuário espera as duas coisas
+    mod.addEventListener('click', e => { if (e.target === mod) fecharDetalhe(); });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && mod.classList.contains('open')) fecharDetalhe();
+    });
+  }
+  document.getElementById('detalheTitulo').textContent = titulo;
+  document.getElementById('detalheCorpo').innerHTML =
+    corpoHtml ?? '<div class="loading-text">Carregando...</div>';
+  mod.classList.add('open');
+}
+
+function fecharDetalhe() {
+  document.getElementById('detalheModal')?.classList.remove('open');
+}
+
+// Tabela de itens no formato que o detalhe usa.
+// colunas: [{ rotulo, campo | valor(item), classe }]
+function tabelaDetalhe(itens, colunas, vazio = 'Nenhum item.') {
+  if (!itens || !itens.length) return `<div class="empty-text">${vazio}</div>`;
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  return `<table class="data-table tabela-cards">
+    <thead><tr>${colunas.map(c =>
+      `<th class="${c.classe || ''}">${esc(c.rotulo)}</th>`).join('')}</tr></thead>
+    <tbody>${itens.map(it => `<tr>${colunas.map((c, i) => {
+      const v = c.valor ? c.valor(it) : it[c.campo];
+      const cls = i === 0 ? 'td-titulo' : (c.classe || '');
+      const lbl = i === 0 ? '' : ` data-label="${esc(c.rotulo)}"`;
+      return `<td class="${cls}"${lbl}>${c.valor ? (v ?? '') : esc(v ?? '—')}</td>`;
+    }).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+// ── Detalhes que Chef, Gerente e PDV mostram igual ────────────────
+// Ficam aqui para não existirem três cópias que envelhecem separado.
+// Recebem o cliente `sb` por parâmetro, como inserirIdempotente.
+
+const _esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const _data = s => s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+const _qtd = v => { const n = parseFloat(v) || 0; return n % 1 === 0 ? String(n) : String(n); };
+
+const LABEL_STATUS_SOLC = {
+  rascunho:'Rascunho', enviada:'Aguardando aprovação', aprovada:'Aprovada',
+  rejeitada:'Rejeitada', entregue:'Entregue',
+};
+const LABEL_STATUS_REQ = {
+  enviado:'Aguardando', separacao:'Em separação', entregue:'Entregue', cancelada:'Cancelada',
+};
+
+async function verSolicitacaoCompra(sb, id) {
+  abrirDetalhe('Carregando...', null);
+  // A FK precisa ser nomeada: a tabela aponta para usuarios em mais de uma
+  // coluna (quem criou, quem aprovou), e sem isso o PostgREST recusa o embed
+  const { data: s, error } = await sb.from('solicitacoes_compra')
+    .select(`*, pdvs(nome), solicitacao_compra_itens(*, itens(fornecedor_principal)),
+             usuarios!solicitacoes_compra_usuario_id_fkey(nome)`)
+    .eq('id', id).single();
+  if (error) { abrirDetalhe('Erro', '<div class="empty-text">' + _esc(error.message) + '</div>'); return; }
+
+  const itens = (s.solicitacao_compra_itens || [])
+    .sort((a, b) => a.item_nome.localeCompare(b.item_nome));
+  const atendidos = itens.filter(i => i.ordem_compra_id).length;
+
+  abrirDetalhe(
+    'Solicitação de compra — ' + (s.pdvs?.nome || ''),
+    `<div class="email-campo"><b>Situação</b><span>${LABEL_STATUS_SOLC[s.status] || s.status}</span></div>
+     <div class="email-campo"><b>Criada</b><span>${new Date(s.created_at).toLocaleString('pt-BR')}${
+       s.usuarios?.nome ? ' por ' + _esc(s.usuarios.nome) : ''}</span></div>
+     <div class="email-campo"><b>Entra na lista de</b><span>${_data(s.data_competencia)}${
+       s.data_entrega_desejada ? ' · entrega pedida ' + _data(s.data_entrega_desejada) : ''}</span></div>
+     ${atendidos ? `<div class="email-campo"><b>Compra</b><span>${atendidos} de ${itens.length}
+       item(ns) já em ordem de compra</span></div>` : ''}
+     ${s.observacao ? `<div class="obs-box mt-2">${_esc(s.observacao)}</div>` : ''}
+     ${s.motivo_rejeicao ? `<div class="aviso aviso-warn mt-2">Rejeitada — ${
+       _esc(s.motivo_rejeicao)}</div>` : ''}
+
+     <div class="section-title mt-3"><span>Itens (${itens.length})</span></div>
+     <table class="data-table tabela-cards">
+       <thead><tr><th>Item</th><th>Categoria</th><th>Fornecedor</th>
+         <th class="num">Quantidade</th><th>Comentário</th></tr></thead>
+       <tbody>${itens.map(i => `<tr>
+         <td class="td-titulo">${_esc(i.item_nome)}</td>
+         <td data-label="Categoria">${_esc(i.item_categoria || '—')}</td>
+         <td data-label="Fornecedor">${_esc(i.itens?.fornecedor_principal || '—')}</td>
+         <td class="num" data-label="Quantidade">${_qtd(i.quantidade_solicitada)} ${_esc(i.item_unidade || '')}</td>
+         <td data-label="Comentário">${_esc(i.comentario || '—')}</td>
+       </tr>`).join('')}</tbody>
+     </table>`
+  );
+}
+
+async function verRequisicaoInterna(sb, id) {
+  abrirDetalhe('Carregando...', null);
+  const { data: r, error } = await sb.from('requisicoes')
+    .select('*, pdvs(nome), requisicao_itens(*), usuarios!requisicoes_usuario_id_fkey(nome)')
+    .eq('id', id).single();
+  if (error) { abrirDetalhe('Erro', '<div class="empty-text">' + _esc(error.message) + '</div>'); return; }
+
+  const itens = (r.requisicao_itens || []).sort((a, b) => a.item_nome.localeCompare(b.item_nome));
+  const entregue = ['entregue', 'cancelada'].includes(r.status);
+  const divs = itens.filter(i => i.divergencia).length;
+
+  abrirDetalhe(
+    'Requisição — ' + (r.pdvs?.nome || ''),
+    `<div class="email-campo"><b>Situação</b><span>${LABEL_STATUS_REQ[r.status] || r.status}${
+       divs ? ' · ' + divs + ' item(ns) com divergência' : ''}</span></div>
+     <div class="email-campo"><b>Criada</b><span>${new Date(r.created_at).toLocaleString('pt-BR')}${
+       r.usuarios?.nome ? ' por ' + _esc(r.usuarios.nome) : ''}</span></div>
+     ${r.entregue_em ? `<div class="email-campo"><b>Entregue</b><span>${
+       new Date(r.entregue_em).toLocaleString('pt-BR')}</span></div>` : ''}
+     ${r.observacao ? `<div class="obs-box mt-2">${_esc(r.observacao)}</div>` : ''}
+     ${r.motivo_cancelamento ? `<div class="aviso aviso-warn mt-2">Cancelada — ${
+       _esc(r.motivo_cancelamento)}</div>` : ''}
+
+     <div class="section-title mt-3"><span>Itens (${itens.length})</span></div>
+     <table class="data-table tabela-cards">
+       <thead><tr><th>Item</th><th>Categoria</th><th class="num">Pedido</th>
+         ${entregue ? '<th class="num">Entregue</th><th>Divergência</th>' : ''}</tr></thead>
+       <tbody>${itens.map(i => {
+         const falta = entregue && i.quantidade_entregue != null
+           ? (+i.quantidade_solicitada) - (+i.quantidade_entregue) : 0;
+         return `<tr>
+           <td class="td-titulo">${_esc(i.item_nome)}${i.comentario
+             ? `<br><em style="color:var(--muted);font-size:11px">${_esc(i.comentario)}</em>` : ''}</td>
+           <td data-label="Categoria">${_esc(i.item_categoria || '—')}</td>
+           <td class="num" data-label="Pedido">${_qtd(i.quantidade_solicitada)} ${_esc(i.item_unidade || '')}</td>
+           ${entregue ? `
+             <td class="num" data-label="Entregue">${i.quantidade_entregue != null
+               ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${_qtd(i.quantidade_entregue)} ${
+                   _esc(i.item_unidade || '')}</span>` : '—'}</td>
+             <td data-label="Divergência">${i.motivo_divergencia
+               ? '<span class="text-error">' + _esc(i.motivo_divergencia) + '</span>'
+               : '<span class="text-muted">—</span>'}</td>` : ''}
+         </tr>`;
+       }).join('')}</tbody>
+     </table>`
+  );
+}
+
 function instalarAvisoConexao() {
   const barra = document.createElement('div');
   barra.id = 'barra-offline';
