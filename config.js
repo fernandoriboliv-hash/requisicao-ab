@@ -138,6 +138,36 @@ function resumoItensCasados(itens) {
 }
 
 // =====================================================================
+// DOIS NOMES, DUAS LISTAS
+// =====================================================================
+// O mesmo alimento tem nomes diferentes conforme quem fala dele:
+//
+//   compradora   QUEIJO BURRATA (CX C/6 DE 100G) - REF.: 3688
+//   cozinha      QUEIJO BURRATA
+//
+// A parte entre parênteses não é lixo — é o que impede o fornecedor de
+// separar errado. Só não serve para quem vai pegar o queijo na câmara.
+// Por isso o item guarda os dois nomes e cada tela mostra o que serve.
+//
+// E as duas listas também são diferentes: a de requisição é o que a
+// Comissaria tem em estoque (as duas planilhas que a cozinha usa), a de
+// compras é o catálogo inteiro. Misturar as duas foi o que fez o
+// cozinheiro pedir "PICANHA CONG.FRIBOI BACK(ATÉ 1,35KG)" seis vezes.
+//
+// Enquanto a migration 30 não roda, as colunas não existem: nome_curto
+// vem indefinido (cai no nome) e req_ativo idem (o !== false deixa passar).
+// Tudo se comporta como antes.
+
+function nomeExibicao(item) {
+  return item?.nome_curto || item?.nome || '';
+}
+
+// true quando o item deve aparecer na lista de REQUISIÇÃO
+function ehDeRequisicao(item) {
+  return item?.req_ativo !== false;
+}
+
+// =====================================================================
 // PEDIDO POR PACOTE × CONSUMO POR PESO
 // =====================================================================
 // Boa parte das proteínas é pedida em pacote de peso variável: o

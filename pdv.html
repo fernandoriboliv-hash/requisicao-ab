@@ -725,7 +725,7 @@ function renderItemRow(item, aba) {
   return `
     <div class="item-row ${sel ? 'selected' : ''}" id="row-${aba}-${item.id}">
       <div class="item-check alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${sel ? '✓' : ''}</div>
-      <div class="item-name alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${escapeHtml(item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}${
+      <div class="item-name alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${escapeHtml(aba === 'req' ? nomeExibicao(item) : item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}${
         pacote ? ` <span class="pct-badge" title="Pedido em pacotes — a Comissaria pesa na separação">por ${escapeHtml(rotuloPacote(item))}</span>` : ''}</div>
       <div class="item-unit">${pacote ? escapeHtml(rotuloPacote(item)) : item.unidade}</div>
       <div class="item-actions-cell">
@@ -748,9 +748,13 @@ function renderItemRow(item, aba) {
 function renderItens(aba) {
   const cat = state.catAtual[aba];
   const q = (document.getElementById(`${aba}-search`).value || '').toLowerCase();
+  // A requisição mostra só o que a Comissaria tem em estoque; a compra
+  // mostra o catálogo inteiro. A busca também olha o nome curto, senão
+  // procurar "picanha peça" não acharia o item cadastrado como outra coisa.
   const itens = state.catalogo.filter(i =>
     i.categoria === cat &&
-    itemAtendeBusca(i, q)
+    (aba !== 'req' || ehDeRequisicao(i)) &&
+    (itemAtendeBusca(i, q) || (aba === 'req' && i.nome_curto && itemCasaBusca(i.nome_curto, q)))
   );
 
   const cont = document.getElementById(`${aba}-items`);
@@ -946,7 +950,7 @@ function atualizarCarrinho() {
       html += `
         <div class="cart-sidebar-item">
           <div class="cs-name">
-            ${escapeHtml(s.item.nome)}
+            ${escapeHtml(aba === 'req' ? nomeExibicao(s.item) : s.item.nome)}
             <span class="cs-cat">${catLabels[s.item.categoria]||''}</span>
           </div>
           <div class="cs-qty">${s.qty} ${s.item.unidade||''}</div>
@@ -1192,7 +1196,7 @@ function abrirRevisao() {
       <div class="uppercase-label mb-2">${catLabels[cat]}</div>
       ${porCat[cat].map(s => `
         <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
-          <span>${escapeHtml(s.item.nome)}${s.comentario ? ` <em style="color:var(--muted);font-size:11px">— ${escapeHtml(s.comentario)}</em>` : ''}</span>
+          <span>${escapeHtml(aba === 'req' ? nomeExibicao(s.item) : s.item.nome)}${s.comentario ? ` <em style="color:var(--muted);font-size:11px">— ${escapeHtml(s.comentario)}</em>` : ''}</span>
           <span style="color:var(--gold);font-weight:500">${s.qty} ${s.item.unidade}</span>
         </div>`).join('')}
     </div>`;
@@ -1383,7 +1387,9 @@ async function inserirItensRequisicao(reqId) {
   const itensCat = sel.map(s => ({
     requisicao_id: reqId,
     item_id: s.item.id,
-    item_nome: s.item.nome,
+    // Snapshot com o nome da cozinha: é quem vai ler na separação e no
+    // histórico. O item_id preserva o vínculo com a ficha de compra.
+    item_nome: nomeExibicao(s.item),
     item_categoria: s.item.categoria,
     item_unidade: s.item.unidade,
     quantidade_solicitada: s.qty,

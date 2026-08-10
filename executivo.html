@@ -563,7 +563,7 @@ function renderExecItemRow(item, modo) {
     ? `<span class="text-orange" style="font-size:11px">⚠ ${(qty/media).toFixed(1)}× média</span>` : '';
   return `<div class="item-row ${sel?'selected':''}" onclick="toggleItem('${modo}','${item.id}')">
     <div class="item-check">${sel?'✓':''}</div>
-    <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''} ${alerta}</div>
+    <div class="item-name">${escapeHtml(modo === 'req' ? nomeExibicao(item) : item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''} ${alerta}</div>
     <div class="item-unit">${item.unidade}</div>
     <div class="item-qty-wrap" onclick="event.stopPropagation()">
       <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',-1)">−</button>
@@ -580,8 +580,11 @@ function renderExecItemRow(item, modo) {
 function renderItens(modo) {
   const cat = state.catAtual[modo];
   const q = (document.getElementById(`${modo}-search`).value || '').toLowerCase();
+  // Requisição: só o que a Comissaria tem. Compra: catálogo inteiro.
   const itens = state.catalogo.filter(i =>
-    i.categoria === cat && itemAtendeBusca(i, q)
+    i.categoria === cat
+    && (modo !== 'req' || ehDeRequisicao(i))
+    && (itemAtendeBusca(i, q) || (modo === 'req' && i.nome_curto && itemCasaBusca(i.nome_curto, q)))
   );
   const cont = document.getElementById(`${modo}-items`);
   if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarExecCartBar(); return; }
@@ -647,7 +650,7 @@ function atualizarExecCartBar() {
     body.innerHTML = sels.map(s => `
       <div class="cart-sidebar-item">
         <div class="cs-name">
-          ${escapeHtml(s.item.nome)}
+          ${escapeHtml(modo === 'req' ? nomeExibicao(s.item) : s.item.nome)}
           <span class="cs-cat">${catLabels[s.item.categoria]||''}</span>
         </div>
         <div class="cs-qty">${s.qty} ${s.item.unidade||''}</div>
@@ -810,7 +813,7 @@ async function enviar(modo) {
       }
       const itens = sel.map(s => ({
         requisicao_id: req.id, item_id: s.item.id,
-        item_nome: s.item.nome, item_categoria: s.item.categoria, item_unidade: s.item.unidade,
+        item_nome: nomeExibicao(s.item), item_categoria: s.item.categoria, item_unidade: s.item.unidade,
         quantidade_solicitada: s.qty, item_livre: false, comentario: s.comentario || null,
         ...snapshotPacote(s.item),
       }));

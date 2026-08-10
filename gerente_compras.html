@@ -116,6 +116,10 @@
   .add-item-row:hover { border-color: var(--border-subtle); }
   /* Comentário ocupa a linha toda, abaixo dos controles — só aparece
      depois que o item entra na lista, senão vira ruído em 700 linhas */
+  /* Nome de compra abaixo do nome curto: o gerente precisa ver os dois
+     para saber que "QUEIJO BURRATA" é o "(CX C/6 DE 100G) REF.: 3688" */
+  .nome-compra { font-size: 10px; color: var(--muted); letter-spacing: 0.2px; }
+  .linha-revisar td { background: rgba(224,140,62,0.06); }
   .rc-coment { grid-column: 1 / -1; margin-top: 6px; }
   .rc-coment .input { width: 100%; font-size: 12px; padding: 6px 10px; }
   .add-item-check { width: 18px; text-align: center; color: var(--gold); font-size: 11px; }
@@ -602,7 +606,14 @@
           <option value="hortifruti">Hortifruti</option>
           <option value="diversos">Diversos</option>
         </select>
+        <select class="select" id="cat-req-filtro" onchange="renderCatalogoTable()" style="max-width:220px">
+          <option value="">Requisição: todos</option>
+          <option value="revisar">⚠ Pendentes de revisão</option>
+          <option value="sim">Só os da requisição</option>
+          <option value="nao">Só os fora da requisição</option>
+        </select>
       </div>
+      <div class="aviso aviso-info" id="cat-aviso-revisar" style="display:none"></div>
       <div id="catalogoContainer"><div class="loading-text">Carregando...</div></div>
     </div>
   </div>
@@ -1636,25 +1647,55 @@ function exportarRelatorio() {
 function renderCatalogoTable() {
   const q = (document.getElementById('cat-busca').value || '').toLowerCase();
   const cf = document.getElementById('cat-cat-filtro').value;
+  const rf = document.getElementById('cat-req-filtro')?.value || '';
   let lista = state.catalogo;
   if (cf) lista = lista.filter(i => i.categoria === cf);
-  if (q) lista = lista.filter(i => itemAtendeBusca(i, q));
+  if (rf === 'revisar') lista = lista.filter(i => i.req_revisar);
+  if (rf === 'sim')     lista = lista.filter(i => ehDeRequisicao(i));
+  if (rf === 'nao')     lista = lista.filter(i => !ehDeRequisicao(i));
+  if (q) lista = lista.filter(i => itemAtendeBusca(i, q)
+    || (i.nome_curto && itemCasaBusca(i.nome_curto, q)));
   state.catalogoLista = lista;
+
+  // O aviso da revisão: a limpeza deixa ambíguo o que casou com mais de um
+  // item da planilha — "ROBALO FILÉ" achou "ROBALO FILÉ PCT" e "FILE DE
+  // ROBALO". Os dois ficam ativos até alguém dizer qual é o certo.
+  const aRevisar = state.catalogo.filter(i => i.req_revisar).length;
+  const av = document.getElementById('cat-aviso-revisar');
+  if (av) {
+    av.style.display = aRevisar ? '' : 'none';
+    av.innerHTML = `<strong>${aRevisar} item(ns) aguardando sua decisão.</strong>
+      A planilha da cozinha usa um nome que casou com mais de um item do catálogo,
+      e todos continuam na lista de requisição até você tirar os que não são.
+      Use <strong>Requisição: Pendentes de revisão</strong> e desligue os errados
+      na coluna <strong>Na requisição</strong>.`;
+  }
+
   const cont = document.getElementById('catalogoContainer');
   if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
   const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
   const comPreco = lista.filter(i => state.precosMap && state.precosMap[i.id]).length;
   document.getElementById('catCount').textContent = `${lista.length} itens · ${comPreco} com preço`;
   cont.innerHTML = `<table class="data-table tabela-cards">
-    <thead><tr><th>Nome</th><th>Categoria</th><th>Unid.</th><th class="center" title="Pacote = embalagem de peso variável. O PDV pede em pacotes e a Comissaria pesa na separação.">Pede por</th><th>Fornecedor</th><th class="center">Inventário</th><th class="center" title="Aparece por padrão no checklist de contagem da Comissaria">No checklist?</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
+    <thead><tr><th>Nome</th><th class="center" title="Aparece na lista de requisição do cozinheiro. Não afeta a lista de compras.">Na requisição</th><th>Categoria</th><th>Unid.</th><th class="center" title="Pacote = embalagem de peso variável. O PDV pede em pacotes e a Comissaria pesa na separação.">Pede por</th><th>Fornecedor</th><th class="center">Inventário</th><th class="center" title="Aparece por padrão no checklist de contagem da Comissaria">No checklist?</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
     <tbody>${lista.map(it => {
       const p = state.precosMap ? state.precosMap[it.id] : null;
       const precoTxt = p
         ? `R$ ${parseFloat(p.preco_unitario).toFixed(2).replace('.',',')} <small class="text-muted">${new Date(p.atualizado_em).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</small>`
         : `<span class="text-muted">sem preço</span>`;
       const noChk = it.no_checklist_estoque === true;
-      return `<tr>
-      <td class="td-titulo">${escapeHtml(it.nome)}</td>
+      const req = ehDeRequisicao(it);
+      const clsLinha = it.req_revisar ? 'linha-revisar' : '';
+      return `<tr class="${clsLinha}">
+      <td class="td-titulo">${escapeHtml(it.nome_curto || it.nome)}${it.nome_curto
+        ? `<br><span class="nome-compra">compra: ${escapeHtml(it.nome)}</span>` : ''}${
+        it.req_revisar ? ' <span class="badge badge-orange" style="font-size:9px">REVISAR</span>' : ''}</td>
+      <td class="center" data-label="Na requisição">
+        <input type="checkbox" ${req ? 'checked' : ''} onchange="setReqAtivo('${it.id}',this.checked)"
+               title="Aparece na lista de requisição do cozinheiro">
+        ${it.req_revisar ? `<br><button class="btn btn-sm btn-secondary" style="font-size:10px;padding:2px 6px;margin-top:4px"
+               onclick="resolverRevisao('${it.id}')">É este</button>` : ''}
+      </td>
       <td data-label="Categoria"><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
       <td data-label="Unidade">${it.unidade}</td>
       <td class="center" data-label="Pede por">
@@ -1676,6 +1717,41 @@ function renderCatalogoTable() {
       <td class="td-acoes"><button class="btn btn-sm ${it.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoItem('${it.id}',${it.ativo})">${it.ativo?'Desativar':'Ativar'}</button></td>
     </tr>`;
     }).join('')}</tbody></table>`;
+}
+
+// Liga e desliga o item da lista de requisição. A lista de COMPRAS não
+// muda — são duas listas diferentes desde a migration 30.
+async function setReqAtivo(id, val) {
+  const { error } = await sb.from('itens').update({ req_ativo: val }).eq('id', id);
+  if (error) { showToast(msgErroPacote(error), 'error'); return; }
+  const it = state.catalogo.find(x => x.id === id);
+  if (it) it.req_ativo = val;
+  renderCatalogoTable();
+  showToast(val ? 'Item entrou na lista de requisição.' : 'Item saiu da lista de requisição.', 'success');
+}
+
+// "É este": confirma o item certo entre os candidatos ambíguos. Marca este
+// como resolvido e tira da requisição os irmãos — os outros itens que a
+// mesma linha da planilha alcançou (mesmo nome_curto).
+async function resolverRevisao(id) {
+  const it = state.catalogo.find(x => x.id === id);
+  if (!it) return;
+  const irmaos = state.catalogo.filter(x =>
+    x.id !== id && x.nome_curto && x.nome_curto === it.nome_curto);
+
+  const { error } = await sb.from('itens')
+    .update({ req_ativo: true, req_revisar: false }).eq('id', id);
+  if (error) { showToast(msgErroPacote(error), 'error'); return; }
+  it.req_ativo = true; it.req_revisar = false;
+
+  for (const irmao of irmaos) {
+    await sb.from('itens').update({ req_ativo: false, req_revisar: false }).eq('id', irmao.id);
+    irmao.req_ativo = false; irmao.req_revisar = false;
+  }
+  renderCatalogoTable();
+  showToast(irmaos.length
+    ? `"${it.nome_curto}" resolvido — ${irmaos.length} item(ns) saíram da requisição.`
+    : `"${it.nome_curto}" confirmado.`, 'success');
 }
 
 // "Pede por" é o que separa 2 pacotes de 2 quilos. Muda só daqui pra
@@ -1950,7 +2026,7 @@ function renderItemRowRC(item) {
   return `
     <div class="add-item-row" id="rcrow-${item.id}" style="${sel ? 'border-color:var(--gold);background:rgba(184,150,62,0.06)' : ''}">
       <div class="add-item-check">${sel ? '✓' : ''}</div>
-      <div class="add-item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+      <div class="add-item-name">${escapeHtml(nomeExibicao(item))}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
       <div class="add-item-unit">${item.unidade || '—'}</div>
       <div class="add-item-qty-wrap">
         <button class="add-qty-btn" onclick="changeQtyRC('${item.id}',-1)">−</button>
@@ -1975,12 +2051,13 @@ function renderItensReqCreate() {
   }
   const q = (document.getElementById('rc-search').value || '').toLowerCase();
   const cat = state.reqNew.cat;
+  // Esta tela cria REQUISIÇÃO — vale a mesma lista que o cozinheiro vê
   const itens = state.catalogo.filter(i =>
-    i.ativo && i.categoria === cat &&
-    itemAtendeBusca(i, q)
+    i.ativo && i.categoria === cat && ehDeRequisicao(i) &&
+    (itemAtendeBusca(i, q) || (i.nome_curto && itemCasaBusca(i.nome_curto, q)))
   );
   if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item nesta categoria.</div>'; return; }
-  itens.sort((a,b) => a.nome.localeCompare(b.nome));
+  itens.sort((a,b) => nomeExibicao(a).localeCompare(nomeExibicao(b)));
 
   if (!CATS_COM_SUBGRUPO_RC.has(cat)) {
     cont.innerHTML = itens.map(item => renderItemRowRC(item)).join('');
@@ -2081,7 +2158,7 @@ function atualizarCartBarRC() {
       body.innerHTML = sels.map(s => `
         <div class="cart-sidebar-item">
           <div class="cs-name">
-            ${escapeHtml(s.item.nome)}
+            ${escapeHtml(nomeExibicao(s.item))}
             <span class="cs-cat">${catLabels[s.item.categoria]||''}</span>
           </div>
           <div class="cs-qty">${s.qty} ${s.item.unidade||''}</div>
@@ -2221,7 +2298,7 @@ async function enviarReqCreate() {
     const itensPayload = sel.map(s => ({
       requisicao_id: req.id,
       item_id: s.item.id,
-      item_nome: s.item.nome,
+      item_nome: nomeExibicao(s.item),
       item_categoria: s.item.categoria,
       item_unidade: s.item.unidade,
       quantidade_solicitada: s.qty,

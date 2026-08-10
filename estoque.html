@@ -2031,7 +2031,7 @@ function renderItemRowManual(item) {
   return `
     <div class="item-row ${sel ? 'selected' : ''}" id="mrow-${item.id}">
       <div class="item-check alvo-toggle" onclick="toggleManualItem('${item.id}')">${sel ? '✓' : ''}</div>
-      <div class="item-name alvo-toggle" onclick="toggleManualItem('${item.id}')">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+      <div class="item-name alvo-toggle" onclick="toggleManualItem('${item.id}')">${escapeHtml(nomeExibicao(item))}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
       <div class="item-unit">${item.unidade}</div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
@@ -2048,9 +2048,10 @@ function renderItemRowManual(item) {
 function renderItensManual() {
   const cat = state.manual.cat;
   const q = (document.getElementById('m-search').value || '').toLowerCase();
+  // Aba de REQUISIÇÃO em nome de outro PDV — mesma lista do cozinheiro
   const itens = state.catalogo.filter(i =>
-    i.categoria === cat &&
-    itemAtendeBusca(i, q)
+    i.categoria === cat && ehDeRequisicao(i) &&
+    (itemAtendeBusca(i, q) || (i.nome_curto && itemCasaBusca(i.nome_curto, q)))
   );
   const cont = document.getElementById('m-items');
   if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarManualCartBar(); return; }
@@ -2128,7 +2129,7 @@ function atualizarCartSidebarComis() {
     body.innerHTML = sels.map(s => `
       <div class="cart-sidebar-item">
         <div class="cs-name">
-          ${escapeHtml(s.item.nome)}
+          ${escapeHtml(aba === 'manual' ? nomeExibicao(s.item) : s.item.nome)}
           <span class="cs-cat">${catLabels[s.item.categoria]||''}</span>
         </div>
         <div class="cs-qty">${s.qty} ${s.item.unidade||''}</div>
@@ -2225,7 +2226,7 @@ async function enviarManual() {
     const itens = sel.map(s => ({
       requisicao_id: req.id,
       item_id: s.item.id,
-      item_nome: s.item.nome,
+      item_nome: nomeExibicao(s.item),
       item_categoria: s.item.categoria,
       item_unidade: s.item.unidade,
       quantidade_solicitada: s.qty,
