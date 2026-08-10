@@ -570,6 +570,10 @@ function renderExecItemRow(item, modo) {
       <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQty('${modo}','${item.id}',this.value)">
       <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',1)">+</button>
     </div>
+    <div class="item-coment" onclick="event.stopPropagation()">
+      <input placeholder="Comentário sobre este item (opcional)..." value="${escapeHtml(sel?.comentario || '')}"
+             onchange="setComentario('${modo}','${item.id}',this.value)">
+    </div>
   </div>`;
 }
 
@@ -683,6 +687,12 @@ function setQty(modo, itemId, val) {
   const v = parseFloat(val); s.qty = isNaN(v) || v <= 0 ? 1 : v;
   renderItens(modo);
 }
+// Sem re-render de propósito: o valor já está no campo, e redesenhar aqui
+// tiraria o cursor de quem ainda está escrevendo nas outras linhas.
+function setComentario(modo, itemId, val) {
+  const s = state.selecionados[modo][itemId]; if (!s) return;
+  s.comentario = val.trim();
+}
 
 // Prazo por item (horas → dias arredondando pra cima)
 function prazoItemDias(item) {
@@ -776,7 +786,7 @@ async function enviar(modo) {
       const itens = sel.map(s => ({
         solicitacao_id: solc.id, item_id: s.item.id,
         item_nome: s.item.nome, item_categoria: s.item.categoria, item_unidade: s.item.unidade,
-        quantidade_solicitada: s.qty, item_livre: false,
+        quantidade_solicitada: s.qty, item_livre: false, comentario: s.comentario || null,
         ...snapshotPacote(s.item),
       }));
       await sb.from('solicitacao_compra_itens').insert(itens);
@@ -801,7 +811,7 @@ async function enviar(modo) {
       const itens = sel.map(s => ({
         requisicao_id: req.id, item_id: s.item.id,
         item_nome: s.item.nome, item_categoria: s.item.categoria, item_unidade: s.item.unidade,
-        quantidade_solicitada: s.qty, item_livre: false,
+        quantidade_solicitada: s.qty, item_livre: false, comentario: s.comentario || null,
         ...snapshotPacote(s.item),
       }));
       await sb.from('requisicao_itens').insert(itens);

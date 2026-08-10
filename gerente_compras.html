@@ -114,6 +114,10 @@
     border: 1px solid transparent; transition: border-color 0.15s;
   }
   .add-item-row:hover { border-color: var(--border-subtle); }
+  /* Comentário ocupa a linha toda, abaixo dos controles — só aparece
+     depois que o item entra na lista, senão vira ruído em 700 linhas */
+  .rc-coment { grid-column: 1 / -1; margin-top: 6px; }
+  .rc-coment .input { width: 100%; font-size: 12px; padding: 6px 10px; }
   .add-item-check { width: 18px; text-align: center; color: var(--gold); font-size: 11px; }
   .add-item-name { font-size: 13px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
   .add-item-name .forn {
@@ -1956,6 +1960,10 @@ function renderItemRowRC(item) {
           ? `<button class="add-item-btn" style="background:transparent;border-color:var(--border-subtle);color:var(--muted)" onclick="removerItemRC('${item.id}')">Remover</button>`
           : `<button class="add-item-btn" onclick="adicionarItemRC('${item.id}')">+ Adicionar</button>`}
       </div>
+      ${sel ? `<div class="rc-coment">
+        <input class="input" placeholder="Comentário sobre este item (opcional) — a Comissaria lê na separação"
+               value="${escapeHtml(sel.comentario || '')}" onchange="setComentarioRC('${item.id}',this.value)">
+      </div>` : ''}
     </div>`;
 }
 
@@ -2022,6 +2030,11 @@ function adicionarItemRC(itemId) {
   state.reqNew.selecionados[itemId] = { item, qty };
   renderItensReqCreate();
   atualizarCartBarRC();
+}
+// Sem re-render: o valor já está no campo e redesenhar tiraria o cursor
+function setComentarioRC(itemId, val) {
+  const s = state.reqNew.selecionados[itemId];
+  if (s) s.comentario = val.trim();
 }
 function removerItemRC(itemId) {
   delete state.reqNew.selecionados[itemId];
@@ -2212,6 +2225,7 @@ async function enviarReqCreate() {
       item_categoria: s.item.categoria,
       item_unidade: s.item.unidade,
       quantidade_solicitada: s.qty,
+      comentario: s.comentario || null,
       ...snapshotPacote(s.item),
     }));
     const { error: ei } = await sb.from('requisicao_itens').insert(itensPayload);
