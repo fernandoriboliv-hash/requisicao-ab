@@ -137,6 +137,19 @@
   }
   .po-alt:hover { color: var(--gold); }
 
+  /* ---- Adicionar item ao pedido ----
+     Vale para os dois caminhos: a ordem avulsa começa vazia e se monta
+     toda por aqui, e o pedido vindo da fila ganha a mesma possibilidade
+     de completar com o que ninguém pediu mas precisa entrar. */
+  .po-add { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border-subtle); }
+  .po-add-linha {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 10px; margin-top: 4px; cursor: pointer;
+    border: 1px solid var(--border-subtle); background: rgba(255,255,255,0.02);
+  }
+  .po-add-linha:hover { border-color: var(--gold); background: rgba(184,150,62,0.06); }
+  .po-add-mais { color: var(--gold); font-size: 17px; line-height: 1; }
+
   /* ---- Pendências de entrega (backorder) ---- */
   .pend-bloco {
     background: rgba(224,140,62,0.06); border: 1px solid rgba(224,140,62,0.35);
@@ -282,7 +295,15 @@
         </select>
         <input class="input" id="o-busca" placeholder="Buscar por nº da PO ou fornecedor..." oninput="renderOrdens()">
       </div>
-      <div class="section-title"><span>Ordens de compra (<span id="oCount">0</span>)</span></div>
+      <div class="section-title">
+        <span>Ordens de compra (<span id="oCount">0</span>)</span>
+        <button class="btn btn-sm btn-gold" onclick="abrirNovaOrdem()">+ Nova ordem</button>
+      </div>
+      <div class="aviso aviso-info">
+        A fila <strong>A Comprar</strong> cobre o que os PDVs pediram. Use <strong>+ Nova ordem</strong>
+        para o que não nasce de pedido: compra de contrato, reposição da Comissaria
+        ou complemento de uma entrega já feita.
+      </div>
       <div id="ordensContainer"><div class="loading-text">Carregando...</div></div>
     </div>
   </div>
@@ -317,6 +338,21 @@
         <button class="btn btn-sm btn-outline" onclick="exportarHistorico()">⤓ Exportar CSV</button>
       </div>
       <div id="histContainer"><div class="empty-text">Escolha o período e clique em Buscar.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: escolher fornecedor da ordem avulsa ============ -->
+<div class="modal-overlay" id="novaOrdemModal">
+  <div class="modal" style="width:520px">
+    <div class="modal-header">
+      <span>Nova ordem de compra</span>
+      <button class="modal-close" onclick="fecharModal('novaOrdemModal')">✕</button>
+    </div>
+    <div class="modal-body" id="novaOrdemBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('novaOrdemModal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="iniciarOrdemAvulsa()">Continuar</button>
     </div>
   </div>
 </div>
@@ -949,32 +985,163 @@ function toggleForn(i) {
 // de 10, um item entrou por engano. Antes isso só dava para consertar
 // cancelando a PO e refazendo.
 
+// Pendências de entrega do fornecedor entram como sugestão nos dois
+// caminhos — pedido vindo da fila e pedido avulso.
+function pendenciasDoFornecedor(fornNome, f) {
+  return state.pendencias
+    .filter(p => (f && p.fornecedor_id === f.id) || p.fornecedores?.nome === fornNome)
+    .map(p => ({
+      pendencia_id: p.id, item_id: p.item_id, nome: p.item_nome,
+      unidade: p.item_unidade, qtd: parseFloat(p.quantidade) || 0,
+      preco: opcaoPadrao(p.item_id)?.preco ?? state.precos[p.item_id] ?? 0,
+      motivo: p.motivo_codigo, incluir: false,
+    }));
+}
+
 function abrirGerarPO(fornNome) {
   const grupo = agruparFilaPorFornecedor().find(g => g.fornecedor === fornNome);
   if (!grupo) { showToast('Fornecedor não encontrado na fila.', 'error'); return; }
 
   const f = state.fornecedores.find(x => x.nome === fornNome);
 
-  // Pendências de entrega deste mesmo fornecedor entram como sugestão
-  const pends = state.pendencias.filter(p =>
-    (f && p.fornecedor_id === f.id) || p.fornecedores?.nome === fornNome);
-
   state.poAtual = {
     fornecedorNome: fornNome,
     fornecedor: f || null,
     // cópia editável — mexer aqui não altera a fila até a PO ser gerada
     linhas: grupo.linhas.map(l => ({ ...l, incluir: true })),
-    pendencias: pends.map(p => ({
-      pendencia_id: p.id, item_id: p.item_id, nome: p.item_nome,
-      unidade: p.item_unidade, qtd: parseFloat(p.quantidade) || 0,
-      preco: opcaoPadrao(p.item_id)?.preco ?? state.precos[p.item_id] ?? 0,
-      motivo: p.motivo_codigo, incluir: false,
-    })),
+    pendencias: pendenciasDoFornecedor(fornNome, f),
+    avulsa: false,
   };
 
   document.getElementById('poModalTitle').textContent = 'Revisar pedido — ' + fornNome;
   renderPOEdit();
   abrirModal('poModal');
+}
+
+// =====================================================================
+// ORDEM AVULSA — pedido que não nasce de solicitação de PDV
+// =====================================================================
+// A fila "A Comprar" só sabe do que os PDVs pediram. Fica de fora o que
+// a compradora precisa comprar de qualquer jeito: contrato mensal,
+// reposição do estoque da Comissaria, complemento de uma entrega já
+// feita. Antes disso não havia caminho nenhum — era pedir a um PDV que
+// abrisse uma solicitação só para destravar a PO.
+//
+// A ordem avulsa é a MESMA ordem: começa sem linhas e a compradora
+// escolhe os itens. Daí reaproveitar `state.poAtual`, `renderPOEdit` e
+// `gerarPO` inteiros, em vez de abrir um segundo caminho para manter.
+
+function abrirNovaOrdem() {
+  const forns = [...state.fornecedores].sort((a, b) => a.nome.localeCompare(b.nome));
+  document.getElementById('novaOrdemBody').innerHTML = `
+    <div class="aviso aviso-info">
+      Escolha o fornecedor. Na tela seguinte você monta o pedido item a item —
+      é a mesma revisão da fila, só que começando vazia.
+    </div>
+    <label class="field-label">Fornecedor</label>
+    <select class="select" id="no-fornecedor" style="width:100%">
+      ${forns.map(f => `<option value="${f.id}">${escapeHtml(f.nome)}</option>`).join('')}
+    </select>
+    <div class="text-muted mt-2" style="font-size:11px">
+      Não achou? Cadastre em <strong>Fornecedores</strong> — a PO precisa de um
+      fornecedor para saber prazo, condição de pagamento e certificação.
+    </div>`;
+  abrirModal('novaOrdemModal');
+}
+
+function iniciarOrdemAvulsa() {
+  const id = document.getElementById('no-fornecedor').value;
+  const f = state.fornecedores.find(x => x.id === id);
+  if (!f) { showToast('Escolha um fornecedor.', 'error'); return; }
+
+  state.poAtual = {
+    fornecedorNome: f.nome,
+    fornecedor: f,
+    linhas: [],
+    pendencias: pendenciasDoFornecedor(f.nome, f),
+    avulsa: true,
+  };
+  fecharModal('novaOrdemModal');
+  document.getElementById('poModalTitle').textContent = 'Nova ordem — ' + f.nome;
+  renderPOEdit();
+  abrirModal('poModal');
+}
+
+// Itens que este fornecedor atende, pela matriz. Os demais aparecem
+// depois, marcados — comprar de quem não está na matriz é legítimo
+// (item novo, compra pontual), só não deve ser o caminho fácil.
+function itensParaAdicionar(termo) {
+  const fid = state.poAtual?.fornecedor?.id;
+  const jaNoPedido = new Set(state.poAtual.linhas.map(l => l.item_id));
+  const casa = i => !jaNoPedido.has(i.id) && i.ativo !== false
+    && !i.producao_propria && itemAtendeBusca(i, termo);
+
+  const doForn = [], outros = [];
+  for (const i of state.itens) {
+    if (!casa(i)) continue;
+    (opcoesDe(i.id).some(o => o.fornecedor_id === fid) ? doForn : outros).push(i);
+  }
+  const ord = (a, b) => a.nome.localeCompare(b.nome);
+  return { doForn: doForn.sort(ord).slice(0, 12), outros: outros.sort(ord).slice(0, 6) };
+}
+
+function renderBuscaItemPO() {
+  const cont = document.getElementById('po-add-result');
+  if (!cont) return;
+  const termo = document.getElementById('po-add-busca').value.trim();
+  if (termo.length < 2) {
+    cont.innerHTML = '<div class="text-muted" style="font-size:11px;padding:6px 0">Digite ao menos duas letras.</div>';
+    return;
+  }
+  const { doForn, outros } = itensParaAdicionar(termo);
+  if (!doForn.length && !outros.length) {
+    cont.innerHTML = `<div class="empty-text">Nenhum item encontrado para "${escapeHtml(termo)}".</div>`;
+    return;
+  }
+  const linha = (i, deOutro) => {
+    const o = opcoesDe(i.id).find(x => x.fornecedor_id === state.poAtual.fornecedor?.id)
+           || opcaoPadrao(i.id);
+    const preco = o?.preco ?? state.precos[i.id] ?? null;
+    return `<div class="po-add-linha" onclick="adicionarItemPO('${i.id}')">
+      <div>
+        <div class="po-nome-edit">${escapeHtml(i.nome)}</div>
+        <span class="linha-origem">${escapeHtml(i.unidade || '')}${
+          preco != null ? ' · ' + fmtMoeda(preco) : ' · sem preço'}${
+          deOutro ? ' · não está na matriz deste fornecedor' : ''}</span>
+      </div>
+      <span class="po-add-mais">＋</span>
+    </div>`;
+  };
+  cont.innerHTML =
+    doForn.map(i => linha(i, false)).join('') +
+    (outros.length ? `<div class="text-muted" style="font-size:11px;padding:8px 4px 4px">
+       Outros itens do catálogo</div>` + outros.map(i => linha(i, true)).join('') : '');
+}
+
+function adicionarItemPO(itemId) {
+  const item = state.itens.find(i => i.id === itemId);
+  if (!item) return;
+  const fid = state.poAtual.fornecedor?.id;
+  const alternativas = opcoesDe(itemId);
+  const opcao = alternativas.find(o => o.fornecedor_id === fid) || alternativas[0] || null;
+
+  state.poAtual.linhas.push({
+    item_id: item.id,
+    nome: item.nome,
+    categoria: item.categoria,
+    unidade: item.unidade,
+    qtd: opcao?.moq || 1,
+    preco: opcao?.preco ?? state.precos[item.id] ?? 0,
+    pdvs: [],        // ninguém pediu — é compra da própria área
+    itemIds: [],     // não há solicitação para amarrar
+    codigo: opcao?.codigo || null,
+    moq: opcao?.moq ?? null,
+    opcao, alternativas,
+    incluir: true,
+  });
+  document.getElementById('po-add-busca').value = '';
+  renderPOEdit();
+  showToast(item.nome + ' adicionado ao pedido.', 'success');
 }
 
 function totalPO() {
@@ -1060,10 +1227,18 @@ function renderPOEdit() {
     </div>
     <div class="text-muted mb-2" style="font-size:11px">
       Ajuste quantidade e preço direto na linha. O ✕ tira o item deste pedido —
-      ele volta para a fila e entra no próximo.
+      ${state.poAtual.avulsa ? 'ele some do pedido.' : 'ele volta para a fila e entra no próximo.'}
     </div>
     <div style="border:1px solid var(--border-subtle)">
-      ${linhas.map(linhaHtml).join('')}
+      ${linhas.length ? linhas.map(linhaHtml).join('')
+        : '<div class="empty-text">Pedido vazio — busque um item abaixo para começar.</div>'}
+    </div>
+
+    <div class="po-add">
+      <label class="field-label">Adicionar item ao pedido</label>
+      <input class="input" id="po-add-busca" oninput="renderBuscaItemPO()"
+             placeholder="Buscar no catálogo — ex.: file mignon, morango...">
+      <div id="po-add-result"></div>
     </div>
 
     ${pendencias.length ? `
