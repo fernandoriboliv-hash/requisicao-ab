@@ -513,9 +513,18 @@ function temperaturaOk(it) {
   if (isNaN(t)) return null;
   return t >= parseFloat(f.min_c) && t <= parseFloat(f.max_c);
 }
+// Data ainda sendo digitada. O campo de data do Chrome considera "0002"
+// um ano completo e dispara change a cada dígito: 0002, 0020, 0202, 2026.
+// Sem esta guarda, o sistema anunciava VENCIDO três vezes antes de a
+// pessoa terminar de escrever o ano.
+function dataIncompleta(iso) {
+  const ano = parseInt(String(iso || '').slice(0, 4), 10);
+  return !ano || ano < 1900;
+}
+
 // 'vencido' | 'curta' | 'ok' | null
 function statusValidade(it) {
-  if (!it.validade) return null;
+  if (!it.validade || dataIncompleta(it.validade)) return null;
   const min = parseInt(state.config.validade_minima_dias || '15', 10);
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const v = new Date(it.validade + 'T00:00:00');
@@ -557,20 +566,21 @@ function renderConferencia() {
         <div class="conf-campo">
           <label>TEMPERATURA °C</label>
           <input type="number" step="0.1" placeholder="—" value="${escapeAttr(it.temperatura)}"
-                 class="${tOk === false ? 'ruim' : ''}"
+                 id="cf-temperatura-${i}" class="${tOk === false ? 'ruim' : ''}"
                  onchange="mudarCampo(${i},'temperatura',this.value)">
         </div>
         <span class="conf-faixa">aceita ${f.min_c}°C a ${f.max_c}°C</span>
         <div class="conf-campo">
           <label>VALIDADE</label>
-          <input type="date" value="${escapeAttr(it.validade)}"
+          <input type="date" value="${escapeAttr(it.validade)}" id="cf-validade-${i}"
+                 min="2000-01-01" max="2099-12-31"
                  class="${vSt === 'vencido' ? 'ruim' : vSt === 'curta' ? 'aviso' : ''}"
                  onchange="mudarCampo(${i},'validade',this.value)">
         </div>
         <div class="conf-campo">
           <label>LOTE</label>
           <input type="text" placeholder="opcional" value="${escapeAttr(it.lote)}"
-                 onchange="mudarCampo(${i},'lote',this.value)">
+                 id="cf-lote-${i}" onchange="mudarCampo(${i},'lote',this.value)">
         </div>
         ${tOk === false ? '<span class="conf-faixa" style="color:var(--error)">fora da faixa</span>' : ''}
         ${vSt === 'vencido' ? '<span class="conf-faixa" style="color:var(--error)">VENCIDO</span>'
@@ -618,6 +628,11 @@ function renderConferencia() {
   const nConf = itens.filter(i => i.conferido).length;
   const nProb = itens.filter(temProblema).length;
   const semTemp = itens.filter(i => exigeTemperatura(i) && i.temperatura === '').length;
+
+  // Quem estava com o cursor antes do redesenho. O render troca o HTML
+  // inteiro, então sem isto o campo somia por baixo dos dedos de quem
+  // estava digitando — e cada tecla que dispara change redesenha.
+  const focado = document.activeElement?.id || null;
 
   document.getElementById('confBody').innerHTML = `
     <div class="aviso aviso-info">
@@ -681,6 +696,8 @@ function renderConferencia() {
     <input class="input" id="rec-obs" placeholder="opcional — nota geral sobre a entrega"
            value="${escapeAttr(state.conf.obsGeral || '')}">`;
 
+  if (focado) document.getElementById(focado)?.focus({ preventScroll: true });
+
   recalcularNF();
 }
 
@@ -737,6 +754,10 @@ function mudarCampo(i, campo, valor) {
   guardarCamposVolateis();
   const it = state.conf.itens[i];
   it[campo] = valor;
+
+  // Guarda o valor e não redesenha: o render recria o campo e o conferente
+  // perde o foco no meio do ano. Era isto que impedia digitar a validade.
+  if (campo === 'validade' && dataIncompleta(valor)) return;
 
   // Temperatura fora da faixa e validade curta se explicam sozinhas
   if (campo === 'temperatura' && !it.motivo && temperaturaOk(it) === false) it.motivo = 'temperatura';
