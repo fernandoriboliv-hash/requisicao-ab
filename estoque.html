@@ -1614,7 +1614,7 @@ function renderFila() {
           <td class="td-cat"><span class="cat-pill ${catCls}">${catTxt}</span></td>
           <td class="td-item">${escapeHtml(it.item_nome)}${pacote
             ? ` <span class="pct-badge">por ${rot}</span>` : ''}${it.comentario
-            ? `<br><em style="color:var(--muted);font-size:11px">${escapeHtml(it.comentario)}</em>` : ''}</td>
+            ? `<span class="item-obs">${escapeHtml(it.comentario)}</span>` : ''}</td>
           <td class="num td-solic" data-label="Solicitado">${solicitado}</td>
           <td class="td-entr" data-label="Entregue">${campoEntrega}</td>
           <td class="td-div">${entregue && it.divergencia
@@ -2030,8 +2030,8 @@ function renderItemRowManual(item) {
   const qty = sel ? sel.qty : (state.manual.qtdInputs[item.id] ?? 1);
   return `
     <div class="item-row ${sel ? 'selected' : ''}" id="mrow-${item.id}">
-      <div class="item-check">${sel ? '✓' : ''}</div>
-      <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+      <div class="item-check alvo-toggle" onclick="toggleManualItem('${item.id}')">${sel ? '✓' : ''}</div>
+      <div class="item-name alvo-toggle" onclick="toggleManualItem('${item.id}')">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
       <div class="item-unit">${item.unidade}</div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
@@ -2160,6 +2160,12 @@ function adicionarManual(itemId) {
 function removerManual(itemId) {
   delete state.manual.selecionados[itemId];
   renderItensManual();
+}
+// Marca e desmarca no mesmo toque — o alvo é a caixinha e o nome, não a
+// linha inteira, que também tem o campo de quantidade
+function toggleManualItem(itemId) {
+  if (state.manual.selecionados[itemId]) removerManual(itemId);
+  else adicionarManual(itemId);
 }
 function changeQtyManual(itemId, delta) {
   const input = document.querySelector(`#mrow-${itemId} .qty-input`);
@@ -2323,8 +2329,8 @@ function renderItemRowCompra(item) {
   const qty = sel ? sel.qty : (state.compra.qtdInputs[item.id] ?? 1);
   return `
     <div class="item-row ${sel ? 'selected' : ''}" id="crow-${item.id}">
-      <div class="item-check">${sel ? '✓' : ''}</div>
-      <div class="item-name">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+      <div class="item-check alvo-toggle" onclick="toggleCompraItem('${item.id}')">${sel ? '✓' : ''}</div>
+      <div class="item-name alvo-toggle" onclick="toggleCompraItem('${item.id}')">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
       <div class="item-unit">${item.unidade}</div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
@@ -2389,6 +2395,10 @@ function adicionarCompra(itemId) {
 function removerCompra(itemId) {
   delete state.compra.selecionados[itemId];
   renderItensCompra();
+}
+function toggleCompraItem(itemId) {
+  if (state.compra.selecionados[itemId]) removerCompra(itemId);
+  else adicionarCompra(itemId);
 }
 function changeQtyCompra(itemId, delta) {
   const input = document.querySelector(`#crow-${itemId} .qty-input`);

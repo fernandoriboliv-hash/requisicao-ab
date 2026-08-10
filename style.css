@@ -494,6 +494,45 @@ main, .main {
   }
 }
 
+/* Caixinha e nome do item marcam/desmarcam no toque. O alvo para de ser
+   só o botão "+ Adicionar": a caixinha é o que a pessoa tenta tocar
+   primeiro, e antes ela não fazia nada. */
+.alvo-toggle { cursor: pointer; -webkit-tap-highlight-color: rgba(184,150,62,0.25); }
+.item-check.alvo-toggle:hover { border-color: var(--gold); }
+.item-row:not(.selected) .item-name.alvo-toggle:hover { color: var(--gold); }
+@media (max-width: 900px) {
+  /* dedo, não cursor: a caixinha de 18px vira alvo de 30px sem crescer
+     visualmente, com a área extra por fora da borda */
+  .item-check.alvo-toggle { position: relative; }
+  .item-check.alvo-toggle::after {
+    content: ''; position: absolute; top: -6px; left: -6px; right: -6px; bottom: -6px;
+  }
+}
+
+/* Comentário do cozinheiro na tela de quem separa.
+   Era 11px cinza itálico embaixo de um nome em 16px negrito — estava lá,
+   ninguém via. É uma instrução de trabalho ("cortar em cubos de 3cm"),
+   não um rodapé: quem separa precisa ler antes de pegar a faca. */
+.item-obs {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(37,99,168,0.10);
+  border-left: 3px solid var(--blue);
+  font-size: 13px;
+  font-style: normal;
+  color: var(--text);
+  line-height: 1.35;
+}
+.item-obs::before {
+  content: 'OBS ';
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--blue);
+}
+@media (max-width: 900px) { .item-obs { font-size: 14px; } }
+
 /* Item pedido em pacote de peso variável. O rótulo precisa estar visível
    no momento de pedir: "2" de um item por pacote não é a mesma coisa que
    "2" de um item por quilo, e quem digita tem que saber qual dos dois é. */

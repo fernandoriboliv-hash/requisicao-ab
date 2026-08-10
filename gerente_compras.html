@@ -989,7 +989,7 @@ async function carregarAprovacao() {
         ? `<span class="text-orange" style="font-size:11px"> ⚠ ${(parseFloat(it.quantidade_solicitada)/media).toFixed(1)}× média</span>` : '';
       return `<tr>
         <td><span class="cat-pill ${catCls}">${catTxt}</span></td>
-        <td>${escapeHtml(it.item_nome)}${it.comentario ? `<br><em style="color:var(--muted);font-size:11px">${escapeHtml(it.comentario)}</em>` : ''}${alerta}</td>
+        <td>${escapeHtml(it.item_nome)}${it.comentario ? `<span class="item-obs">${escapeHtml(it.comentario)}</span>` : ''}${alerta}</td>
         <td class="num">${it.quantidade_solicitada} ${it.item_unidade || ''}</td>
       </tr>`;
     }).join('');

@@ -724,8 +724,8 @@ function renderItemRow(item, aba) {
     : '';
   return `
     <div class="item-row ${sel ? 'selected' : ''}" id="row-${aba}-${item.id}">
-      <div class="item-check">${sel ? '✓' : ''}</div>
-      <div class="item-name">${escapeHtml(item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}${
+      <div class="item-check alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${sel ? '✓' : ''}</div>
+      <div class="item-name alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${escapeHtml(item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}${
         pacote ? ` <span class="pct-badge" title="Pedido em pacotes — a Comissaria pesa na separação">por ${escapeHtml(rotuloPacote(item))}</span>` : ''}</div>
       <div class="item-unit">${pacote ? escapeHtml(rotuloPacote(item)) : item.unidade}</div>
       <div class="item-actions-cell">
@@ -819,6 +819,15 @@ function removerItem(aba, itemId) {
   delete state.selecionados[aba][itemId];
   renderItens(aba);
   atualizarCarrinho();
+}
+
+// Marca e desmarca no mesmo toque, como o Chef já faz. O alvo é a caixinha
+// e o nome — de propósito não é a linha inteira: ela também guarda a
+// quantidade e o comentário, e um toque errado ali apagaria o item junto
+// com o que a pessoa escreveu.
+function toggleItem(aba, itemId) {
+  if (state.selecionados[aba][itemId]) removerItem(aba, itemId);
+  else adicionarItem(aba, itemId);
 }
 
 function changeQty(aba, itemId, delta) {

@@ -444,7 +444,7 @@ async function verRequisicaoInterna(sb, id) {
          const est = estimativaPeso(i.quantidade_solicitada, i.peso_medio_pacote, unidadePeso(i));
          return `<tr>
            <td class="td-titulo">${_esc(i.item_nome)}${pct ? ` <span class="pct-badge">por ${rot}</span>` : ''}${
-             i.comentario ? `<br><em style="color:var(--muted);font-size:11px">${_esc(i.comentario)}</em>` : ''}</td>
+             i.comentario ? `<span class="item-obs">${_esc(i.comentario)}</span>` : ''}</td>
            <td data-label="Categoria">${_esc(i.item_categoria || '—')}</td>
            <td class="num" data-label="Pedido">${_qtd(i.quantidade_solicitada)} ${pct ? rot : un}${
              pct && est ? `<br><span class="est-peso">${est}</span>` : ''}</td>
