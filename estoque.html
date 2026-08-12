@@ -1350,6 +1350,8 @@ window.addEventListener('load', async () => {
   const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
   document.getElementById('c-data-entrega').value = isoDate(amanha);
 
+  // Antes da fila: renderFila mostra o autor de cada requisição e lê do mapa
+  await carregarAutores(sb);
   await Promise.all([carregarCatalogo(), carregarFila()]);
   atualizarBadgeChecklist();
   atualizarBadgeDivergencias();
@@ -1648,7 +1650,8 @@ function renderFila() {
       <div class="req-head" onclick="toggleDetail('${r.id}')">
         <span class="req-num">#${String(r.id).slice(0,8)}</span>
         <span class="req-pdv">${escapeHtml(r.pdvs?.nome || '—')}${manualTag}</span>
-        <span class="req-meta">${hora}</span>
+        <span class="req-meta">${hora}${
+          autorComPerfil(r.usuario_id) ? ' · ' + escapeHtml(autorComPerfil(r.usuario_id)) : ''}</span>
         ${entregaTag}
         <span class="req-count">${itens.length} item(ns)</span>
         <span class="badge status-${r.status}">${statusLabel[r.status] || r.status}</span>
@@ -1973,6 +1976,8 @@ function renderHistorico() {
          return `<tr class="clicavel" onclick="verRequisicaoInterna(sb,'${r.id}')">
            <td class="td-titulo">${escapeHtml(r.pdvs?.nome || '—')}${
              r.criada_pelo_estoque ? ' <span class="badge badge-gold" style="font-size:9px">MANUAL</span>' : ''}
+             ${autorComPerfil(r.usuario_id)
+               ? `<span class="autor-linha">${escapeHtml(autorComPerfil(r.usuario_id))}</span>` : ''}
              ${resumoItensCasados(itensQueCasam(r, termo, campo))}</td>
            <td class="text-muted" data-label="Pedido em">${ptDate(r.created_at)}</td>
            <td class="text-muted" data-label="Entrega">${ptDate(dataAlvo(r))}</td>

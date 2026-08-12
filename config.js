@@ -390,13 +390,41 @@ const LABEL_STATUS_REQ = {
   enviado:'Aguardando', separacao:'Em separação', entregue:'Entregue', cancelada:'Cancelada',
 };
 
+// ── Quem pediu ──────────────────────────────────────────────────────────
+// O embed `usuarios!..._usuario_id_fkey(nome)` volta NULL pra todo mundo que
+// não é gerente: o RLS de `usuarios` só libera a própria linha. Quem precisa
+// ver o autor é justamente a Comissaria. A view v_autores (migration 35) tem
+// nome e perfil, sem e-mail, e é legível por qualquer perfil logado.
+let _autores = null;
+
+async function carregarAutores(sb) {
+  if (_autores) return _autores;
+  const { data, error } = await sb.from('v_autores').select('id,nome,perfil');
+  // Sem a migration 35 a view não existe — degrada pra "—" em vez de quebrar
+  _autores = new Map((error ? [] : data).map(u => [u.id, u]));
+  return _autores;
+}
+
+function nomeAutor(usuarioId) {
+  return _autores?.get(usuarioId)?.nome || '';
+}
+
+// "Fulano" ou "Fulano (Chef)" — o perfil separa o pedido do cozinheiro do que
+// o Chef ou a Comissaria lançou em nome do PDV
+const _ROTULO_PERFIL = { executivo: 'Chef', gerente_compras: 'Gerente', estoque: 'Comissaria' };
+
+function autorComPerfil(usuarioId) {
+  const u = _autores?.get(usuarioId);
+  if (!u) return '';
+  const r = _ROTULO_PERFIL[u.perfil];
+  return u.nome + (r ? ' (' + r + ')' : '');
+}
+
 async function verSolicitacaoCompra(sb, id) {
   abrirDetalhe('Carregando...', null);
-  // A FK precisa ser nomeada: a tabela aponta para usuarios em mais de uma
-  // coluna (quem criou, quem aprovou), e sem isso o PostgREST recusa o embed
+  await carregarAutores(sb);
   const { data: s, error } = await sb.from('solicitacoes_compra')
-    .select(`*, pdvs(nome), solicitacao_compra_itens(*, itens(fornecedor_principal)),
-             usuarios!solicitacoes_compra_usuario_id_fkey(nome)`)
+    .select(`*, pdvs(nome), solicitacao_compra_itens(*, itens(fornecedor_principal))`)
     .eq('id', id).single();
   if (error) { abrirDetalhe('Erro', '<div class="empty-text">' + _esc(error.message) + '</div>'); return; }
 
@@ -408,7 +436,7 @@ async function verSolicitacaoCompra(sb, id) {
     'Solicitação de compra — ' + (s.pdvs?.nome || ''),
     `<div class="email-campo"><b>Situação</b><span>${LABEL_STATUS_SOLC[s.status] || s.status}</span></div>
      <div class="email-campo"><b>Criada</b><span>${new Date(s.created_at).toLocaleString('pt-BR')}${
-       s.usuarios?.nome ? ' por ' + _esc(s.usuarios.nome) : ''}</span></div>
+       autorComPerfil(s.usuario_id) ? ' por ' + _esc(autorComPerfil(s.usuario_id)) : ''}</span></div>
      <div class="email-campo"><b>Entra na lista de</b><span>${_data(s.data_competencia)}${
        s.data_entrega_desejada ? ' · entrega pedida ' + _data(s.data_entrega_desejada) : ''}</span></div>
      ${atendidos ? `<div class="email-campo"><b>Compra</b><span>${atendidos} de ${itens.length}
@@ -434,8 +462,9 @@ async function verSolicitacaoCompra(sb, id) {
 
 async function verRequisicaoInterna(sb, id) {
   abrirDetalhe('Carregando...', null);
+  await carregarAutores(sb);
   const { data: r, error } = await sb.from('requisicoes')
-    .select('*, pdvs(nome), requisicao_itens(*), usuarios!requisicoes_usuario_id_fkey(nome)')
+    .select('*, pdvs(nome), requisicao_itens(*)')
     .eq('id', id).single();
   if (error) { abrirDetalhe('Erro', '<div class="empty-text">' + _esc(error.message) + '</div>'); return; }
 
@@ -448,7 +477,7 @@ async function verRequisicaoInterna(sb, id) {
     `<div class="email-campo"><b>Situação</b><span>${LABEL_STATUS_REQ[r.status] || r.status}${
        divs ? ' · ' + divs + ' item(ns) com divergência' : ''}</span></div>
      <div class="email-campo"><b>Criada</b><span>${new Date(r.created_at).toLocaleString('pt-BR')}${
-       r.usuarios?.nome ? ' por ' + _esc(r.usuarios.nome) : ''}</span></div>
+       autorComPerfil(r.usuario_id) ? ' por ' + _esc(autorComPerfil(r.usuario_id)) : ''}</span></div>
      ${r.entregue_em ? `<div class="email-campo"><b>Entregue</b><span>${
        new Date(r.entregue_em).toLocaleString('pt-BR')}</span></div>` : ''}
      ${r.observacao ? `<div class="obs-box mt-2">${_esc(r.observacao)}</div>` : ''}

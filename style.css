@@ -509,6 +509,16 @@ main, .main {
   }
 }
 
+/* Quem pediu — linha discreta abaixo do PDV nas listas de histórico.
+   Aqui o cinza pequeno é adequado: é rastreabilidade para consulta, não
+   instrução de trabalho como o .item-obs abaixo. */
+.autor-linha {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted, #8a8a8a);
+  margin-top: 2px;
+}
+
 /* Comentário do cozinheiro na tela de quem separa.
    Era 11px cinza itálico embaixo de um nome em 16px negrito — estava lá,
    ninguém via. É uma instrução de trabalho ("cortar em cubos de 3cm"),
