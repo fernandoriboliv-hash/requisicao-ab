@@ -340,6 +340,15 @@
        ela pela faixa do polegar. Padrão do iFood: a lista rola por cima. */
     .cart-bar { bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
 
+    /* O carrinho fechado fica estacionado FORA da tela, à direita, com
+       translateX(319px). Isso conta como conteúdo e alarga o documento para
+       445 numa tela de 375. E como a faixa e a barra são position:fixed, elas
+       se dimensionam pela largura do DOCUMENTO — nasciam com 445 e o
+       "Revisar e enviar" caía fora, obrigando a dar zoom out para achar.
+       `clip` corta esse excesso sem criar um contexto de rolagem novo
+       (diferente de `hidden`, que criaria e poderia prender a página). */
+    html, body { overflow-x: clip; }
+
     .bottom-nav { display: flex; }
     .cart-strip.visivel { display: flex; }
     .so-celular { display: block; }
