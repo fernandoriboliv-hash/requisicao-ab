@@ -669,6 +669,16 @@
 
 <div class="toast-stack" id="toasts"></div>
 
+<!-- Barra inferior — só aparece no celular (ver @media). Fica ANTES do
+     <script> de propósito: o init chama switchAba() e precisa encontrar estes
+     botões no DOM, senão a barra nunca acende. -->
+<nav class="bottom-nav" id="bottomNav" aria-label="Navegação principal">
+  <button onclick="switchAba('inicio')"    data-aba="inicio"><span class="bn-ico">⌂</span>Início</button>
+  <button onclick="switchAba('req')"       data-aba="req"><span class="bn-ico">▤</span>Requisição<span class="bn-badge" id="bnBadgeReq" style="display:none"></span></button>
+  <button onclick="switchAba('compra')"    data-aba="compra"><span class="bn-ico">$</span>Compra<span class="bn-badge" id="bnBadgeCompra" style="display:none"></span></button>
+  <button onclick="switchAba('historico')" data-aba="historico"><span class="bn-ico">⏱</span>Histórico</button>
+</nav>
+
 <script>
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -735,6 +745,13 @@ window.addEventListener('load', async () => {
 
   setCat('compra', 'proteina');
   setCat('req', 'proteina');
+
+  // Abre no Início. Precisa passar por switchAba (e não só pelo `active` do
+  // HTML) para o título do topo e a barra inferior ficarem coerentes com a
+  // aba — sem isto o app abria no Início escrito "Solicitar Compra".
+  // Vem por último: carregarRascunhos() já rodou, então o cartão de
+  // rascunhos aparece com a contagem certa.
+  switchAba('inicio');
 });
 
 function isoDate(d) { return d.toISOString().split('T')[0]; }
@@ -1645,7 +1662,9 @@ async function carregarRascunho(id) {
   document.getElementById('compra-obs').value = solc.observacao || '';
   if (solc.data_entrega_desejada) document.getElementById('compra-data-entrega').value = solc.data_entrega_desejada;
 
-  switchAba('inicio');
+  // Abrir rascunho leva para a Compra, que é onde ele foi montado — não para
+  // o Início, que só serviria para a pessoa ter que navegar de novo.
+  switchAba('compra');
   renderItens('compra');
   renderLivres('compra');
   atualizarCarrinho();
@@ -2091,15 +2110,5 @@ async function logout() {
   window.location.href = 'index.html';
 }
 </script>
-
-<!-- Barra inferior. Fica fora do .main-with-sidebar porque é fixa na tela,
-     não parte do conteúdo que rola. O rótulo escrito embaixo do ícone é
-     obrigatório: ícone sozinho é adivinhação. -->
-<nav class="bottom-nav" id="bottomNav" aria-label="Navegação principal">
-  <button onclick="switchAba('inicio')"    data-aba="inicio"><span class="bn-ico">⌂</span>Início</button>
-  <button onclick="switchAba('req')"       data-aba="req"><span class="bn-ico">▤</span>Requisição<span class="bn-badge" id="bnBadgeReq" style="display:none"></span></button>
-  <button onclick="switchAba('compra')"    data-aba="compra"><span class="bn-ico">$</span>Compra<span class="bn-badge" id="bnBadgeCompra" style="display:none"></span></button>
-  <button onclick="switchAba('historico')" data-aba="historico"><span class="bn-ico">⏱</span>Histórico</button>
-</nav>
 </body>
 </html>
