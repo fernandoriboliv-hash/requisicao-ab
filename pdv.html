@@ -208,6 +208,10 @@
   /* ── Barra inferior — só no celular ──────────────────────────
      No desktop a sidebar já resolve; no celular ela vira gaveta, que
      esconde justamente o que se usa o tempo todo. */
+  /* Tudo que é só da versão de celular. O desktop continua exatamente como
+     estava antes de 13/08: sidebar completa, sem Início e sem barra. */
+  .so-celular { display: none; }
+
   .bottom-nav {
     display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 210;
     background: var(--surface); border-top: 1px solid var(--border);
@@ -230,7 +234,8 @@
     padding: 15px 18px; min-height: 52px;
     align-items: center; justify-content: space-between; gap: 12px;
   }
-  .cart-strip.visivel { display: flex; }
+  /* `.visivel` só liga dentro do @media de celular — no desktop a faixa não
+     existe, porque lá o carrinho lateral já fica visível o tempo todo. */
   .cart-strip .cs-cta { font-weight: 700; white-space: nowrap; }
   .cart-strip:focus-visible { outline: 2px solid var(--text); outline-offset: -4px; }
 
@@ -322,9 +327,16 @@
     .cart-bar { bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
 
     .bottom-nav { display: flex; }
+    .cart-strip.visivel { display: flex; }
+    .so-celular { display: block; }
     /* O flutuante sai de cena: com a barra inferior ele ficava por cima dela
        e cobria o último item da lista. Quem assume é a faixa. */
     .cart-fab { display: none !important; }
+
+    /* Carrinho aberto = as duas barras somem. O rodapé do carrinho tem o
+       "Revisar e Enviar" e a barra ficava por cima dele. */
+    body.cart-aberto .bottom-nav,
+    body.cart-aberto .cart-strip { display: none !important; }
     /* Espaço para o conteúdo não terminar embaixo das barras */
     .main-with-sidebar { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
     body.tem-carrinho .main-with-sidebar { padding-bottom: 136px; }
@@ -346,9 +358,11 @@
     <div class="sub">A&amp;B · <span id="pdvChip">PDV</span></div>
   </div>
   <div class="sidebar-nav">
-    <div class="nav-item active" onclick="goTab('inicio',this)"><span class="nav-icon">⌂</span> Início</div>
-    <div class="nav-item" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição Comissaria</div>
+    <!-- Início é da versão de celular. No desktop a sidebar já mostra tudo,
+         então o menu de entrada só somaria um clique. -->
+    <div class="nav-item so-celular" onclick="goTab('inicio',this)"><span class="nav-icon">⌂</span> Início</div>
     <div class="nav-item" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
+    <div class="nav-item" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição Comissaria</div>
     <div class="nav-item" onclick="goTab('rascunhos',this)">
       <span class="nav-icon">✎</span> Rascunhos
       <span class="nav-badge" id="badgeRascunhos"></span>
@@ -772,12 +786,16 @@ window.addEventListener('load', async () => {
   setCat('compra', 'proteina');
   setCat('req', 'proteina');
 
-  // Abre no Início. Precisa passar por switchAba (e não só pelo `active` do
-  // HTML) para o título do topo e a barra inferior ficarem coerentes com a
-  // aba — sem isto o app abria no Início escrito "Solicitar Compra".
-  // Vem por último: carregarRascunhos() já rodou, então o cartão de
-  // rascunhos aparece com a contagem certa.
-  switchAba('inicio');
+  // Celular abre no Início; desktop continua abrindo em Solicitar Compra,
+  // como era antes de 13/08. O Início é a resposta para a sidebar virar
+  // gaveta no celular — no desktop ela está sempre à vista e não há problema
+  // a resolver.
+  //
+  // Precisa passar por switchAba (e não só pelo `active` do HTML) para o
+  // título do topo e a barra inferior ficarem coerentes com a aba. Vem por
+  // último porque carregarRascunhos() já rodou, então o cartão de rascunhos
+  // aparece com a contagem certa.
+  switchAba(window.innerWidth <= 900 ? 'inicio' : 'compra');
 });
 
 function isoDate(d) { return d.toISOString().split('T')[0]; }
@@ -1045,13 +1063,19 @@ function removeLivre(aba, idx) {
 // =====================================================================
 // CARRINHO — sidebar direita (desktop) + drawer (mobile)
 // =====================================================================
+// A classe no <body> tira a barra inferior e a faixa do caminho enquanto o
+// carrinho está aberto. Sem isso a barra (z-index 210) fica POR CIMA do
+// "Revisar e Enviar", que vive no rodapé do carrinho (z-index 40): o toque
+// batia na barra e a requisição não era enviada.
 function abrirCartSidebar() {
   document.getElementById('cartSidebar').classList.add('open');
   document.getElementById('cartOverlay').classList.add('open');
+  document.body.classList.add('cart-aberto');
 }
 function fecharCartSidebar() {
   document.getElementById('cartSidebar').classList.remove('open');
   document.getElementById('cartOverlay').classList.remove('open');
+  document.body.classList.remove('cart-aberto');
 }
 
 function atualizarCarrinho() {
