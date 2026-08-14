@@ -183,6 +183,50 @@
   .cart-count { font-size: 22px; font-weight: 500; color: var(--text); margin-right: 8px; }
   .cart-actions { display: flex; gap: 8px; }
 
+  /* ── Início ──────────────────────────────────────────────────
+     Cartões grandes de propósito: cozinheiro mexe no celular com a mão
+     ocupada, e a equipe tem gente de 50+ com dificuldade de enxergar. */
+  .inicio-cards { display: flex; flex-direction: column; gap: 12px; max-width: 560px; }
+  .card-acao {
+    display: flex; align-items: center; gap: 16px; width: 100%;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); text-align: left; cursor: pointer;
+    padding: 20px 18px; min-height: 76px; font: inherit;
+  }
+  .card-acao:hover { border-color: var(--gold); }
+  .card-acao .glifo { font-size: 26px; line-height: 1; opacity: .85; flex: 0 0 auto; width: 30px; text-align: center; }
+  .card-acao .txt { display: flex; flex-direction: column; gap: 3px; }
+  .card-acao .rot { font-size: 17px; font-weight: 600; }
+  .card-acao .desc { font-size: 13px; color: var(--muted); }
+  .card-acao.primaria {
+    background: var(--gold); border-color: var(--gold); color: #14100A; min-height: 92px;
+  }
+  .card-acao.primaria .rot { font-size: 20px; }
+  .card-acao.primaria .desc { color: rgba(20,16,10,.75); }
+  .card-acao:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* ── Barra inferior — só no celular ──────────────────────────
+     No desktop a sidebar já resolve; no celular ela vira gaveta, que
+     esconde justamente o que se usa o tempo todo. */
+  .bottom-nav {
+    display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 210;
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .bottom-nav button {
+    flex: 1; min-height: 58px; background: none; border: 0; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; padding: 7px 2px; color: var(--muted); font: inherit; font-size: 10.5px;
+  }
+  .bottom-nav .bn-ico { font-size: 19px; line-height: 1; }
+  .bottom-nav button.on { color: var(--gold); }
+  .bottom-nav .bn-badge {
+    position: absolute; top: 5px; margin-left: 20px;
+    background: var(--gold); color: #14100A; font-size: 10px; font-weight: 700;
+    min-width: 17px; height: 17px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center; padding: 0 4px;
+  }
+
   /* histórico */
   .hist-card {
     background: var(--panel);
@@ -259,6 +303,15 @@
     .cart-bar .cart-actions .btn { flex: 1; }
     .cart-count { font-size: 20px; }
 
+    /* O carrinho sobe para cima da barra de navegação em vez de brigar com
+       ela pela faixa do polegar. Padrão do iFood: a lista rola por cima. */
+    .cart-bar { bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+
+    .bottom-nav { display: flex; }
+    /* Espaço para o conteúdo não terminar embaixo da barra */
+    .main-with-sidebar { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+    body.tem-carrinho .main-with-sidebar { padding-bottom: 190px; }
+
     /* Filtros da compra/req */
     .form-row.col2 { grid-template-columns: 1fr !important; }
 
@@ -276,8 +329,9 @@
     <div class="sub">A&amp;B · <span id="pdvChip">PDV</span></div>
   </div>
   <div class="sidebar-nav">
-    <div class="nav-item active" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
+    <div class="nav-item active" onclick="goTab('inicio',this)"><span class="nav-icon">⌂</span> Início</div>
     <div class="nav-item" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição Comissaria</div>
+    <div class="nav-item" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
     <div class="nav-item" onclick="goTab('rascunhos',this)">
       <span class="nav-icon">✎</span> Rascunhos
       <span class="nav-badge" id="badgeRascunhos"></span>
@@ -305,9 +359,48 @@
   <div class="main">
 
   <!-- ========================================================== -->
+  <!-- INÍCIO — o app abre aqui                                   -->
+  <!-- ========================================================== -->
+  <!-- Antes o app abria em Solicitar Compra, que é o que o cozinheiro
+       menos usa: ele entrava para pedir à Comissaria e caía na tela de
+       pedir ao fornecedor. -->
+  <div class="tab-content active" id="tab-inicio">
+    <div class="inicio-cards">
+      <button class="card-acao primaria" onclick="switchAba('req')">
+        <span class="glifo">▤</span>
+        <span class="txt">
+          <span class="rot">Fazer Requisição</span>
+          <span class="desc">Pedir para a Comissaria</span>
+        </span>
+      </button>
+      <button class="card-acao" onclick="switchAba('compra')">
+        <span class="glifo">$</span>
+        <span class="txt">
+          <span class="rot">Solicitar Compra</span>
+          <span class="desc">Item que a Comissaria não tem</span>
+        </span>
+      </button>
+      <button class="card-acao" onclick="switchAba('historico')">
+        <span class="glifo">⏱</span>
+        <span class="txt">
+          <span class="rot">Meu Histórico</span>
+          <span class="desc">O que este PDV já pediu</span>
+        </span>
+      </button>
+      <button class="card-acao" id="cardRascunhos" onclick="switchAba('rascunhos')" style="display:none">
+        <span class="glifo">✎</span>
+        <span class="txt">
+          <span class="rot">Rascunhos <span id="cardRascunhosQtd"></span></span>
+          <span class="desc">Pedidos começados e não enviados</span>
+        </span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========================================================== -->
   <!-- ABA COMPRA — Processo 1                                    -->
   <!-- ========================================================== -->
-  <div class="tab-content active" id="tab-compra">
+  <div class="tab-content" id="tab-compra">
 
     <div class="aviso aviso-info" id="avisoCorte">
       <span id="avisoCorteTxt">Carregando regra de corte...</span>
@@ -586,7 +679,7 @@ const state = {
   pdvId: null,
   pdvNome: '',
   catalogo: [],          // todos os itens ativos
-  abaAtual: 'compra',    // 'compra' | 'req'
+  abaAtual: 'inicio',    // 'inicio' | 'req' | 'compra' | 'rascunhos' | 'historico' | 'relatorios'
   catAtual: { compra: 'proteina', req: 'proteina' },
   selecionados: { compra: {}, req: {} }, // { itemId: { item, qty, comentario } }
   livres: { compra: [], req: [] },        // [{ nome, qtd, unidade, comentario }]
@@ -925,6 +1018,7 @@ function atualizarCarrinho() {
   document.body.classList.toggle('has-cart', usaCart);
   if (!usaCart) {
     fecharCartSidebar();
+    atualizarBadgesBarra();
     return;
   }
 
@@ -977,12 +1071,14 @@ function atualizarCarrinho() {
 
   // FAB badge
   document.getElementById('cartFabBadge').textContent = total;
+  atualizarBadgesBarra();
 
   // Atualiza aviso de corte (considera prazo dos itens agora no carrinho)
   if (aba === 'compra') atualizarAvisoCorte();
 }
 
 const tabTitles = {
+  inicio:     ['Início', 'O que você quer fazer?'],
   compra:     ['Solicitar Compra', 'Pedido para compra externa (aprovação do Gerente)'],
   req:        ['Requisição da Comissaria', 'Pedido de itens do estoque interno — sem aprovação'],
   rascunhos:  ['Rascunhos', 'Solicitações salvas pra continuar depois'],
@@ -1009,13 +1105,50 @@ function goTab(aba, el) {
   document.getElementById('topTitle').textContent = t;
   document.getElementById('topSub').textContent = s;
   atualizarCarrinho();
+  sincronizarBarraInferior(aba);
   if (aba === 'relatorios') setupRelatorio();
   if (aba === 'rascunhos') carregarRascunhos();
   if (aba === 'historico') setupHistoricoTab();
+  if (aba === 'inicio') atualizarCardRascunhos();
   if (window.innerWidth <= 900) {
     document.querySelector('.sidebar')?.classList.remove('open');
     document.getElementById('sbOverlay')?.classList.remove('open');
   }
+}
+
+// A barra inferior só tem 4 dos 6 destinos. Rascunhos e Relatórios ficam na
+// sidebar e no Início — nenhum item da barra acende quando se está neles, o
+// que é honesto: acender o errado mentiria sobre onde a pessoa está.
+function sincronizarBarraInferior(aba) {
+  document.querySelectorAll('#bottomNav button').forEach(b =>
+    b.classList.toggle('on', b.dataset.aba === aba));
+}
+
+// O carrinho de cada aba tem contagem própria — a bolinha na barra é o que
+// avisa que sobrou item não enviado na outra aba.
+function atualizarBadgesBarra() {
+  [['req', 'bnBadgeReq'], ['compra', 'bnBadgeCompra']].forEach(([aba, id]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const n = Object.keys(state.selecionados[aba] || {}).length
+            + (state.livres[aba] || []).length;
+    el.textContent = n;
+    el.style.display = n ? 'flex' : 'none';
+  });
+  // Empurra o conteúdo quando o carrinho aparece, para o último item da lista
+  // não ficar embaixo das duas barras
+  document.body.classList.toggle('tem-carrinho',
+    document.querySelector('.cart-bar.visible') !== null);
+}
+
+function atualizarCardRascunhos() {
+  const card = document.getElementById('cardRascunhos');
+  const badge = document.getElementById('badgeRascunhos');
+  if (!card) return;
+  const n = (badge?.textContent || '').trim();
+  card.style.display = n && n !== '0' ? 'flex' : 'none';
+  const qtd = document.getElementById('cardRascunhosQtd');
+  if (qtd) qtd.textContent = n ? '(' + n + ')' : '';
 }
 // Compat: manter switchAba como alias pra chamadas internas (ex: novoPedido, load inicial).
 // Acha o item de menu pelo próprio onclick em vez de por índice fixo — o índice
@@ -1512,7 +1645,7 @@ async function carregarRascunho(id) {
   document.getElementById('compra-obs').value = solc.observacao || '';
   if (solc.data_entrega_desejada) document.getElementById('compra-data-entrega').value = solc.data_entrega_desejada;
 
-  switchAba('compra');
+  switchAba('inicio');
   renderItens('compra');
   renderLivres('compra');
   atualizarCarrinho();
@@ -1958,5 +2091,15 @@ async function logout() {
   window.location.href = 'index.html';
 }
 </script>
+
+<!-- Barra inferior. Fica fora do .main-with-sidebar porque é fixa na tela,
+     não parte do conteúdo que rola. O rótulo escrito embaixo do ícone é
+     obrigatório: ícone sozinho é adivinhação. -->
+<nav class="bottom-nav" id="bottomNav" aria-label="Navegação principal">
+  <button onclick="switchAba('inicio')"    data-aba="inicio"><span class="bn-ico">⌂</span>Início</button>
+  <button onclick="switchAba('req')"       data-aba="req"><span class="bn-ico">▤</span>Requisição<span class="bn-badge" id="bnBadgeReq" style="display:none"></span></button>
+  <button onclick="switchAba('compra')"    data-aba="compra"><span class="bn-ico">$</span>Compra<span class="bn-badge" id="bnBadgeCompra" style="display:none"></span></button>
+  <button onclick="switchAba('historico')" data-aba="historico"><span class="bn-ico">⏱</span>Histórico</button>
+</nav>
 </body>
 </html>
