@@ -220,6 +220,20 @@
   }
   .bottom-nav .bn-ico { font-size: 19px; line-height: 1; }
   .bottom-nav button.on { color: var(--gold); }
+  /* Faixa do carrinho — padrão iFood/Rappi, que a equipe já usa todo dia.
+     Escondida no desktop, onde o carrinho lateral fica sempre visível. */
+  .cart-strip {
+    display: none; position: fixed; left: 0; right: 0; z-index: 205;
+    bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+    background: var(--gold); color: #14100A; border: 0; cursor: pointer;
+    font: inherit; font-size: 14px; font-weight: 700;
+    padding: 15px 18px; min-height: 52px;
+    align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .cart-strip.visivel { display: flex; }
+  .cart-strip .cs-cta { font-weight: 700; white-space: nowrap; }
+  .cart-strip:focus-visible { outline: 2px solid var(--text); outline-offset: -4px; }
+
   .bottom-nav .bn-badge {
     position: absolute; top: 5px; margin-left: 20px;
     background: var(--gold); color: #14100A; font-size: 10px; font-weight: 700;
@@ -308,9 +322,12 @@
     .cart-bar { bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
 
     .bottom-nav { display: flex; }
-    /* Espaço para o conteúdo não terminar embaixo da barra */
-    .main-with-sidebar { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
-    body.tem-carrinho .main-with-sidebar { padding-bottom: 190px; }
+    /* O flutuante sai de cena: com a barra inferior ele ficava por cima dela
+       e cobria o último item da lista. Quem assume é a faixa. */
+    .cart-fab { display: none !important; }
+    /* Espaço para o conteúdo não terminar embaixo das barras */
+    .main-with-sidebar { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+    body.tem-carrinho .main-with-sidebar { padding-bottom: 136px; }
 
     /* Filtros da compra/req */
     .form-row.col2 { grid-template-columns: 1fr !important; }
@@ -637,6 +654,15 @@
 </aside>
 <button class="cart-fab" id="cartFab" onclick="abrirCartSidebar()" aria-label="Ver lista">
   🛒<span class="cart-fab-badge" id="cartFabBadge">0</span>
+</button>
+
+<!-- Faixa do carrinho no celular. Substitui o botão flutuante, que colidia
+     com a barra inferior e cobria o último item da lista — o mesmo defeito
+     que já tinha aparecido na tela da Comissaria em julho.
+     Alvo da largura da tela, e a lista rola por cima dela. -->
+<button class="cart-strip" id="cartStrip" onclick="abrirCartSidebar()" style="display:none">
+  <span id="cartStripQtd">0 itens</span>
+  <span class="cs-cta">Revisar e enviar →</span>
 </button>
 
 <!-- Modal de revisão -->
@@ -1144,18 +1170,28 @@ function sincronizarBarraInferior(aba) {
 // O carrinho de cada aba tem contagem própria — a bolinha na barra é o que
 // avisa que sobrou item não enviado na outra aba.
 function atualizarBadgesBarra() {
+  const conta = aba => Object.keys(state.selecionados[aba] || {}).length
+                     + (state.livres[aba] || []).length;
+
   [['req', 'bnBadgeReq'], ['compra', 'bnBadgeCompra']].forEach(([aba, id]) => {
     const el = document.getElementById(id);
     if (!el) return;
-    const n = Object.keys(state.selecionados[aba] || {}).length
-            + (state.livres[aba] || []).length;
+    const n = conta(aba);
     el.textContent = n;
     el.style.display = n ? 'flex' : 'none';
   });
-  // Empurra o conteúdo quando o carrinho aparece, para o último item da lista
-  // não ficar embaixo das duas barras
-  document.body.classList.toggle('tem-carrinho',
-    document.querySelector('.cart-bar.visible') !== null);
+
+  // A faixa só existe quando há item na aba aberta. Carrinho vazio, tela cheia.
+  const strip = document.getElementById('cartStrip');
+  if (strip) {
+    const n = ['req', 'compra'].includes(state.abaAtual) ? conta(state.abaAtual) : 0;
+    strip.classList.toggle('visivel', n > 0);
+    strip.style.display = '';   // a classe manda; o inline só existia pro estado inicial
+    document.getElementById('cartStripQtd').textContent =
+      n === 1 ? '1 item no pedido' : n + ' itens no pedido';
+    // Empurra o conteúdo para o último item não ficar debaixo das duas barras
+    document.body.classList.toggle('tem-carrinho', n > 0);
+  }
 }
 
 function atualizarCardRascunhos() {
