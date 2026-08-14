@@ -57,7 +57,17 @@
     display: flex; align-items: center; justify-content: center;
   }
   .item-row.selected .item-check { background: var(--gold); border-color: var(--gold); color: #0F1117; }
-  .item-name { font-size: 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  /* Uma coluna `1fr` do grid NÃO encolhe abaixo do conteúdo: o padrão é
+     min-width auto. Nome de fornecedor comprido (MONICA PASSAMANI
+     FANTINATO/M) empurrava a linha até 445px numa tela de 375, e aí a
+     página inteira ganhava rolagem lateral. Pior: elemento `position:
+     fixed` se dimensiona pela largura do DOCUMENTO, então a faixa do
+     carrinho nascia com 445 e o "Revisar e enviar" caía fora da tela. */
+  .item-row > * { min-width: 0; }
+  .item-name {
+    font-size: 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    min-width: 0; overflow-wrap: anywhere;
+  }
   .item-name .forn {
     font-size: 11px;
     color: var(--gold);
@@ -214,6 +224,7 @@
 
   .bottom-nav {
     display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 210;
+    max-width: 100vw;
     background: var(--surface); border-top: 1px solid var(--border);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -228,6 +239,9 @@
      Escondida no desktop, onde o carrinho lateral fica sempre visível. */
   .cart-strip {
     display: none; position: fixed; left: 0; right: 0; z-index: 205;
+    /* Trava contra rolagem lateral: se algum conteúdo voltar a estourar a
+       largura, a faixa continua do tamanho da TELA e não do documento. */
+    max-width: 100vw;
     bottom: calc(58px + env(safe-area-inset-bottom, 0px));
     background: var(--gold); color: #14100A; border: 0; cursor: pointer;
     font: inherit; font-size: 14px; font-weight: 700;
