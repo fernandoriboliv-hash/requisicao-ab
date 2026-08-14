@@ -1318,24 +1318,57 @@ async function enviarCompra() {
   mostrarSucesso(solcId, 'compra', competencia);
 }
 
+// Envio numa transação só (migration 39). Antes gravava a requisição e depois
+// os itens: em 12/08 o lote de itens estourou e a Comissaria recebeu duas
+// requisições vazias, que o perfil pdv nem consegue apagar (o RLS recusa em
+// silêncio). Agora ou entra requisição com itens, ou não entra nada.
 async function enviarRequisicao() {
   const obs = document.getElementById('req-obs').value.trim();
   const dataEntrega = document.getElementById('req-data-entrega').value || null;
 
-  const { data, error } = await inserirIdempotente(sb, 'requisicoes', {
-    pdv_id: state.pdvId,
-    usuario_id: state.perfil.id,
-    status: 'enviado',
-    data_competencia: isoDate(new Date()),
-    data_entrega_desejada: dataEntrega,
-    observacao: obs || null,
-  }, 'req');
+  const { data: reqId, error } = await sb.rpc('criar_requisicao', {
+    p_pdv_id:       state.pdvId,
+    p_data_entrega: dataEntrega,
+    p_observacao:   obs || null,
+    p_client_token: tokenCarrinho('req'),
+    p_itens:        itensRequisicaoPayload(),
+  });
   if (error) throw error;
 
-  await inserirItensRequisicao(data.id);
-
   limparCarrinho('req');
-  mostrarSucesso(data.id, 'req', data.data_competencia);
+  mostrarSucesso(reqId, 'req', isoDate(new Date()));
+}
+
+// Monta o array que a função do banco consome. O `pedido_por` continua sendo
+// enviado, mas quem garante o valor agora é o servidor — item livre não tem
+// item de catálogo por trás e era exatamente aí que faltava.
+function itensRequisicaoPayload() {
+  const sel = Object.values(state.selecionados.req);
+  const livres = state.livres.req;
+  return [
+    ...sel.map(s => ({
+      item_id: s.item.id,
+      // Snapshot com o nome da cozinha: é quem vai ler na separação e no
+      // histórico. O item_id preserva o vínculo com a ficha de compra.
+      item_nome: nomeExibicao(s.item),
+      item_categoria: s.item.categoria,
+      item_unidade: s.item.unidade,
+      quantidade_solicitada: s.qty,
+      comentario: s.comentario || null,
+      item_livre: false,
+      ...snapshotPacote(s.item),
+    })),
+    ...livres.map(l => ({
+      item_id: null,
+      item_nome: l.nome,
+      item_categoria: state.catAtual.req,
+      item_unidade: l.unidade,
+      quantidade_solicitada: l.qtd,
+      comentario: l.comentario || null,
+      item_livre: true,
+      ...snapshotPacote(null),
+    })),
+  ];
 }
 
 async function inserirItensSolicitacao(solcId, aba) {
@@ -1361,6 +1394,11 @@ async function inserirItensSolicitacao(solcId, aba) {
     quantidade_solicitada: l.qtd,
     comentario: l.comentario || null,
     item_livre: true,
+    // Mesmo defeito que derrubou a requisição em 12/08: o PostgREST monta o
+    // INSERT em lote com a UNIÃO das chaves e preenche o que falta com NULL,
+    // não com o DEFAULT. Sem isto, misturar item de catálogo com item livre
+    // manda pedido_por nulo e o lote inteiro é recusado.
+    ...snapshotPacote(null),
   }));
   const todos = [...itensCat, ...itensLivres];
   if (todos.length > 0) {
@@ -1381,49 +1419,10 @@ async function inserirItensSolicitacao(solcId, aba) {
   }
 }
 
-async function inserirItensRequisicao(reqId) {
-  const sel = Object.values(state.selecionados.req);
-  const livres = state.livres.req;
-  const itensCat = sel.map(s => ({
-    requisicao_id: reqId,
-    item_id: s.item.id,
-    // Snapshot com o nome da cozinha: é quem vai ler na separação e no
-    // histórico. O item_id preserva o vínculo com a ficha de compra.
-    item_nome: nomeExibicao(s.item),
-    item_categoria: s.item.categoria,
-    item_unidade: s.item.unidade,
-    quantidade_solicitada: s.qty,
-    comentario: s.comentario || null,
-    item_livre: false,
-    ...snapshotPacote(s.item),
-  }));
-  const itensLivres = livres.map(l => ({
-    requisicao_id: reqId,
-    item_id: null,
-    item_nome: l.nome,
-    item_categoria: state.catAtual.req,
-    item_unidade: l.unidade,
-    quantidade_solicitada: l.qtd,
-    comentario: l.comentario || null,
-    item_livre: true,
-  }));
-  const todos = [...itensCat, ...itensLivres];
-  if (todos.length > 0) {
-    const { error } = await sb.from('requisicao_itens').insert(todos);
-    if (error) throw error;
-  }
-  if (livres.length > 0) {
-    await sb.from('itens_pendentes').insert(livres.map(l => ({
-      origem: 'requisicao',
-      requisicao_id: reqId,
-      pdv_id: state.pdvId,
-      nome_digitado: l.nome,
-      categoria_sugerida: state.catAtual.req,
-      unidade_sugerida: l.unidade,
-      status: 'pendente',
-    })));
-  }
-}
+// inserirItensRequisicao() saiu daqui: era a segunda etapa do envio em duas
+// partes que deixou requisição vazia na Comissaria. Quem grava os itens agora
+// é a função criar_requisicao no banco, junto com o cabeçalho — inclusive a
+// fila de itens_pendentes dos itens digitados à mão.
 
 function mostrarSucesso(id, aba, competencia) {
   const numStr = '#' + String(id).slice(0, 8);
