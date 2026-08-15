@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608150815">
+<link rel="stylesheet" href="style.css?v=202608150940">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608150815"></script>
+<script src="config.js?v=202608150940"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -360,6 +360,13 @@
        "Revisar e Enviar" e a barra ficava por cima dele. */
     body.cart-aberto .bottom-nav,
     body.cart-aberto .cart-strip { display: none !important; }
+
+    /* A gaveta vai de topo a rodapé (z-index 70) e a barra inferior é
+       desenhada por cima dela (z-index 210) — o "Sair do sistema" ficava
+       escondido atrás dos botões da barra. O rodapé da gaveta está preso
+       no fim de um flex column de altura fixa, então crescer o padding
+       empurra o nome e o botão para CIMA da barra, em vez de para fora. */
+    .sidebar-foot { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
     /* Espaço para o conteúdo não terminar embaixo das barras */
     .main-with-sidebar { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
     body.tem-carrinho .main-with-sidebar { padding-bottom: 136px; }
