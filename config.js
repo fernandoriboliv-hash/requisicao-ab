@@ -337,7 +337,9 @@ function _edAproveitamento() {
   if (!el.value) {
     nota.className = 'ed-nota';
     nota.textContent = 'Deixe em branco quando o item é contado do mesmo jeito que é comprado.';
-  } else if (isNaN(n) || n <= 0 || n > 100) {
+  // Piso 1, igual ao do banco: 0,62 é o fator digitado no lugar da
+  // porcentagem, e passaria por qualquer teste de "maior que zero".
+  } else if (isNaN(n) || n < 1 || n > 100) {
     nota.className = 'ed-nota ed-nota-erro';
     nota.textContent = 'Use a porcentagem inteira, de 1 a 100. 62 quer dizer 62%.';
   } else {
@@ -358,8 +360,9 @@ async function salvarEditorItem() {
   const pacote = document.getElementById('ed-pede').value === 'pacote';
   const peso   = parseFloat(String(t('ed-peso')).replace(',', '.'));
   const aprov  = t('ed-aprov') ? parseFloat(String(t('ed-aprov')).replace(',', '.')) : null;
-  if (aprov != null && (isNaN(aprov) || aprov <= 0 || aprov > 100)) {
-    showToast('Aproveitamento tem que ser uma porcentagem de 1 a 100.', 'error'); return;
+  if (aprov != null && (isNaN(aprov) || aprov < 1 || aprov > 100)) {
+    showToast('Aproveitamento tem que ser uma porcentagem de 1 a 100. '
+            + 'Para 62%, escreva 62 — não 0,62.', 'error'); return;
   }
 
   const patch = {
