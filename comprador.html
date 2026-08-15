@@ -1995,8 +1995,10 @@ function renderMatriz() {
           </div>
           ${opsHtml}
           ${avisoEpocas}
-          <div style="padding:12px 16px">
+          <div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-sm btn-secondary" onclick="abrirIF(null,'${i.id}')">+ Adicionar fornecedor</button>
+            <button class="btn btn-sm btn-outline" onclick="editarItemDaMatriz('${i.id}')"
+                    title="Nome que o cozinheiro vê, nome do inventário, aproveitamento, unidade de pedido">Editar cadastro do item</button>
           </div>
         </div>
       </div>`;
@@ -2008,6 +2010,17 @@ function renderMatriz() {
 function toggleMtz(i) {
   document.getElementById('bodyM-' + i).classList.toggle('open');
   document.getElementById('chevM-' + i).classList.toggle('open');
+}
+
+// Editor de item compartilhado com o gerente (config.js). state.itens é
+// parcial aqui — o editor relê o item inteiro do banco ao abrir; o que
+// passo é só a lista para o campo "vem de qual item bruto".
+function editarItemDaMatriz(itemId) {
+  abrirEditorItem(itemId, state.itens, item => {
+    const i = state.itens.findIndex(x => x.id === item.id);
+    if (i >= 0) state.itens[i] = { ...state.itens[i], ...item };
+    renderMatriz();
+  });
 }
 
 async function tornarPrimario(itemId, ifId) {

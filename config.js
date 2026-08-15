@@ -162,9 +162,256 @@ function nomeExibicao(item) {
   return item?.nome_curto || item?.nome || '';
 }
 
+// O inventário é o TERCEIRO vocabulário. Cai no nome da cozinha, e só
+// depois no de compra — quem conta a câmara fala como a cozinha, não
+// como o fornecedor.
+function nomeInventario(item) {
+  return item?.nome_inventario || item?.nome_curto || item?.nome || '';
+}
+
 // true quando o item deve aparecer na lista de REQUISIÇÃO
 function ehDeRequisicao(item) {
   return item?.req_ativo !== false;
+}
+
+// =====================================================================
+// EDITOR DE ITEM — a paridade feita na tela, não na planilha
+// =====================================================================
+// Uma tela só, aberta do Catálogo (gerente) ou da matriz (comprador),
+// com tudo que descreve o item nos três vocabulários. Antes disso a
+// paridade só existia exportando planilha, revisando fora e carregando
+// de volta por script; qualquer ajuste de um item pedia a volta inteira.
+//
+// abrirEditorItem(itemId, catalogo, aoSalvar)
+//   catalogo  usado só para montar a lista de "vem de qual item"
+//   aoSalvar  chamado com o item atualizado, para a tela se redesenhar
+//
+// O item é relido do banco ao abrir: as duas telas carregam colunas
+// diferentes de `itens`, e editar em cima de um objeto parcial apagaria
+// o que não veio no SELECT.
+
+const _CAT_ITEM = { proteina:'Proteína', laticinios:'Laticínios',
+                    hortifruti:'Hortifruti', diversos:'Diversos' };
+const _ROTULOS_PACOTE = ['PCT', 'UN', 'CX', 'BDJ', 'PT', 'SC'];
+
+function _escEd(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function _montarEditorItem() {
+  if (document.getElementById('itemEditorModal')) return;
+  const div = document.createElement('div');
+  div.className = 'modal-overlay';
+  div.id = 'itemEditorModal';
+  div.innerHTML = `
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <span>Editar item</span>
+        <button class="modal-close" onclick="fecharModal('itemEditorModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="ed-secao">Os três nomes do mesmo produto</div>
+        <div class="field">
+          <label class="field-label">Nome de compra — o que a compradora manda ao fornecedor</label>
+          <input class="input" id="ed-nome">
+        </div>
+        <div class="form-row col2">
+          <div><label class="field-label">Nome na requisição — o que o cozinheiro vê</label>
+            <input class="input" id="ed-curto" placeholder="vazio = usa o nome de compra"></div>
+          <div><label class="field-label">Nome no inventário — o que aparece na contagem</label>
+            <input class="input" id="ed-inv-nome" placeholder="vazio = usa o nome da requisição"></div>
+        </div>
+
+        <div class="ed-secao">Cadastro</div>
+        <div class="form-row col3">
+          <div><label class="field-label">Categoria</label>
+            <select class="select" id="ed-cat">
+              <option value="proteina">Proteína</option>
+              <option value="laticinios">Laticínios</option>
+              <option value="hortifruti">Hortifruti</option>
+              <option value="diversos">Diversos</option>
+            </select></div>
+          <div><label class="field-label">Unidade de compra</label>
+            <input class="input" id="ed-unid" placeholder="KG, UN, CX..."></div>
+          <div><label class="field-label">Fornecedor principal</label>
+            <input class="input" id="ed-forn"></div>
+        </div>
+        <div class="ed-checks">
+          <label><input type="checkbox" id="ed-req"> Aparece na lista de requisição</label>
+          <label><input type="checkbox" id="ed-chk"> Entra no checklist da Comissaria</label>
+          <label><input type="checkbox" id="ed-inv"> Conta no inventário</label>
+        </div>
+
+        <div class="ed-secao">Como a cozinha pede</div>
+        <div class="form-row col3">
+          <div><label class="field-label">Pede por</label>
+            <select class="select" id="ed-pede" onchange="_edPedePor()">
+              <option value="peso">Peso / unidade simples</option>
+              <option value="pacote">Pacote (a Comissaria pesa)</option>
+            </select></div>
+          <div id="ed-box-rotulo"><label class="field-label">Rótulo do pacote</label>
+            <select class="select" id="ed-rotulo">${
+              _ROTULOS_PACOTE.map(r => `<option value="${r}">${r}</option>`).join('')}</select></div>
+          <div id="ed-box-peso"><label class="field-label">Peso de 1 pacote (kg)</label>
+            <input class="input" id="ed-peso" type="number" step="0.001" min="0"
+                   placeholder="em branco = o sistema aprende pesando"></div>
+        </div>
+        <div class="ed-nota" id="ed-nota-pacote"></div>
+
+        <div class="ed-secao">Aproveitamento — usado no fechamento do inventário</div>
+        <div class="form-row col2">
+          <div><label class="field-label">Aproveitamento (%)</label>
+            <input class="input" id="ed-aprov" type="number" step="1" min="1" max="100"
+                   placeholder="62 = sobram 62% do peso comprado"
+                   oninput="_edAproveitamento()"></div>
+          <div><label class="field-label">Vem de qual item bruto</label>
+            <select class="select" id="ed-origem"></select></div>
+        </div>
+        <div class="ed-nota" id="ed-nota-aprov">Deixe em branco quando o item é
+          contado do mesmo jeito que é comprado.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="fecharModal('itemEditorModal')">Cancelar</button>
+        <button class="btn btn-gold" id="ed-salvar" onclick="salvarEditorItem()">Salvar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+let _edItem = null, _edAoSalvar = null;
+
+async function abrirEditorItem(itemId, catalogo, aoSalvar) {
+  _montarEditorItem();
+  const { data, error } = await sb.from('itens').select('*').eq('id', itemId).single();
+  if (error) { showToast('Não consegui ler o item: ' + error.message, 'error'); return; }
+  _edItem = data; _edAoSalvar = aoSalvar || null;
+
+  const v = (id, val) => document.getElementById(id).value = val ?? '';
+  const c = (id, val) => document.getElementById(id).checked = !!val;
+  v('ed-nome', data.nome);
+  v('ed-curto', data.nome_curto);
+  v('ed-inv-nome', data.nome_inventario);
+  v('ed-cat', data.categoria || 'proteina');
+  v('ed-unid', data.unidade);
+  v('ed-forn', data.fornecedor_principal);
+  c('ed-req', ehDeRequisicao(data));
+  c('ed-chk', data.no_checklist_estoque);
+  c('ed-inv', data.inventario);
+  v('ed-pede', data.pede_por === 'pacote' ? 'pacote' : 'peso');
+  v('ed-rotulo', rotuloPacote(data));
+  v('ed-peso', data.peso_medio_pacote);
+  v('ed-aprov', data.aproveitamento_pct);
+
+  // Origem: só itens da MESMA categoria. Um filé de peixe vem de um peixe;
+  // oferecer o catálogo inteiro só aumenta a chance de escolher errado.
+  const irmaos = (catalogo || [])
+    .filter(i => i.id !== data.id && i.categoria === data.categoria)
+    .sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+  document.getElementById('ed-origem').innerHTML =
+    '<option value="">— nenhum, é o próprio item comprado —</option>'
+    + irmaos.map(i => `<option value="${i.id}">${_escEd(i.nome)}</option>`).join('');
+  v('ed-origem', data.item_origem_id);
+
+  _edPedePor(); _edAproveitamento();
+  abrirModal('itemEditorModal');
+}
+
+// Rótulo e peso só existem no regime de pacote.
+function _edPedePor() {
+  const pac = document.getElementById('ed-pede').value === 'pacote';
+  document.getElementById('ed-box-rotulo').style.visibility = pac ? '' : 'hidden';
+  document.getElementById('ed-box-peso').style.visibility   = pac ? '' : 'hidden';
+  document.getElementById('ed-nota-pacote').textContent = pac
+    ? 'Pacote abre dois campos para a Comissaria: quantos pacotes vieram e quanto pesou. '
+    + 'Só use quando a cozinha pede embalagem e a entrega é por peso.'
+    : '';
+}
+
+// O erro que a faixa do banco não pega sozinha: digitar 0,62 achando que é
+// fator. Aqui isso vira aviso antes de virar inventário errado.
+function _edAproveitamento() {
+  const el = document.getElementById('ed-aprov');
+  const n = parseFloat(String(el.value).replace(',', '.'));
+  const nota = document.getElementById('ed-nota-aprov');
+  if (!el.value) {
+    nota.className = 'ed-nota';
+    nota.textContent = 'Deixe em branco quando o item é contado do mesmo jeito que é comprado.';
+  } else if (isNaN(n) || n <= 0 || n > 100) {
+    nota.className = 'ed-nota ed-nota-erro';
+    nota.textContent = 'Use a porcentagem inteira, de 1 a 100. 62 quer dizer 62%.';
+  } else {
+    nota.className = 'ed-nota';
+    nota.textContent = `Contou 10 kg deste item? São ${(10 / (n / 100)).toFixed(1)} kg do item bruto — `
+      + 'é esse peso que multiplica o preço no fechamento.';
+  }
+}
+
+async function salvarEditorItem() {
+  if (!_edItem) return;
+  const t = id => document.getElementById(id).value.trim();
+  const b = id => document.getElementById(id).checked;
+
+  const nome = t('ed-nome');
+  if (!nome) { showToast('O nome de compra não pode ficar vazio.', 'error'); return; }
+
+  const pacote = document.getElementById('ed-pede').value === 'pacote';
+  const peso   = parseFloat(String(t('ed-peso')).replace(',', '.'));
+  const aprov  = t('ed-aprov') ? parseFloat(String(t('ed-aprov')).replace(',', '.')) : null;
+  if (aprov != null && (isNaN(aprov) || aprov <= 0 || aprov > 100)) {
+    showToast('Aproveitamento tem que ser uma porcentagem de 1 a 100.', 'error'); return;
+  }
+
+  const patch = {
+    nome,
+    nome_curto:      t('ed-curto') || null,
+    nome_inventario: t('ed-inv-nome') || null,
+    categoria:       document.getElementById('ed-cat').value,
+    unidade:         t('ed-unid') || _edItem.unidade,
+    fornecedor_principal: t('ed-forn') || null,
+    req_ativo:            b('ed-req'),
+    no_checklist_estoque: b('ed-chk'),
+    inventario:           b('ed-inv'),
+    pede_por:             pacote ? 'pacote' : 'peso',
+    rotulo_pacote:        pacote ? document.getElementById('ed-rotulo').value : _edItem.rotulo_pacote,
+    // Fora do regime de pacote o peso médio é inerte — nenhuma tela lê. Não
+    // apago: em 9 itens ele foi medido na balança, e apagar medição real
+    // para limpar campo que ninguém lê é perda pura.
+    peso_medio_pacote: pacote ? (isNaN(peso) || peso <= 0 ? null : peso) : _edItem.peso_medio_pacote,
+    aproveitamento_pct: aprov,
+    item_origem_id:     document.getElementById('ed-origem').value || null,
+    // Editado à mão resolve a ambiguidade que a carga automática deixou.
+    req_revisar: false,
+  };
+
+  const btn = document.getElementById('ed-salvar');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  const { data, error } = await sb.from('itens')
+    .update(patch).eq('id', _edItem.id).select().maybeSingle();
+  btn.disabled = false; btn.textContent = 'Salvar';
+
+  if (error) { showToast(_msgErroEditor(error), 'error'); return; }
+  // A RLS não dá erro em UPDATE bloqueado: devolve zero linhas e a tela
+  // acharia que salvou. Quem não pode editar precisa saber disso.
+  if (!data) {
+    showToast('Seu perfil não tem permissão para editar o catálogo.', 'error');
+    return;
+  }
+  _edItem = data;
+  fecharModal('itemEditorModal');
+  showToast('Item atualizado.', 'success');
+  if (_edAoSalvar) _edAoSalvar(data);
+}
+
+function _msgErroEditor(err) {
+  const m = err.message || '';
+  if (err.code === 'PGRST204' || err.code === '42703'
+      || /aproveitamento_pct|item_origem_id|nome_inventario/.test(m)) {
+    return 'Os campos de aproveitamento e nome de inventário ainda não existem no banco — falta rodar a migration 40.';
+  }
+  if (/itens_aproveitamento_faixa/.test(m)) return 'Aproveitamento tem que ficar entre 1% e 100%.';
+  if (/itens_origem_nao_circular/.test(m)) return 'O item não pode vir dele mesmo.';
+  return 'Erro: ' + m;
 }
 
 // =====================================================================

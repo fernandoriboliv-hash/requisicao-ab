@@ -611,6 +611,8 @@
           <option value="revisar">⚠ Pendentes de revisão</option>
           <option value="sim">Só os da requisição</option>
           <option value="nao">Só os fora da requisição</option>
+          <option value="sem_curto">Sem nome de cozinha</option>
+          <option value="sem_aprov">Sem aproveitamento</option>
         </select>
       </div>
       <div class="aviso aviso-info" id="cat-aviso-revisar" style="display:none"></div>
@@ -1653,6 +1655,11 @@ function renderCatalogoTable() {
   if (rf === 'revisar') lista = lista.filter(i => i.req_revisar);
   if (rf === 'sim')     lista = lista.filter(i => ehDeRequisicao(i));
   if (rf === 'nao')     lista = lista.filter(i => !ehDeRequisicao(i));
+  // Os dois filtros de trabalho da paridade: quem ainda não tem nome de
+  // cozinha, e quem ainda não tem rendimento. Só entre os da requisição —
+  // item que o cozinheiro não pede não precisa de nenhum dos dois.
+  if (rf === 'sem_curto') lista = lista.filter(i => ehDeRequisicao(i) && !i.nome_curto);
+  if (rf === 'sem_aprov') lista = lista.filter(i => ehDeRequisicao(i) && !i.aproveitamento_pct);
   if (q) lista = lista.filter(i => itemAtendeBusca(i, q)
     || (i.nome_curto && itemCasaBusca(i.nome_curto, q)));
   state.catalogoLista = lista;
@@ -1687,9 +1694,12 @@ function renderCatalogoTable() {
       const req = ehDeRequisicao(it);
       const clsLinha = it.req_revisar ? 'linha-revisar' : '';
       return `<tr class="${clsLinha}">
-      <td class="td-titulo">${escapeHtml(it.nome_curto || it.nome)}${it.nome_curto
-        ? `<br><span class="nome-compra">compra: ${escapeHtml(it.nome)}</span>` : ''}${
-        it.req_revisar ? ' <span class="badge badge-orange" style="font-size:9px">REVISAR</span>' : ''}</td>
+      <td class="td-titulo">${escapeHtml(it.nome_curto || it.nome)}${
+        it.aproveitamento_pct ? ` <span class="badge badge-muted" style="font-size:9px"
+          title="Aproveitamento: sobra ${it.aproveitamento_pct}% do peso comprado">${it.aproveitamento_pct}%</span>` : ''}${
+        it.req_revisar ? ' <span class="badge badge-orange" style="font-size:9px">REVISAR</span>' : ''}${
+        it.nome_curto ? `<br><span class="nome-compra">compra: ${escapeHtml(it.nome)}</span>` : ''}${
+        it.nome_inventario ? `<br><span class="nome-compra">inventário: ${escapeHtml(it.nome_inventario)}</span>` : ''}</td>
       <td class="center" data-label="Na requisição">
         <input type="checkbox" ${req ? 'checked' : ''} onchange="setReqAtivo('${it.id}',this.checked)"
                title="Aparece na lista de requisição do cozinheiro">
@@ -1714,9 +1724,25 @@ function renderCatalogoTable() {
       <td data-label="Preço atual">${precoTxt} <button class="btn btn-sm btn-outline" style="margin-left:6px" onclick="editarPreco('${it.id}')">${p ? '✎' : '+ Definir'}</button></td>
       <td class="center num" data-label="Média/dia">${it.media_diaria ? parseFloat(it.media_diaria).toFixed(1) : '—'}</td>
       <td data-label="Status"><span class="badge ${it.ativo?'badge-green':'badge-muted'}">${it.ativo?'Ativo':'Inativo'}</span></td>
-      <td class="td-acoes"><button class="btn btn-sm ${it.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoItem('${it.id}',${it.ativo})">${it.ativo?'Desativar':'Ativar'}</button></td>
+      <td class="td-acoes">
+        <button class="btn btn-sm btn-outline" onclick="editarItemDoCatalogo('${it.id}')"
+                title="Nomes, unidade de pedido, aproveitamento e item de origem">Editar</button>
+        <button class="btn btn-sm ${it.ativo?'btn-secondary':'btn-gold'}" onclick="toggleAtivoItem('${it.id}',${it.ativo})">${it.ativo?'Desativar':'Ativar'}</button>
+      </td>
     </tr>`;
     }).join('')}</tbody></table>`;
+}
+
+// Editor de item completo (config.js), compartilhado com o comprador.
+// Os controles soltos da tabela continuam: são o caminho rápido para
+// ligar/desligar em série. O editor é para quando o item precisa de
+// atenção — nome, aproveitamento, de onde ele vem.
+function editarItemDoCatalogo(itemId) {
+  abrirEditorItem(itemId, state.catalogo, item => {
+    const i = state.catalogo.findIndex(x => x.id === item.id);
+    if (i >= 0) state.catalogo[i] = { ...state.catalogo[i], ...item };
+    renderCatalogoTable();
+  });
 }
 
 // Liga e desliga o item da lista de requisição. A lista de COMPRAS não
