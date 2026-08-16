@@ -469,8 +469,14 @@ function unidadePeso(x) {
 // mesmo (iogurte 170 g, ovo, tablete de manteiga): esses continuam em UN,
 // porque é assim que o inventário os conta.
 //
-// Devolve { qtd, unidade, estimado } — `estimado` marca a linha em que
-// ninguém pesou e o número veio do peso médio da embalagem.
+// O SISTEMA NÃO ESTIMA. Decisão do Fernando em 2026-08-16: a resposta da
+// Comissaria é sempre o peso pesado, e o relatório mostra esse peso ou não
+// mostra nada. Cheguei a implementar a conversão por peso médio da
+// embalagem e tirei — um número calculado no meio de uma coluna de números
+// medidos é indistinguível deles, e essa coluna vira inventário e depois
+// vira valor para a auditoria. Falta de peso tem que aparecer como falta.
+//
+// Devolve { qtd, unidade, semPeso }.
 
 function qtdInventario(it) {
   const pacote = it?.pedido_por === 'pacote' || it?.pede_por === 'pacote';
@@ -479,22 +485,16 @@ function qtdInventario(it) {
   if (!pacote) {
     const q = entregue != null ? parseFloat(entregue)
             : parseFloat(it?.quantidade_solicitada ?? 0);
-    return { qtd: q || 0, unidade: it?.item_unidade || it?.unidade || '', estimado: false };
+    return { qtd: q || 0, unidade: it?.item_unidade || it?.unidade || '', semPeso: false };
   }
 
   const un = unidadePeso(it);
-  if (entregue != null) return { qtd: parseFloat(entregue) || 0, unidade: un, estimado: false };
+  if (entregue != null) return { qtd: parseFloat(entregue) || 0, unidade: un, semPeso: false };
 
-  // Não pesaram. O peso médio da embalagem é a melhor aproximação — e a
-  // linha vai marcada, para ninguém tratar estimativa como medição.
-  const pct = parseFloat(it?.pacotes_entregues ?? it?.quantidade_solicitada ?? 0) || 0;
-  const pm  = parseFloat(it?.peso_medio_pacote ?? 0) || 0;
-  if (pm > 0) return { qtd: +(pct * pm).toFixed(3), unidade: un, estimado: true };
-
-  // Sem peso e sem peso médio: não dá para converter. Zero em vez de
-  // devolver a contagem de pacotes — número errado é pior que número
-  // faltando num relatório que vira inventário.
-  return { qtd: 0, unidade: un, estimado: true, semConversao: true };
+  // Pedido em pacote e ninguém pesou: a quantidade é desconhecida. Devolver
+  // a contagem de pacotes somaria pacote com quilo na mesma coluna, que foi
+  // o que fez 3 pacotes de hambúrguer kids virarem "3" no relatório.
+  return { qtd: 0, unidade: un, semPeso: true };
 }
 
 // Peso que não faz sentido nenhum para a linha. Devolve o texto do aviso,
@@ -789,6 +789,129 @@ async function verSolicitacaoCompra(sb, id) {
   );
 }
 
+// =====================================================================
+// CORRIGIR O PESO DE UMA ENTREGA JÁ REGISTRADA
+// =====================================================================
+// Um dígito errado na balança contamina o relatório, que vira inventário,
+// que vira valor para a auditoria. Antes disso o único conserto era
+// cancelar a requisição e refazer — jogando fora o histórico de quem
+// pediu e quando por causa de um número.
+//
+// Quem corrige: a Comissaria (pesou) e o gerente (fecha o mês e vê o erro
+// no relatório). O PDV não — ele não estava na balança.
+//
+// A correção nunca é silenciosa: guarda o peso anterior, quem mudou,
+// quando e por quê. Número que muda sem rastro é o que a auditoria recusa.
+
+const _PERFIS_CORRIGEM_PESO = ['estoque', 'gerente_compras', 'master_sistema'];
+
+function podeCorrigirPeso() {
+  const p = window.state?.perfil?.perfil;
+  return _PERFIS_CORRIGEM_PESO.includes(p);
+}
+
+function _montarModalPeso() {
+  if (document.getElementById('pesoModal')) return;
+  const d = document.createElement('div');
+  d.className = 'modal-overlay';
+  d.id = 'pesoModal';
+  d.innerHTML = `
+    <div class="modal" style="width:480px">
+      <div class="modal-header">
+        <span>Corrigir peso entregue</span>
+        <button class="modal-close" onclick="fecharModal('pesoModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="ed-secao" id="pk-item"></div>
+        <div class="form-row col2">
+          <div><label class="field-label">Peso registrado</label>
+            <input class="input" id="pk-antes" disabled></div>
+          <div><label class="field-label">Peso correto</label>
+            <input class="input" id="pk-novo" type="number" step="0.001" min="0" autofocus></div>
+        </div>
+        <label class="field-label">Por que está sendo corrigido</label>
+        <select class="select" id="pk-motivo">
+          <option value="Erro de digitação na pesagem">Erro de digitação na pesagem</option>
+          <option value="Peso informado em gramas no lugar de quilos">Peso informado em gramas no lugar de quilos</option>
+          <option value="Peso lançado na linha do item errado">Peso lançado na linha do item errado</option>
+          <option value="Repesagem após a entrega">Repesagem após a entrega</option>
+          <option value="outro">Outro — descrever abaixo</option>
+        </select>
+        <input class="input mt-2" id="pk-obs" placeholder="detalhe (opcional)">
+        <div class="ed-nota mt-2">
+          O peso anterior fica guardado junto com seu nome e a data. A correção
+          aparece no detalhe da requisição e no relatório do mês.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="fecharModal('pesoModal')">Cancelar</button>
+        <button class="btn btn-gold" id="pk-salvar" onclick="salvarCorrecaoPeso()">Salvar correção</button>
+      </div>
+    </div>`;
+  document.body.appendChild(d);
+}
+
+let _pkCtx = null;
+
+function corrigirPeso(sb, itemId, nome, pesoAtual, unidade, reqId) {
+  _montarModalPeso();
+  _pkCtx = { sb, itemId, reqId };
+  document.getElementById('pk-item').textContent = nome;
+  document.getElementById('pk-antes').value = pesoAtual + ' ' + (unidade || '');
+  document.getElementById('pk-novo').value = '';
+  document.getElementById('pk-obs').value = '';
+  abrirModal('pesoModal');
+  setTimeout(() => document.getElementById('pk-novo')?.focus(), 60);
+}
+
+async function salvarCorrecaoPeso() {
+  if (!_pkCtx) return;
+  const novo = parseFloat(String(document.getElementById('pk-novo').value).replace(',', '.'));
+  if (isNaN(novo) || novo < 0) {
+    showToast('Informe o peso correto.', 'error'); return;
+  }
+  const sel = document.getElementById('pk-motivo').value;
+  const obs = document.getElementById('pk-obs').value.trim();
+  if (sel === 'outro' && !obs) {
+    showToast('Descreva o motivo da correção.', 'error'); return;
+  }
+  const motivo = (sel === 'outro' ? obs : sel + (obs ? ' — ' + obs : ''));
+
+  const btn = document.getElementById('pk-salvar');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  const { sb, itemId, reqId } = _pkCtx;
+
+  // Lê o peso atual na hora de gravar, não o que estava na tela: entre
+  // abrir o modal e salvar, outra pessoa pode ter corrigido.
+  const { data: atual, error: e0 } = await sb.from('requisicao_itens')
+    .select('quantidade_entregue, peso_anterior').eq('id', itemId).single();
+  if (e0) { btn.disabled = false; btn.textContent = 'Salvar correção';
+            showToast('Erro: ' + e0.message, 'error'); return; }
+
+  const { data, error } = await sb.from('requisicao_itens').update({
+    quantidade_entregue: novo,
+    // A primeira correção guarda o original. As seguintes preservam ele —
+    // o que interessa à auditoria é de onde o número partiu.
+    peso_anterior: atual.peso_anterior ?? atual.quantidade_entregue,
+    corrigido_por: window.state?.perfil?.id ?? null,
+    corrigido_em: new Date().toISOString(),
+    motivo_correcao: motivo,
+  }).eq('id', itemId).select('id').maybeSingle();
+
+  btn.disabled = false; btn.textContent = 'Salvar correção';
+  if (error) {
+    showToast(error.code === 'PGRST204' || error.code === '42703'
+      ? 'A correção de peso ainda não existe no banco — falta rodar a migration 41.'
+      : 'Erro: ' + error.message, 'error');
+    return;
+  }
+  if (!data) { showToast('Seu perfil não pode corrigir peso de entrega.', 'error'); return; }
+
+  fecharModal('pesoModal');
+  showToast('Peso corrigido.', 'success');
+  if (reqId) verRequisicaoInterna(sb, reqId);
+}
+
 async function verRequisicaoInterna(sb, id) {
   abrirDetalhe('Carregando...', null);
   await carregarAutores(sb);
@@ -841,11 +964,20 @@ async function verRequisicaoInterna(sb, id) {
                ? (i.pacotes_entregues != null
                    ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${_qtd(i.pacotes_entregues)} ${rot}</span>${
                        i.quantidade_entregue != null
-                         ? `<br><span class="est-peso">${_qtd(i.quantidade_entregue)} ${uPeso} pesado</span>` : ''}`
+                         ? `<br><span class="est-peso">${_qtd(i.quantidade_entregue)} ${uPeso} pesado</span>`
+                         : '<br><span class="text-error" style="font-size:11px">não pesado</span>'}`
                    : '—')
                : (i.quantidade_entregue != null
                    ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${_qtd(i.quantidade_entregue)} ${un}</span>`
-                   : '—')}</td>
+                   : '—')}${
+               // Trilha da correção: fica à vista de quem abre a requisição,
+               // e é o que a auditoria precisa ver quando o número mudou.
+               i.corrigido_em ? `<br><span class="est-peso" title="${_esc(i.motivo_correcao || '')}">corrigido de ${
+                 _qtd(i.peso_anterior)} · ${_esc(autorComPerfil(i.corrigido_por) || 'sistema')}</span>` : ''}${
+               podeCorrigirPeso() && i.quantidade_entregue != null
+                 ? `<br><button class="btn btn-sm btn-outline" style="font-size:10px;padding:2px 7px;margin-top:4px"
+                      onclick="corrigirPeso(sb,'${i.id}','${_esc(i.item_nome).replace(/'/g, "\\'")}',${
+                        i.quantidade_entregue},'${pct ? uPeso : un}','${r.id}')">corrigir peso</button>` : ''}</td>
              <td data-label="Divergência">${i.motivo_divergencia
                ? '<span class="text-error">' + _esc(i.motivo_divergencia) + '</span>'
                : '<span class="text-muted">—</span>'}</td>` : ''}
