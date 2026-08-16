@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608161108">
+<link rel="stylesheet" href="style.css?v=202608161451">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608161108"></script>
+<script src="config.js?v=202608161451"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -1812,6 +1812,20 @@ async function registrarEntrega(reqId) {
         alvo.focus({ preventScroll: true });
       }
       return;
+    }
+    // Peso fora de qualquer ordem de grandeza. Aconteceu de verdade: 3
+    // pacotes de hambúrguer kids (≈0,21 kg) gravados como 70011 kg, e
+    // avocado de 0,3 kg gravado como 660 — grama digitada no campo de
+    // quilo. Como o relatório alimenta o inventário, um número desses
+    // contamina o fechamento inteiro sem ninguém perceber.
+    const absurdo = pesoAbsurdo(it, e);
+    if (absurdo) {
+      const alvo = document.getElementById(`qe-${reqId}-${idx}`);
+      if (alvo) {
+        alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        alvo.focus({ preventScroll: true });
+      }
+      if (!confirm(`"${it.item_nome}"\n\n${absurdo}\n\nConfirma que o peso está certo?`)) return;
     }
     const motEl = document.getElementById(`mot-${reqId}-${idx}`);
     const wrapEl = document.getElementById(`motw-${reqId}-${idx}`);

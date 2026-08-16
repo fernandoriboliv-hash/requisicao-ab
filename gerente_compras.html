@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608161108">
+<link rel="stylesheet" href="style.css?v=202608161451">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608161108"></script>
+<script src="config.js?v=202608161451"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -1499,7 +1499,7 @@ async function gerarRelatorio() {
 
   if (fonte === 'ambos' || fonte === 'req') {
     let q = sb.from('requisicao_itens')
-      .select('item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, requisicoes!inner(data_competencia, pdv_id, status, pdvs(nome), entregue_em)')
+      .select('item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, pacotes_entregues, pedido_por, peso_medio_pacote, requisicoes!inner(data_competencia, pdv_id, status, pdvs(nome), entregue_em)')
       .eq('requisicoes.status', 'entregue')
       .gte('requisicoes.data_competencia', de)
       .lte('requisicoes.data_competencia', ate);
@@ -1507,16 +1507,23 @@ async function gerarRelatorio() {
     if (cat) q = q.eq('item_categoria', cat);
     const { data, error } = await q;
     if (error) { showToast('Erro (requisições): ' + error.message, 'error'); cont.innerHTML = ''; return; }
-    (data || []).forEach(it => rows.push({
-      fonte: 'req',
-      data: it.requisicoes.data_competencia,
-      pdv: it.requisicoes.pdvs?.nome || '—',
-      categoria: it.item_categoria,
-      item: it.item_nome,
-      itemId: it.item_id,
-      unidade: it.item_unidade || '',
-      qtd: parseFloat(it.quantidade_entregue || it.quantidade_solicitada || 0),
-    }));
+    // Item de pacote entra em PESO, nunca em número de pacotes — este
+    // relatório alimenta o inventário. Ver qtdInventario() em config.js.
+    (data || []).forEach(it => {
+      const inv = qtdInventario(it);
+      rows.push({
+        fonte: 'req',
+        data: it.requisicoes.data_competencia,
+        pdv: it.requisicoes.pdvs?.nome || '—',
+        categoria: it.item_categoria,
+        item: it.item_nome,
+        itemId: it.item_id,
+        unidade: inv.unidade,
+        qtd: inv.qtd,
+        estimado: inv.estimado,
+        semConversao: inv.semConversao,
+      });
+    });
   }
 
   // Agrupamento por granularidade

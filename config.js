@@ -452,6 +452,85 @@ function unidadePeso(x) {
   return _UNIDADES_DE_PESO.has(u) ? u : 'kg';
 }
 
+// =====================================================================
+// QUANTIDADE PARA O INVENTÁRIO
+// =====================================================================
+// O relatório alimenta o inventário, e inventário se mede em PESO. Um item
+// pedido em pacote tem duas grandezas na mesma linha:
+//
+//   pacotes_entregues   3 PCT     <- controle de separação, NÃO é estoque
+//   quantidade_entregue 0,21 kg   <- isto é o que entra no inventário
+//
+// Somar "3" junto com quilos na mesma coluna foi o que fez o relatório
+// mostrar 3 unidades de hambúrguer kids onde havia 210 gramas. Some
+// pacote com quilo e o total não significa nada.
+//
+// A exceção são os itens que a Comissaria conta e entrega em unidade
+// mesmo (iogurte 170 g, ovo, tablete de manteiga): esses continuam em UN,
+// porque é assim que o inventário os conta.
+//
+// Devolve { qtd, unidade, estimado } — `estimado` marca a linha em que
+// ninguém pesou e o número veio do peso médio da embalagem.
+
+function qtdInventario(it) {
+  const pacote = it?.pedido_por === 'pacote' || it?.pede_por === 'pacote';
+  const entregue = it?.quantidade_entregue;
+
+  if (!pacote) {
+    const q = entregue != null ? parseFloat(entregue)
+            : parseFloat(it?.quantidade_solicitada ?? 0);
+    return { qtd: q || 0, unidade: it?.item_unidade || it?.unidade || '', estimado: false };
+  }
+
+  const un = unidadePeso(it);
+  if (entregue != null) return { qtd: parseFloat(entregue) || 0, unidade: un, estimado: false };
+
+  // Não pesaram. O peso médio da embalagem é a melhor aproximação — e a
+  // linha vai marcada, para ninguém tratar estimativa como medição.
+  const pct = parseFloat(it?.pacotes_entregues ?? it?.quantidade_solicitada ?? 0) || 0;
+  const pm  = parseFloat(it?.peso_medio_pacote ?? 0) || 0;
+  if (pm > 0) return { qtd: +(pct * pm).toFixed(3), unidade: un, estimado: true };
+
+  // Sem peso e sem peso médio: não dá para converter. Zero em vez de
+  // devolver a contagem de pacotes — número errado é pior que número
+  // faltando num relatório que vira inventário.
+  return { qtd: 0, unidade: un, estimado: true, semConversao: true };
+}
+
+// Peso que não faz sentido nenhum para a linha. Devolve o texto do aviso,
+// ou '' quando está tudo bem. Não bloqueia — confirma: peso de verdade
+// varia muito, e travar a Comissaria numa entrega legítima é pior.
+//
+// Duas peneiras, porque foram dois erros diferentes de digitação:
+//   fator 1000  grama digitada no campo de quilo (avocado 0,3 -> 660)
+//   fora de faixa  qualquer coisa acima de 2 toneladas numa requisição
+function pesoAbsurdo(item, entrega) {
+  const peso = parseFloat(entrega?.qtdEntregue);
+  if (!(peso > 0)) return '';
+
+  if (peso > 2000) {
+    return `O peso informado foi ${peso.toLocaleString('pt-BR')} kg. `
+         + 'Uma requisição de cozinha não chega a isso.';
+  }
+  const pm = parseFloat(item?.peso_medio_pacote ?? 0) || 0;
+  const pct = parseFloat(entrega?.pacotesEntregues ?? entrega?.pedido ?? 0) || 0;
+  if (pm > 0 && pct > 0) {
+    const esperado = pm * pct;
+    if (peso > esperado * 20) {
+      return `O peso informado foi ${peso.toLocaleString('pt-BR')} kg, mas ${pct} `
+           + `embalagem(ns) deste item pesa(m) por volta de `
+           + `${esperado.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg. `
+           + 'Confira se o valor não foi digitado em gramas.';
+    }
+  }
+  const pedido = parseFloat(entrega?.pedido ?? 0) || 0;
+  if (!pm && pedido > 0 && peso > pedido * 100) {
+    return `Pediram ${pedido} e o peso informado foi `
+         + `${peso.toLocaleString('pt-BR')} kg. Confira se não está em gramas.`;
+  }
+  return '';
+}
+
 // "≈ 4,4 kg". Devolve vazio quando ninguém informou nem pesou ainda —
 // é melhor não mostrar estimativa nenhuma do que mostrar uma inventada.
 function estimativaPeso(qtd, pesoMedio, unidade) {
