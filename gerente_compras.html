@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608150940">
+<link rel="stylesheet" href="style.css?v=202608161108">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608150940"></script>
+<script src="config.js?v=202608161108"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -706,7 +706,8 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="fecharRevisaoLista()">Voltar</button>
-      <button class="btn btn-primary" onclick="confirmarEnvioLista()">Confirmar e Exportar</button>
+      <button class="btn btn-outline" onclick="exportarLista()">⤓ Exportar Excel</button>
+      <button class="btn btn-primary" id="btnConfirmarLista" onclick="confirmarEnvioLista()">Confirmar e Enviar</button>
     </div>
   </div>
 </div>
@@ -1072,6 +1073,9 @@ let listaConsolidada = null;
 // Persistem por sessão (limpam ao trocar de data ou recarregar página).
 let listaManualItens = {}; // { 'YYYY-MM-DD': [ {cat,key,item_id,nome,unidade,qtd_final} ] }
 let listaRemovidos = {};   // { 'YYYY-MM-DD': Set<'cat:key'> }
+// De quais linhas de solicitacao_compra_itens cada linha consolidada veio.
+// { 'cat:key': [ {id, qtd} ] } — é por aqui que o corte volta para o banco.
+let listaOrigens = {};
 
 // Painel adicionar itens avulsos — catálogo navegável
 let addCat = 'proteina';
@@ -1163,34 +1167,47 @@ async function carregarLista() {
 
   // Consolidar por (categoria, nome)
   const grupos = { proteina: {}, laticinios: {}, hortifruti: {}, diversos: {} };
+  // Cada linha consolidada vem de N linhas de solicitacao_compra_itens, de PDVs
+  // diferentes. Guardo os ids para conseguir escrever o corte do gerente de
+  // volta em cada uma — sem isso a tela ajusta um total que ninguem persiste,
+  // que era exatamente o bug: a compradora continuava vendo a quantidade
+  // original. Inclui os REMOVIDOS: eles precisam receber quantidade_aprovada 0.
+  listaOrigens = {};
   for (const s of (solcs || [])) {
     for (const it of (s.solicitacao_compra_itens || [])) {
       const cat = it.item_categoria || 'diversos';
       const key = `${it.item_nome}__${it.item_unidade||''}`;
+      const qtd = parseFloat(it.quantidade_solicitada);
+      (listaOrigens[`${cat}:${key}`] ||= []).push({ id: it.id, qtd });
       if (listaRemovidos[data].has(`${cat}:${key}`)) continue;
       if (!grupos[cat][key]) {
         grupos[cat][key] = {
           item_id: it.item_id, nome: it.item_nome, unidade: it.item_unidade,
-          total: 0, qtd_final: 0, pdvs: [], origem: 'auto', key,
+          total: 0, qtd_final: 0, pdvs: [], origem: 'auto', key, cat, manual: 0,
         };
       }
-      grupos[cat][key].total += parseFloat(it.quantidade_solicitada);
+      grupos[cat][key].total += qtd;
       grupos[cat][key].qtd_final = grupos[cat][key].total;
-      grupos[cat][key].pdvs.push({ pdv: s.pdvs?.nome || '—', qtd: parseFloat(it.quantidade_solicitada) });
+      grupos[cat][key].pdvs.push({ pdv: s.pdvs?.nome || '—', qtd });
     }
   }
 
   // Adicionar itens manuais
   for (const m of listaManualItens[data]) {
     if (!grupos[m.cat]) continue;
+    const qtdM = parseFloat(m.qtd_final) || 0;
     if (!grupos[m.cat][m.key]) {
       grupos[m.cat][m.key] = {
         item_id: m.item_id, nome: m.nome, unidade: m.unidade,
-        total: 0, qtd_final: parseFloat(m.qtd_final) || 0,
-        pdvs: [], origem: 'manual', key: m.key,
+        total: 0, qtd_final: qtdM,
+        pdvs: [], origem: 'manual', key: m.key, cat: m.cat, manual: qtdM,
       };
     } else {
-      grupos[m.cat][m.key].qtd_final = (grupos[m.cat][m.key].qtd_final || 0) + (parseFloat(m.qtd_final) || 0);
+      // Avulso somado a um item que os PDVs já pediram. A parte avulsa fica
+      // marcada separada: ela é compra do HOTEL e não pode ser rateada de
+      // volta para os PDVs no fechamento de custo.
+      grupos[m.cat][m.key].qtd_final = (grupos[m.cat][m.key].qtd_final || 0) + qtdM;
+      grupos[m.cat][m.key].manual = (grupos[m.cat][m.key].manual || 0) + qtdM;
     }
   }
 
@@ -2280,10 +2297,133 @@ function fecharRevisaoLista() {
   document.getElementById('revisaoListaModal').classList.remove('open');
 }
 
-function confirmarEnvioLista() {
-  exportarLista();
-  fecharRevisaoLista();
-  showToast('Lista enviada. CSV baixado.', 'success');
+// =====================================================================
+// ENVIAR A LISTA PARA A COMPRADORA
+// =====================================================================
+// Antes daqui isto só baixava um CSV. Os avulsos viviam em `listaManualItens`,
+// um objeto em memória — sumiam ao recarregar a página, e os cortes do gerente
+// eram invisíveis para a compradora, que lia `quantidade_solicitada` cru.
+//
+// Agora o envio faz três coisas, nesta ordem:
+//   1. grava o corte de cada item que veio dos PDVs em quantidade_aprovada
+//   2. zera o que o gerente removeu (quantidade_aprovada = 0)
+//   3. cria UMA solicitação do hotel (pdv_id NULL) com os avulsos
+//
+// Rateio: o gerente ajusta o TOTAL consolidado, mas o banco guarda uma linha
+// por PDV. O corte volta proporcional ao que cada um pediu — 20 kg (A:12, B:8)
+// cortado para 12 vira A:7,2 e B:4,8. Distribuir igual arruinaria a apropriação
+// de custo de quem pediu pouco.
+let _enviandoLista = false;
+
+async function confirmarEnvioLista() {
+  if (_enviandoLista) return;
+  if (!listaConsolidada) { showToast('Gere a lista primeiro.', 'error'); return; }
+  const data = document.getElementById('lista-data').value || isoDate(new Date());
+
+  // ── 1 e 2: o que volta para as solicitações dos PDVs ──────────────
+  const ajustes = [];   // { id, qtd }
+  const avulsos = [];   // linhas da solicitação do hotel
+
+  for (const cat of ['proteina','laticinios','hortifruti','diversos']) {
+    for (const it of Object.values(listaConsolidada[cat] || {})) {
+      const origens = listaOrigens[`${cat}:${it.key}`] || [];
+      const parteManual = Math.max(0, parseFloat(it.manual) || 0);
+      const parteAvulsa = it.origem === 'manual' ? (parseFloat(it.qtd_final) || 0) : parteManual;
+
+      if (parteAvulsa > 0) {
+        avulsos.push({
+          item_id: it.item_id || null, item_nome: it.nome,
+          item_categoria: cat, item_unidade: it.unidade || null,
+          quantidade_solicitada: +parteAvulsa.toFixed(3),
+        });
+      }
+      if (!origens.length) continue;
+
+      // O que sobra para os PDVs depois de tirar a parte avulsa
+      const alvo = Math.max(0, (parseFloat(it.qtd_final) || 0) - parteManual);
+      const somaOrig = origens.reduce((s, o) => s + o.qtd, 0);
+      if (Math.abs(alvo - somaOrig) < 0.0005) continue;   // sem ajuste, não escreve
+
+      origens.forEach(o => {
+        const fatia = somaOrig > 0 ? (o.qtd / somaOrig) * alvo : 0;
+        ajustes.push({ id: o.id, qtd: +fatia.toFixed(3) });
+      });
+    }
+  }
+
+  // Removidos: saem da lista da compradora com 0, e não sumindo em silêncio —
+  // assim o histórico continua mostrando que o PDV pediu e o gerente cortou.
+  (listaRemovidos[data] || new Set()).forEach(catKey => {
+    (listaOrigens[catKey] || []).forEach(o => ajustes.push({ id: o.id, qtd: 0 }));
+  });
+
+  if (!ajustes.length && !avulsos.length) {
+    showToast('Nada mudou em relação ao que os PDVs já pediram — a compradora já está vendo esta lista.', 'info');
+    fecharRevisaoLista();
+    return;
+  }
+
+  _enviandoLista = true;
+  const btn = document.getElementById('btnConfirmarLista');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+
+  try {
+    for (const a of ajustes) {
+      const { error } = await sb.from('solicitacao_compra_itens')
+        .update({ quantidade_aprovada: a.qtd }).eq('id', a.id);
+      if (error) throw error;
+    }
+
+    let numAvulsos = 0;
+    if (avulsos.length) {
+      // pdv_id NULL = compra do hotel. Nasce 'aprovada' porque quem aprova é
+      // justamente quem está lançando.
+      const { data: sol, error } = await inserirIdempotente(sb, 'solicitacoes_compra', {
+        pdv_id: null,
+        usuario_id: state.perfil.id,
+        status: 'aprovada',
+        data_competencia: data,
+        aprovado_por: state.perfil.id,
+        aprovado_em: new Date().toISOString(),
+        observacao: 'Itens avulsos lançados pelo gerente (compra do hotel)',
+      }, 'ger-lista', 'id');
+      if (error) {
+        if (ehEnvioDuplicado(error)) {
+          showToast('Esta lista já havia sido enviada — nada foi duplicado.', 'info');
+          fecharRevisaoLista();
+          return;
+        }
+        throw error;
+      }
+      const { error: e2 } = await sb.from('solicitacao_compra_itens')
+        .insert(avulsos.map(l => ({ ...l, solicitacao_id: sol.id })));
+      if (e2) throw e2;
+      numAvulsos = avulsos.length;
+      // Gravado no banco, some da memória: senão o próximo envio duplicaria.
+      listaManualItens[data] = [];
+    }
+
+    fecharRevisaoLista();
+    showToast(`Lista enviada para a compradora — ${ajustes.length} ajuste(s)`
+      + (numAvulsos ? ` e ${numAvulsos} item(ns) avulso(s)` : '') + '.', 'success');
+    await carregarLista();
+  } catch (err) {
+    showToast(msgErroLista(err), 'error');
+  } finally {
+    _enviandoLista = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirmar e Enviar'; }
+  }
+}
+
+function msgErroLista(err) {
+  const m = err.message || '';
+  if (err.code === 'PGRST204' || err.code === '42703' || /quantidade_aprovada/.test(m)) {
+    return 'O campo de quantidade aprovada ainda não existe no banco — falta rodar a migration 36.';
+  }
+  if (/null value in column "pdv_id"/.test(m)) {
+    return 'O banco ainda exige PDV na solicitação — falta rodar a migration 36.';
+  }
+  return 'Erro ao enviar: ' + m;
 }
 function descartarReqCreate() {
   if (Object.keys(state.reqNew.selecionados).length === 0) return;

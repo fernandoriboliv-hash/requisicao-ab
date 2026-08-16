@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprador — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608150940">
+<link rel="stylesheet" href="style.css?v=202608161108">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608150940"></script>
+<script src="config.js?v=202608161108"></script>
 <style>
   /* Bloco de um fornecedor na fila de aprovados */
   .forn-bloco {
@@ -137,6 +137,46 @@
   }
   .po-alt:hover { color: var(--gold); }
 
+  /* ---- Referência de preço: o "Dif % do último preço" do SAP ----
+     Duas referências separadas, cada uma com sua data. Acinzentada quando
+     tem mais de 45 dias: aí a diferença mede época, não mercado. */
+  .refs-linha { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
+  .ref-preco { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .ref-preco em { font-style: normal; opacity: 0.75; }
+  .ref-velha { opacity: 0.55; }
+  .var-alta  { color: var(--error);  font-weight: 600; }
+  .var-baixa { color: var(--green);  font-weight: 600; }
+  .var-igual { color: var(--muted); }
+  .var-velha { color: var(--muted); font-weight: 600; }
+  .linha-corte { font-size: 11px; color: var(--orange); }
+
+  /* ---- Cotação (RFQ) ---- */
+  .cot-card {
+    border: 1px solid var(--border-subtle); margin-bottom: 10px;
+    background: rgba(255,255,255,0.015);
+  }
+  .cot-head {
+    display: flex; align-items: center; gap: 12px; padding: 13px 16px; cursor: pointer;
+  }
+  .cot-nome { flex: 1; font-size: 14px; }
+  .cot-body { display: none; border-top: 1px solid var(--border-subtle); padding: 4px 0; }
+  .cot-body.open { display: block; }
+  .cot-forn {
+    display: grid; grid-template-columns: 1.6fr 1fr 0.8fr 0.9fr 1fr auto;
+    gap: 10px; align-items: center; padding: 9px 16px;
+    border-bottom: 1px solid var(--border-subtle); font-size: 12px;
+  }
+  .cot-forn:last-child { border-bottom: 0; }
+  .cot-forn.vencedora { background: rgba(46,125,50,0.10); }
+  .cot-inp { padding: 5px 7px; font-size: 12px; width: 100%;
+    background: var(--bg); border: 1px solid var(--border-subtle); color: var(--text); }
+  .cot-melhor { color: var(--green); font-weight: 700; }
+  .cot-sem { color: var(--muted); font-style: italic; }
+  @media (max-width: 900px) {
+    .cot-forn { grid-template-columns: 1fr 1fr; }
+    .refs-linha { flex-direction: column; gap: 2px; }
+  }
+
   /* ---- Adicionar item ao pedido ----
      Vale para os dois caminhos: a ordem avulsa começa vazia e se monta
      toda por aqui, e o pedido vindo da fila ganha a mesma possibilidade
@@ -194,6 +234,10 @@
       <span class="nav-badge" id="badgeAtraso"></span>
     </div>
     <div class="nav-item" onclick="goTab('matriz',this)"><span class="nav-icon">⇄</span> Itens × Fornecedores</div>
+    <div class="nav-item" onclick="goTab('cotacoes',this)">
+      <span class="nav-icon">◇</span> Cotações
+      <span class="nav-badge" id="badgeCot"></span>
+    </div>
     <div class="nav-item" onclick="goTab('fornecedores',this)">
       <span class="nav-icon">◎</span> Fornecedores
       <span class="nav-badge" id="badgeCert"></span>
@@ -242,6 +286,31 @@
   </div>
 
   <!-- ================= ITENS × FORNECEDORES ================= -->
+  <!-- =================== COTAÇÕES (RFQ) =================== -->
+  <div class="tab-content" id="tab-cotacoes">
+    <div class="main full">
+      <div class="aviso aviso-info">
+        Peça preço do mesmo item a vários fornecedores, registre as respostas conforme chegam
+        e compare lado a lado. Ao escolher o vencedor, o preço e a data entram na matriz —
+        é assim que a comparação de fornecedor deixa de ser cotação velha de planilha.
+        <br><strong>O sistema não envia e-mail</strong>: ele monta o texto e você copia para o seu.
+      </div>
+
+      <div class="filters-bar mb-3" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input class="input" id="c-busca" placeholder="Buscar item..." oninput="renderCotacoes()" style="flex:1;min-width:180px">
+        <select class="select" id="c-status" onchange="renderCotacoes()" style="max-width:190px">
+          <option value="abertas">Em aberto</option>
+          <option value="">Todas</option>
+          <option value="fechada">Fechadas</option>
+          <option value="cancelada">Canceladas</option>
+        </select>
+        <button class="btn btn-primary" onclick="abrirNovaCotacao()">+ Nova cotação</button>
+      </div>
+
+      <div id="cotacoesContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
   <div class="tab-content" id="tab-matriz">
     <div class="main full">
       <div class="stats-grid mb-3">
@@ -338,6 +407,46 @@
         <button class="btn btn-sm btn-outline" onclick="exportarHistorico()">⤓ Exportar CSV</button>
       </div>
       <div id="histContainer"><div class="empty-text">Escolha o período e clique em Buscar.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: nova cotação ============ -->
+<div class="modal-overlay" id="novaCotacaoModal">
+  <div class="modal" style="width:620px">
+    <div class="modal-header">
+      <span>Nova cotação</span>
+      <button class="modal-close" onclick="fecharModal('novaCotacaoModal')">✕</button>
+    </div>
+    <div class="modal-body" id="novaCotacaoBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('novaCotacaoModal')">Cancelar</button>
+      <button class="btn btn-primary" id="btnCriarCotacao" onclick="criarCotacao()">Criar cotação</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: texto do pedido de cotação ============ -->
+<div class="modal-overlay" id="textoCotacaoModal">
+  <div class="modal" style="width:640px">
+    <div class="modal-header">
+      <span id="textoCotacaoTitulo">Texto para o fornecedor</span>
+      <button class="modal-close" onclick="fecharModal('textoCotacaoModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="aviso aviso-info">
+        Copie e cole no seu e-mail. O sistema não envia nada — marcar como enviada
+        só registra a data para você saber quem já foi cobrado.
+      </div>
+      <label class="field-label">Assunto</label>
+      <input class="input" id="cot-assunto" readonly>
+      <label class="field-label mt-2">Mensagem</label>
+      <textarea class="input" id="cot-corpo" rows="12" readonly style="font-family:inherit;line-height:1.55"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('textoCotacaoModal')">Fechar</button>
+      <button class="btn btn-secondary" onclick="copiarTextoCotacao()">Copiar texto</button>
+      <button class="btn btn-primary" id="btnMarcarEnviada" onclick="marcarCotacaoEnviada()">Copiar e marcar como enviada</button>
     </div>
   </div>
 </div>
@@ -541,6 +650,16 @@ const state = {
   itens: [],           // catálogo, para a aba da matriz
   certificacoes: {},   // fornecedorId -> [certificações]
   pendencias: [],      // faltas do recebimento aguardando recompra
+
+  // ── Histórico de preço (migration 37) ──
+  // ultimoPreco['itemId|fornecedorId'] = { pago: {preco,data,dias}, cotado: {...} }
+  ultimoPreco: {},
+  ultimoPrecoOk: false,
+
+  // ── Cotações / RFQ (migration 38) ──
+  cotacoes: [],
+  cotacoesOk: false,
+  cotacaoAtual: null,
 };
 
 // Troca de fornecedor válida só neste pedido: itemId -> fornecedorId.
@@ -592,6 +711,74 @@ function idadePreco(op) {
 }
 
 // =====================================================================
+// HISTÓRICO DE PREÇO — o "Dif % do último preço" do SAP
+// =====================================================================
+// Duas referências SEPARADAS, cada uma com sua data:
+//
+//   último PAGO     saiu de uma ordem de compra de verdade
+//   último COTADO   é o preço da matriz item × fornecedor
+//
+// Não junto as duas numa variação só. Os preços da matriz vieram de duas
+// importações de planilha (03/06 e 30/07): uma coluna única misturaria
+// diferença de fornecedor com diferença de época e mostraria economia que
+// não existe. Com as duas datas à vista dá para saber qual é qual.
+//
+// Fórmula, igual à do SAP: (atual − referência) ÷ referência × 100.
+
+async function carregarUltimoPreco() {
+  const { data, error } = await sb.from('v_ultimo_preco')
+    .select('item_id, fornecedor_id, tipo, preco_unitario, data_preco, dias_atras');
+  if (error) {
+    // A view é da migration 37. Sem ela a tela roda igual, só sem as
+    // referências — não vale derrubar o pedido por causa disso.
+    console.warn('[preço] v_ultimo_preco indisponível:', error.message);
+    state.ultimoPrecoOk = false;
+    return;
+  }
+  state.ultimoPrecoOk = true;
+  state.ultimoPreco = {};
+  (data || []).forEach(r => {
+    const k = r.item_id + '|' + r.fornecedor_id;
+    (state.ultimoPreco[k] ||= {})[r.tipo] = {
+      preco: parseFloat(r.preco_unitario),
+      data: String(r.data_preco).slice(0, 10),
+      dias: r.dias_atras,
+    };
+  });
+}
+
+function refPreco(itemId, fornecedorId) {
+  if (!itemId || !fornecedorId) return {};
+  return state.ultimoPreco[itemId + '|' + fornecedorId] || {};
+}
+
+// "pago R$ 84,50 (30/07) +6,4%". Sem referência não devolve nada — melhor
+// nenhuma coluna do que um 0% que se lê como "não variou".
+function chipVariacao(rotulo, ref, precoAtual) {
+  if (!ref || !(ref.preco > 0)) return '';
+  const data = ptDate(ref.data);
+  const velho = ref.dias > DIAS_COTACAO_COMPARAVEL;
+  let delta = '';
+  if (precoAtual > 0) {
+    const pct = ((precoAtual - ref.preco) / ref.preco) * 100;
+    const cls = velho ? 'var-velha' : pct > 0.05 ? 'var-alta' : pct < -0.05 ? 'var-baixa' : 'var-igual';
+    const sinal = pct > 0 ? '+' : '';
+    delta = ` <span class="${cls}">${sinal}${pct.toFixed(1).replace('.', ',')}%</span>`;
+  }
+  return `<span class="ref-preco${velho ? ' ref-velha' : ''}"
+    title="${velho ? 'Referência de mais de ' + DIAS_COTACAO_COMPARAVEL + ' dias — compara época, não mercado' : 'Último preço ' + rotulo}">
+    ${rotulo} ${fmtMoeda(ref.preco)} <em>(${data})</em>${delta}</span>`;
+}
+
+function refsDaLinha(l) {
+  const fid = l.opcao?.fornecedor_id || state.poAtual?.fornecedor?.id;
+  const r = refPreco(l.item_id, fid);
+  const html = [chipVariacao('pago', r.pago, l.preco), chipVariacao('cotado', r.cotado, l.preco)]
+    .filter(Boolean).join('');
+  return html ? `<div class="refs-linha">${html}</div>` : '';
+}
+
+// =====================================================================
 // INIT
 // =====================================================================
 window.addEventListener('load', async () => {
@@ -620,6 +807,7 @@ window.addEventListener('load', async () => {
   await carregarConfig();
   await carregarFornecedores();
   await carregarPrecos();
+  await carregarUltimoPreco();
   await carregarMatriz();
   await carregarCertificacoes();
   await carregarPendencias();
@@ -833,7 +1021,7 @@ async function carregarFila() {
   // Itens de solicitações aprovadas que ainda não foram para nenhuma PO
   const { data: itens, error } = await sb.from('solicitacao_compra_itens')
     .select(`id, item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada,
-             comentario, ordem_compra_id,
+             quantidade_aprovada, comentario, ordem_compra_id,
              solicitacoes_compra!inner(id, status, data_competencia, pdv_id, pdvs(nome)),
              itens(fornecedor_principal)`)
     .eq('solicitacoes_compra.status', 'aprovada')
@@ -842,7 +1030,21 @@ async function carregarFila() {
 
   if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + escapeHtml(error.message) + '</div>'; return; }
 
-  state.fila = itens || [];
+  // O gerente ajusta a quantidade na Lista do Dia e isso vira
+  // quantidade_aprovada. NULL = ele não mexeu, vale a solicitada; 0 = ele
+  // tirou o item da lista, e aí não é para comprar.
+  //
+  // `quantidade` passa a ser o número de trabalho da tela inteira, e a
+  // solicitada original fica ao lado para a compradora ver o que foi cortado.
+  state.fila = (itens || [])
+    .map(it => ({
+      ...it,
+      quantidade: it.quantidade_aprovada != null
+        ? parseFloat(it.quantidade_aprovada) : parseFloat(it.quantidade_solicitada),
+      cortado: it.quantidade_aprovada != null
+        && Math.abs(it.quantidade_aprovada - it.quantidade_solicitada) > 0.0005,
+    }))
+    .filter(it => it.quantidade > 0);
   renderFila();
 }
 
@@ -882,13 +1084,22 @@ function agruparFilaPorFornecedor() {
         moq: op?.moq ?? null,
         codigo: op?.codigo ?? null,
         pdvs: [], itemIds: [],
+        qtdPedida: 0, cortada: false,
         removida: false, obsLinha: '',
       };
     }
     const l = g.linhas[chave];
-    l.qtd += parseFloat(it.quantidade_solicitada) || 0;
+    // Quantidade de trabalho = a que o gerente liberou. A pedida fica junto
+    // para a tela poder mostrar "12 kg (o PDV pediu 20)".
+    l.qtd += it.quantidade || 0;
+    l.qtdPedida += parseFloat(it.quantidade_solicitada) || 0;
+    if (it.cortado) l.cortada = true;
     l.itemIds.push(it.id);
-    const pdv = it.solicitacoes_compra?.pdvs?.nome;
+    // pdv_id NULL = item avulso do gerente, compra do hotel. Precisa de nome
+    // explícito: sem isso a linha aparece sem origem e o custo some no
+    // fechamento por PDV.
+    const pdv = it.solicitacoes_compra?.pdv_id
+      ? it.solicitacoes_compra?.pdvs?.nome : 'Hotel (sem PDV)';
     if (pdv && !l.pdvs.includes(pdv)) l.pdvs.push(pdv);
   });
 
@@ -934,7 +1145,9 @@ function renderFila() {
           ${ganho > 0 ? `<br><span class="mtz-econ">${escapeHtml(l.maisBarata.fornecedor)} cobra
              ${fmtMoeda(l.maisBarata.preco)} — economia de ${fmtMoeda(ganho)}</span>` : ''}
         </td>
-        <td class="num" data-label="Quantidade">${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}</td>
+        <td class="num" data-label="Quantidade">${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}
+          ${l.cortada ? `<br><span class="linha-corte" title="O gerente ajustou na Lista do Dia">
+             pedido: ${fmtQtd(l.qtdPedida)}</span>` : ''}</td>
         <td class="num" data-label="Preço un.">${l.preco ? fmtMoeda(l.preco) : '<span class="text-muted">sem preço</span>'}
           ${idade ? `<br><span class="opc-tag">${escapeHtml(idade)}</span>` : ''}
           ${nAlt > 1 ? `<br><span class="opc-tag">${nAlt} fornecedores</span>` : ''}</td>
@@ -1171,6 +1384,7 @@ function renderPOEdit() {
           ? `<div class="po-moq">pedido mínimo ${fmtQtd(l.moq)} ${escapeHtml(l.unidade || '')}</div>` : ''}
         ${l.alternativas?.length > 1
           ? `<span class="po-alt" onclick="abrirAlternativas(${i})">${l.alternativas.length} fornecedores — trocar</span>` : ''}
+        ${refsDaLinha(l)}
       </div>
       <input class="po-inp ${l.moq != null && l.qtd < l.moq ? 'alerta' : ''}" type="number" step="0.001" min="0"
              value="${l.qtd}" onchange="mudarLinhaPO(${i},'qtd',this.value)" ${l.incluir ? '' : 'disabled'}>
@@ -2440,6 +2654,7 @@ function exportarHistorico() {
 const TITULOS = {
   fila:         ['A Comprar', 'Solicitações aprovadas, agrupadas por fornecedor'],
   matriz:       ['Itens × Fornecedores', 'Quem atende cada item, por quanto e em quantos dias'],
+  cotacoes:     ['Cotações', 'Peça preço a vários fornecedores e compare lado a lado'],
   ordens:       ['Ordens de Compra', 'Acompanhe prazo e status de cada PO'],
   fornecedores: ['Fornecedores', 'Contato, prazo, pagamento e documentação'],
   historico:    ['Histórico', 'Ordens emitidas por período'],
@@ -2454,7 +2669,405 @@ function goTab(tab, el) {
   document.getElementById('topTitle').textContent = t;
   document.getElementById('topSub').textContent = s;
   if (tab === 'matriz') renderMatriz();
+  if (tab === 'cotacoes') carregarCotacoes();
   if (window.innerWidth <= 900) fecharSidebar();
+}
+
+// =====================================================================
+// COTAÇÃO (RFQ) — pedir preço a vários fornecedores e comparar
+// =====================================================================
+// O ciclo do SAP é RFQ -> Quotation -> comparação -> award. Aqui:
+//
+//   1. escolhe o item e os fornecedores
+//   2. o sistema monta o TEXTO por fornecedor; ela copia para o e-mail dela.
+//      O sistema NÃO envia e-mail — decisão deliberada, mantém o
+//      desenvolvimento fora do escopo de segurança corporativa
+//   3. digita as respostas conforme chegam
+//   4. compara lado a lado
+//   5. "Escolher" grava preço e data de volta em item_fornecedores
+//
+// O passo 5 é o motivo de tudo isso existir. Hoje a matriz guarda duas
+// importações de planilha de meses diferentes — é por isso que comparar
+// fornecedor ainda não gera economia nenhuma. Quando a cotação passar pelo
+// sistema, a matriz vira dado vivo.
+
+async function carregarCotacoes() {
+  const cont = document.getElementById('cotacoesContainer');
+  const { data, error } = await sb.from('cotacoes')
+    .select(`id, numero, item_id, quantidade, status, prazo_resposta, observacao, created_at,
+             itens(nome, unidade),
+             cotacao_fornecedores(id, fornecedor_id, enviada_em, respondida_em, preco_unitario,
+                                  prazo_entrega_dias, quantidade_minima, validade_proposta,
+                                  observacao, escolhida)`)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    state.cotacoesOk = false;
+    cont.innerHTML = `<div class="aviso aviso-warn">
+      A cotação ainda não existe no banco. Rode a <strong>migration 38</strong> para habilitar esta tela.
+      <br><span class="text-muted" style="font-size:11px">${escapeHtml(error.message)}</span></div>`;
+    return;
+  }
+  state.cotacoesOk = true;
+  state.cotacoes = data || [];
+  setBadge('badgeCot', state.cotacoes.filter(c => c.status === 'aberta').length);
+  renderCotacoes();
+}
+
+function renderCotacoes() {
+  const cont = document.getElementById('cotacoesContainer');
+  if (!state.cotacoesOk) return;
+  const busca = (document.getElementById('c-busca').value || '').trim();
+  const st = document.getElementById('c-status').value;
+
+  let lista = state.cotacoes;
+  if (st === 'abertas') lista = lista.filter(c => c.status === 'aberta' || c.status === 'respondida');
+  else if (st) lista = lista.filter(c => c.status === st);
+  if (busca) lista = lista.filter(c => itemCasaBusca(c.itens?.nome || '', busca));
+
+  if (!lista.length) {
+    cont.innerHTML = `<div class="empty-text">Nenhuma cotação${
+      st === 'abertas' ? ' em aberto' : ''}. Use <strong>+ Nova cotação</strong> para pedir preço de um item.</div>`;
+    return;
+  }
+
+  cont.innerHTML = lista.map((c, i) => {
+    const forns = c.cotacao_fornecedores || [];
+    const comPreco = forns.filter(f => f.preco_unitario != null);
+    const menor = comPreco.length ? Math.min(...comPreco.map(f => parseFloat(f.preco_unitario))) : null;
+    const vencedora = forns.find(f => f.escolhida);
+    const nomeF = id => state.fornecedores.find(x => x.id === id)?.nome || '—';
+
+    const linhas = forns
+      .sort((a, b) => nomeF(a.fornecedor_id).localeCompare(nomeF(b.fornecedor_id)))
+      .map(f => {
+        const p = f.preco_unitario != null ? parseFloat(f.preco_unitario) : null;
+        const ehMenor = p != null && menor != null && p <= menor + 0.005;
+        const venceu = f.escolhida;
+        const fechada = c.status === 'fechada' || c.status === 'cancelada';
+        return `
+        <div class="cot-forn ${venceu ? 'vencedora' : ''}">
+          <div>${escapeHtml(nomeF(f.fornecedor_id))}
+            ${venceu ? '<span class="opc-tag">escolhido</span>' : ''}
+            <div class="linha-origem">${
+              f.respondida_em ? 'respondeu ' + ptDate(String(f.respondida_em).slice(0,10))
+              : f.enviada_em  ? 'enviada ' + ptDate(String(f.enviada_em).slice(0,10))
+              : 'ainda não enviada'}</div>
+          </div>
+          ${fechada
+            ? `<div class="${ehMenor ? 'cot-melhor' : ''}">${p != null ? fmtMoeda(p) : '<span class="cot-sem">sem resposta</span>'}</div>`
+            : `<input class="cot-inp" type="number" step="0.01" min="0" placeholder="preço"
+                 value="${p ?? ''}" onchange="salvarRespostaCotacao('${f.id}','preco_unitario',this.value)">`}
+          ${fechada ? `<div>${f.prazo_entrega_dias ?? '—'}d</div>`
+            : `<input class="cot-inp" type="number" step="1" min="0" placeholder="prazo"
+                 value="${f.prazo_entrega_dias ?? ''}" onchange="salvarRespostaCotacao('${f.id}','prazo_entrega_dias',this.value)">`}
+          ${fechada ? `<div>${f.quantidade_minima != null ? fmtQtd(f.quantidade_minima) : '—'}</div>`
+            : `<input class="cot-inp" type="number" step="0.001" min="0" placeholder="mín."
+                 value="${f.quantidade_minima ?? ''}" onchange="salvarRespostaCotacao('${f.id}','quantidade_minima',this.value)">`}
+          ${fechada ? `<div>${f.validade_proposta ? ptDate(f.validade_proposta) : '—'}</div>`
+            : `<input class="cot-inp" type="date" title="Até quando o preço vale"
+                 value="${f.validade_proposta ?? ''}" onchange="salvarRespostaCotacao('${f.id}','validade_proposta',this.value)">`}
+          <div style="display:flex;gap:6px;justify-content:flex-end">
+            ${fechada ? '' : `
+              <button class="btn btn-sm btn-secondary" onclick="abrirTextoCotacao('${c.id}','${f.id}')"
+                      title="Gerar o texto para copiar no e-mail">Texto</button>
+              ${p != null ? `<button class="btn btn-sm btn-gold" onclick="escolherFornecedorCotacao('${c.id}','${f.id}')"
+                      title="Fecha a cotação e grava este preço na matriz">Escolher</button>` : ''}`}
+          </div>
+        </div>`;
+      }).join('');
+
+    const respondidos = comPreco.length, total = forns.length;
+    const economia = comPreco.length > 1
+      ? Math.max(...comPreco.map(f => parseFloat(f.preco_unitario))) - menor : 0;
+
+    return `
+      <div class="cot-card">
+        <div class="cot-head" onclick="toggleCot(${i})">
+          <span class="cot-nome"><strong>${escapeHtml(c.itens?.nome || '—')}</strong>
+            ${c.quantidade ? `<span class="opc-tag">${fmtQtd(c.quantidade)} ${escapeHtml(c.itens?.unidade || '')}</span>` : ''}
+          </span>
+          <span class="forn-meta">${respondidos} de ${total} respondeu</span>
+          ${vencedora ? `<span class="forn-valor">${fmtMoeda(vencedora.preco_unitario)}</span>`
+            : menor != null ? `<span class="forn-valor">menor ${fmtMoeda(menor)}</span>` : ''}
+          <span class="badge ${c.status === 'fechada' ? 'badge-green'
+            : c.status === 'cancelada' ? 'badge-muted' : 'badge-gold'}">${c.status}</span>
+          <span class="chevron" id="chevC-${i}">▼</span>
+        </div>
+        <div class="cot-body ${c.status !== 'fechada' && c.status !== 'cancelada' ? 'open' : ''}" id="bodyC-${i}">
+          ${c.prazo_resposta ? `<div style="padding:8px 16px;font-size:11px;color:var(--muted)">
+            Prazo para responder: ${ptDate(c.prazo_resposta)}${c.observacao ? ' · ' + escapeHtml(c.observacao) : ''}</div>` : ''}
+          <div class="cot-forn" style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">
+            <div>Fornecedor</div><div>Preço</div><div>Prazo</div><div>Mínimo</div><div>Validade</div><div></div>
+          </div>
+          ${linhas}
+          ${economia > 0 && c.status !== 'fechada' ? `<div style="padding:10px 16px;font-size:11.5px;color:var(--green)">
+            Entre quem respondeu, a diferença do mais caro para o mais barato é
+            <strong>${fmtMoeda(economia)}</strong> por ${escapeHtml(c.itens?.unidade || 'unidade')}.</div>` : ''}
+          ${c.status !== 'fechada' && c.status !== 'cancelada' ? `
+            <div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-sm btn-outline" onclick="cancelarCotacao('${c.id}')">Cancelar cotação</button>
+            </div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleCot(i) {
+  document.getElementById('bodyC-' + i).classList.toggle('open');
+  document.getElementById('chevC-' + i).classList.toggle('open');
+}
+
+function abrirNovaCotacao() {
+  if (!state.cotacoesOk) { showToast('Rode a migration 38 para habilitar as cotações.', 'error'); return; }
+  const forns = [...state.fornecedores].sort((a, b) => a.nome.localeCompare(b.nome));
+  const prazo = new Date(); prazo.setDate(prazo.getDate() + 3);
+  document.getElementById('novaCotacaoBody').innerHTML = `
+    <label class="field-label">Item</label>
+    <input class="input" id="nc-busca" placeholder="Buscar item do catálogo..." oninput="renderBuscaItemCotacao()">
+    <div id="nc-resultado" style="max-height:180px;overflow-y:auto;margin-top:6px"></div>
+    <div id="nc-escolhido" class="aviso aviso-info mt-2" style="display:none"></div>
+
+    <div class="form-row col2 mt-3">
+      <div><label class="field-label">Quantidade de referência</label>
+        <input class="input" id="nc-qtd" type="number" step="0.001" min="0" placeholder="opcional"></div>
+      <div><label class="field-label">Responder até</label>
+        <input class="input" id="nc-prazo" type="date" value="${isoDate(prazo)}"></div>
+    </div>
+
+    <label class="field-label mt-2">Fornecedores a consultar</label>
+    <div class="text-muted mb-2" style="font-size:11px">
+      Os que já atendem este item vêm marcados quando você escolhe o item.
+      Não achou algum? Cadastre em <strong>Fornecedores</strong> e volte aqui.
+    </div>
+    <div style="max-height:210px;overflow-y:auto;border:1px solid var(--border-subtle);padding:8px">
+      ${forns.map(f => `<label style="display:flex;gap:8px;align-items:center;padding:5px 2px;font-size:13px;cursor:pointer">
+        <input type="checkbox" class="nc-forn" value="${f.id}"> ${escapeHtml(f.nome)}</label>`).join('')}
+    </div>
+
+    <label class="field-label mt-2">Observação para os fornecedores</label>
+    <input class="input" id="nc-obs" placeholder="opcional — entra no texto do e-mail">`;
+  _cotItem = null;
+  renderBuscaItemCotacao();
+  abrirModal('novaCotacaoModal');
+}
+
+let _cotItem = null;
+
+function renderBuscaItemCotacao() {
+  const termo = (document.getElementById('nc-busca').value || '').trim();
+  const cont = document.getElementById('nc-resultado');
+  if (!termo) { cont.innerHTML = ''; return; }
+  const achados = state.itens
+    .filter(i => i.ativo !== false && !i.producao_propria && itemAtendeBusca(i, termo))
+    .sort((a, b) => a.nome.localeCompare(b.nome)).slice(0, 10);
+  cont.innerHTML = achados.length
+    ? achados.map(i => `<div class="po-add-linha" onclick="escolherItemCotacao('${i.id}')">
+        <span>${escapeHtml(i.nome)}</span>
+        <span class="opc-tag">${escapeHtml(i.unidade || '')}</span></div>`).join('')
+    : '<div class="text-muted" style="font-size:12px;padding:6px 2px">Nenhum item com esse nome.</div>';
+}
+
+function escolherItemCotacao(itemId) {
+  _cotItem = state.itens.find(i => i.id === itemId);
+  if (!_cotItem) return;
+  document.getElementById('nc-resultado').innerHTML = '';
+  document.getElementById('nc-busca').value = '';
+  const box = document.getElementById('nc-escolhido');
+  box.style.display = '';
+  box.innerHTML = `Item: <strong>${escapeHtml(_cotItem.nome)}</strong> (${escapeHtml(_cotItem.unidade || '')})`;
+  // Já atende este item? Então já vai marcado — é a lista natural de quem consultar.
+  const jaAtendem = new Set(opcoesDe(itemId).map(o => o.fornecedor_id));
+  document.querySelectorAll('.nc-forn').forEach(c => { c.checked = jaAtendem.has(c.value); });
+}
+
+async function criarCotacao() {
+  if (!_cotItem) { showToast('Escolha o item primeiro.', 'error'); return; }
+  const forns = [...document.querySelectorAll('.nc-forn:checked')].map(c => c.value);
+  if (!forns.length) { showToast('Marque ao menos um fornecedor.', 'error'); return; }
+
+  const btn = document.getElementById('btnCriarCotacao');
+  btn.disabled = true; btn.textContent = 'Criando...';
+  try {
+    const qtd = parseFloat(document.getElementById('nc-qtd').value);
+    const { data: cot, error } = await inserirIdempotente(sb, 'cotacoes', {
+      item_id: _cotItem.id,
+      quantidade: isNaN(qtd) || qtd <= 0 ? null : qtd,
+      status: 'aberta',
+      prazo_resposta: document.getElementById('nc-prazo').value || null,
+      observacao: document.getElementById('nc-obs').value.trim() || null,
+      criada_por: state.perfil.id,
+    }, 'cotacao', 'id');
+    if (error) {
+      if (ehEnvioDuplicado(error)) { showToast('Esta cotação já havia sido criada.', 'info'); fecharModal('novaCotacaoModal'); return; }
+      throw error;
+    }
+    const { error: e2 } = await sb.from('cotacao_fornecedores')
+      .insert(forns.map(fid => ({ cotacao_id: cot.id, fornecedor_id: fid })));
+    if (e2) throw e2;
+
+    fecharModal('novaCotacaoModal');
+    showToast(`Cotação criada para ${forns.length} fornecedor(es). Gere o texto e mande por e-mail.`, 'success');
+    await carregarCotacoes();
+  } catch (err) {
+    showToast('Erro: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Criar cotação';
+  }
+}
+
+// Grava resposta campo a campo — a compradora recebe os e-mails aos poucos e
+// digita conforme chegam; esperar um "salvar" no fim perderia o que já tinha.
+async function salvarRespostaCotacao(linhaId, campo, valor) {
+  const patch = {};
+  if (campo === 'validade_proposta') patch[campo] = valor || null;
+  else {
+    const n = parseFloat(String(valor).replace(',', '.'));
+    patch[campo] = isNaN(n) || n < 0 ? null : n;
+  }
+  // Preço preenchido = o fornecedor respondeu. Carimba a data sozinho: pedir
+  // que ela digite também a data seria trabalho repetido e fonte de erro.
+  if (campo === 'preco_unitario' && patch[campo] != null) {
+    patch.respondida_em = new Date().toISOString();
+  }
+  const { error } = await sb.from('cotacao_fornecedores').update(patch).eq('id', linhaId);
+  if (error) { showToast('Erro ao salvar: ' + error.message, 'error'); return; }
+
+  if (campo === 'preco_unitario' && patch[campo] != null) {
+    const cot = state.cotacoes.find(c => (c.cotacao_fornecedores || []).some(f => f.id === linhaId));
+    if (cot && cot.status === 'aberta') {
+      await sb.from('cotacoes').update({ status: 'respondida' }).eq('id', cot.id);
+    }
+  }
+  await carregarCotacoes();
+}
+
+// ── Texto do e-mail ─────────────────────────────────────────────────
+let _cotTexto = null;
+
+function abrirTextoCotacao(cotId, linhaId) {
+  const cot = state.cotacoes.find(c => c.id === cotId);
+  const linha = (cot?.cotacao_fornecedores || []).find(f => f.id === linhaId);
+  if (!cot || !linha) return;
+  const forn = state.fornecedores.find(x => x.id === linha.fornecedor_id);
+
+  const assunto = `Cotação — ${cot.itens?.nome || 'item'} — Rosewood São Paulo`;
+  const corpo = [
+    `Prezados${forn?.nome ? ' (' + forn.nome + ')' : ''},`,
+    '',
+    'Solicitamos cotação para o item abaixo:',
+    '',
+    `  Item: ${cot.itens?.nome || '—'}`,
+    cot.quantidade ? `  Quantidade de referência: ${fmtQtd(cot.quantidade)} ${cot.itens?.unidade || ''}` : null,
+    '',
+    'Favor informar:',
+    '  - preço unitário',
+    '  - prazo de entrega em dias',
+    '  - quantidade mínima de pedido',
+    '  - validade da proposta',
+    cot.prazo_resposta ? `\nPedimos retorno até ${ptDate(cot.prazo_resposta)}.` : null,
+    cot.observacao ? `\n${cot.observacao}` : null,
+    '',
+    'Atenciosamente,',
+    state.perfil?.nome || 'Compras',
+    'Rosewood São Paulo — Alimentos & Bebidas',
+  ].filter(l => l !== null).join('\n');
+
+  _cotTexto = { linhaId, assunto, corpo };
+  document.getElementById('textoCotacaoTitulo').textContent =
+    'Texto para ' + (forn?.nome || 'o fornecedor');
+  document.getElementById('cot-assunto').value = assunto;
+  document.getElementById('cot-corpo').value = corpo;
+  document.getElementById('btnMarcarEnviada').textContent =
+    linha.enviada_em ? 'Copiar e atualizar a data' : 'Copiar e marcar como enviada';
+  abrirModal('textoCotacaoModal');
+}
+
+async function copiarTextoCotacao() {
+  if (!_cotTexto) return false;
+  try {
+    await navigator.clipboard.writeText(_cotTexto.assunto + '\n\n' + _cotTexto.corpo);
+    showToast('Texto copiado.', 'success');
+    return true;
+  } catch {
+    // clipboard bloqueado (http, permissão): seleciona para copiar à mão
+    const ta = document.getElementById('cot-corpo');
+    ta.focus(); ta.select();
+    showToast('Não consegui copiar sozinho — o texto está selecionado, use Ctrl+C.', 'info');
+    return false;
+  }
+}
+
+async function marcarCotacaoEnviada() {
+  if (!_cotTexto) return;
+  await copiarTextoCotacao();
+  const { error } = await sb.from('cotacao_fornecedores')
+    .update({ enviada_em: new Date().toISOString() }).eq('id', _cotTexto.linhaId);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  fecharModal('textoCotacaoModal');
+  showToast('Marcada como enviada.', 'success');
+  await carregarCotacoes();
+}
+
+// ── O passo que faz a cotação valer: o preço volta para a matriz ────
+async function escolherFornecedorCotacao(cotId, linhaId) {
+  const cot = state.cotacoes.find(c => c.id === cotId);
+  const linha = (cot?.cotacao_fornecedores || []).find(f => f.id === linhaId);
+  if (!cot || !linha) return;
+  const forn = state.fornecedores.find(x => x.id === linha.fornecedor_id);
+  if (!confirm(`Fechar a cotação de "${cot.itens?.nome}" com ${forn?.nome} a `
+    + `${fmtMoeda(linha.preco_unitario)}?\n\nO preço e a data de hoje vão para a matriz `
+    + `Item × Fornecedor e passam a valer nos próximos pedidos.`)) return;
+
+  try {
+    // 1. marca a vencedora (o índice único garante uma só por cotação)
+    const { error: e1 } = await sb.from('cotacao_fornecedores')
+      .update({ escolhida: true }).eq('id', linhaId);
+    if (e1) throw e1;
+
+    // 2. o preço entra na matriz, datado de hoje. É isto que transforma a
+    //    matriz de "duas importações de planilha" em dado vivo.
+    const hoje = new Date().toISOString();
+    const { data: existente } = await sb.from('item_fornecedores')
+      .select('id').eq('item_id', cot.item_id).eq('fornecedor_id', linha.fornecedor_id).maybeSingle();
+
+    const dados = {
+      preco_unitario: linha.preco_unitario,
+      preco_atualizado_em: hoje,
+      prazo_entrega_dias: linha.prazo_entrega_dias ?? undefined,
+      quantidade_minima: linha.quantidade_minima ?? undefined,
+      atualizado_em: hoje,
+      atualizado_por: state.perfil.id,
+      ativo: true,
+    };
+    Object.keys(dados).forEach(k => dados[k] === undefined && delete dados[k]);
+
+    const { error: e2 } = existente
+      ? await sb.from('item_fornecedores').update(dados).eq('id', existente.id)
+      : await sb.from('item_fornecedores').insert({
+          ...dados, item_id: cot.item_id, fornecedor_id: linha.fornecedor_id, preferencia: 2 });
+    if (e2) throw e2;
+
+    // 3. fecha a cotação
+    const { error: e3 } = await sb.from('cotacoes')
+      .update({ status: 'fechada', fechada_em: hoje }).eq('id', cotId);
+    if (e3) throw e3;
+
+    showToast(`Cotação fechada com ${forn?.nome}. O preço já está na matriz.`, 'success');
+    await Promise.all([carregarCotacoes(), carregarMatriz(), carregarUltimoPreco()]);
+    renderMatriz();
+  } catch (err) {
+    showToast('Erro ao fechar: ' + err.message, 'error');
+  }
+}
+
+async function cancelarCotacao(cotId) {
+  if (!confirm('Cancelar esta cotação? As respostas já digitadas ficam registradas.')) return;
+  const { error } = await sb.from('cotacoes')
+    .update({ status: 'cancelada', fechada_em: new Date().toISOString() }).eq('id', cotId);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  showToast('Cotação cancelada.', 'info');
+  await carregarCotacoes();
 }
 
 function toggleSidebar() {
