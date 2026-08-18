@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608181140">
+<link rel="stylesheet" href="style.css?v=202608181320">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608181140"></script>
+<script src="config.js?v=202608181320"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -1526,32 +1526,22 @@ async function enviarCompra() {
   const itensCompra = Object.values(state.selecionados.compra).map(s => s.item);
   const competencia = isoDate(calcularCompetenciaFinal(dataEntrega, itensCompra));
 
-  let solcId = state.rascunhoIdCompra;
-  if (solcId) {
-    // Atualizar rascunho existente para 'enviada'
-    const { error } = await sb.from('solicitacoes_compra').update({
-      status: 'enviada',
-      data_competencia: competencia,
-      data_entrega_desejada: dataEntrega,
-      observacao: obs || null,
-    }).eq('id', solcId);
-    if (error) throw error;
-    // Apagar itens antigos para sobrescrever
-    await sb.from('solicitacao_compra_itens').delete().eq('solicitacao_id', solcId);
-  } else {
-    const { data, error } = await inserirIdempotente(sb, 'solicitacoes_compra', {
-      pdv_id: state.pdvId,
-      usuario_id: state.perfil.id,
-      status: 'enviada',
-      data_competencia: competencia,
-      data_entrega_desejada: dataEntrega,
-      observacao: obs || null,
-    }, 'compra');
-    if (error) throw error;
-    solcId = data.id;
-  }
-
-  await inserirItensSolicitacao(solcId, 'compra');
+  // Transação única (migration 43), mesmo remédio da requisição. O caminho
+  // do rascunho ia pior que o do envio novo: apagava os itens antigos e SÓ
+  // DEPOIS tentava gravar os novos — se o segundo passo falhasse, a pessoa
+  // perdia a lista que já tinha montado. Agora o apagar e o gravar estão
+  // dentro da mesma transação.
+  const { data: solcId, error } = await sb.rpc('criar_solicitacao_compra', {
+    p_pdv_id:           state.pdvId,
+    p_data_entrega:     dataEntrega,
+    p_observacao:       obs || null,
+    p_client_token:     tokenCarrinho('compra'),
+    p_itens:            itensSolicitacaoPayload('compra'),
+    p_status:           'enviada',
+    p_data_competencia: competencia,
+    p_solicitacao_id:   state.rascunhoIdCompra || null,
+  });
+  if (error) throw error;
 
   state.rascunhoIdCompra = null;
   limparCarrinho('compra');
@@ -1611,52 +1601,38 @@ function itensRequisicaoPayload() {
   ];
 }
 
-async function inserirItensSolicitacao(solcId, aba) {
+// Monta o array que criar_solicitacao_compra consome. Não grava nada: quem
+// grava é o banco, junto com o cabeçalho — inclusive a fila itens_pendentes
+// dos itens digitados à mão, que antes era um terceiro insert solto aqui.
+//
+// Repare que aqui vai `s.item.nome` e não `nomeExibicao`: na compra quem lê
+// o nome é a compradora e o fornecedor, e o nome que eles reconhecem é o do
+// catálogo de compras. Na requisição é o contrário — lá vale o nome da cozinha.
+function itensSolicitacaoPayload(aba) {
   const sel = Object.values(state.selecionados[aba]);
   const livres = state.livres[aba];
-  const itensCat = sel.map(s => ({
-    solicitacao_id: solcId,
-    item_id: s.item.id,
-    item_nome: s.item.nome,
-    item_categoria: s.item.categoria,
-    item_unidade: s.item.unidade,
-    quantidade_solicitada: s.qty,
-    comentario: s.comentario || null,
-    item_livre: false,
-    ...snapshotPacote(s.item),
-  }));
-  const itensLivres = livres.map(l => ({
-    solicitacao_id: solcId,
-    item_id: null,
-    item_nome: l.nome,
-    item_categoria: state.catAtual[aba],
-    item_unidade: l.unidade,
-    quantidade_solicitada: l.qtd,
-    comentario: l.comentario || null,
-    item_livre: true,
-    // Mesmo defeito que derrubou a requisição em 12/08: o PostgREST monta o
-    // INSERT em lote com a UNIÃO das chaves e preenche o que falta com NULL,
-    // não com o DEFAULT. Sem isto, misturar item de catálogo com item livre
-    // manda pedido_por nulo e o lote inteiro é recusado.
-    ...snapshotPacote(null),
-  }));
-  const todos = [...itensCat, ...itensLivres];
-  if (todos.length > 0) {
-    const { error } = await sb.from('solicitacao_compra_itens').insert(todos);
-    if (error) throw error;
-  }
-  // Itens livres → fila para gerente_compras revisar
-  if (livres.length > 0) {
-    await sb.from('itens_pendentes').insert(livres.map(l => ({
-      origem: 'compra',
-      solicitacao_id: solcId,
-      pdv_id: state.pdvId,
-      nome_digitado: l.nome,
-      categoria_sugerida: state.catAtual[aba],
-      unidade_sugerida: l.unidade,
-      status: 'pendente',
-    })));
-  }
+  return [
+    ...sel.map(s => ({
+      item_id: s.item.id,
+      item_nome: s.item.nome,
+      item_categoria: s.item.categoria,
+      item_unidade: s.item.unidade,
+      quantidade_solicitada: s.qty,
+      comentario: s.comentario || null,
+      item_livre: false,
+      ...snapshotPacote(s.item),
+    })),
+    ...livres.map(l => ({
+      item_id: null,
+      item_nome: l.nome,
+      item_categoria: state.catAtual[aba],
+      item_unidade: l.unidade,
+      quantidade_solicitada: l.qtd,
+      comentario: l.comentario || null,
+      item_livre: true,
+      ...snapshotPacote(null),
+    })),
+  ];
 }
 
 // inserirItensRequisicao() saiu daqui: era a segunda etapa do envio em duas
@@ -1692,42 +1668,24 @@ async function salvarRascunho() {
   const obs = document.getElementById('compra-obs').value.trim();
   const dataEntrega = document.getElementById('compra-data-entrega').value || null;
 
-  let solcId = state.rascunhoIdCompra;
-  if (solcId) {
-    await sb.from('solicitacoes_compra').update({
-      status: 'rascunho',
-      data_entrega_desejada: dataEntrega,
-      observacao: obs || null,
-    }).eq('id', solcId);
-    await sb.from('solicitacao_compra_itens').delete().eq('solicitacao_id', solcId);
-  } else {
-    const { data, error } = await sb.from('solicitacoes_compra').insert({
-      pdv_id: state.pdvId,
-      usuario_id: state.perfil.id,
-      status: 'rascunho',
-      data_entrega_desejada: dataEntrega,
-      observacao: obs || null,
-    }).select().single();
-    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-    state.rascunhoIdCompra = data.id;
-    solcId = data.id;
-  }
-
-  try {
-    await inserirItensSolicitacao(solcId, 'compra');
-  } catch (err) {
-    showToast('Erro ao salvar itens: ' + err.message, 'error'); return;
-  }
+  const { error } = await sb.rpc('criar_solicitacao_compra', {
+    p_pdv_id:         state.pdvId,
+    p_data_entrega:   dataEntrega,
+    p_observacao:     obs || null,
+    p_client_token:   tokenCarrinho('compra'),
+    p_itens:          itensSolicitacaoPayload('compra'),
+    p_status:         'rascunho',
+    p_solicitacao_id: state.rascunhoIdCompra || null,
+  });
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
 
   // Zerar carrinho após salvar — usuário pode começar nova lista.
   // O rascunho fica salvo e pode ser retomado pela aba "Rascunhos".
-  state.selecionados.compra = {};
-  state.livres.compra = [];
+  // limparCarrinho zera o token junto — era o que faltava aqui. Sem isso o
+  // envio seguinte reusava o token do rascunho e a função devolvia o rascunho
+  // em vez de criar a solicitação nova.
+  limparCarrinho('compra');
   state.rascunhoIdCompra = null;
-  document.getElementById('compra-obs').value = '';
-  renderItens('compra');
-  renderLivres('compra');
-  atualizarCarrinho();
 
   showToast('Rascunho salvo. Carrinho zerado — encontre em "Rascunhos" pra continuar.', 'success');
   await Promise.all([carregarHistorico('compra'), carregarRascunhos()]);

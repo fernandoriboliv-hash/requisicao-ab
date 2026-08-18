@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608181140">
+<link rel="stylesheet" href="style.css?v=202608181320">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608181140"></script>
+<script src="config.js?v=202608181320"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -771,12 +771,25 @@ async function enviar(modo) {
     if (modo === 'compra') {
       const itensDoCarrinho = sel.map(s => s.item);
       const competencia = isoDate(calcularCompetenciaFinal(dataEntrega, itensDoCarrinho));
-      const { data: solc, error } = await inserirIdempotente(sb, 'solicitacoes_compra', {
-        pdv_id: pdvId, usuario_id: state.perfil.id,
-        status: 'enviada',
-        data_competencia: competencia, data_entrega_desejada: dataEntrega,
-        observacao: obs || null,
-      }, 'exec-compra');
+      // Transação única (migration 43): cabeçalho e itens, ou nada.
+      const { error } = await sb.rpc('criar_solicitacao_compra', {
+        p_pdv_id:           pdvId,
+        p_data_entrega:     dataEntrega,
+        p_observacao:       obs || null,
+        p_client_token:     tokenCarrinho('exec-compra'),
+        p_itens:            sel.map(s => ({
+          item_id: s.item.id,
+          item_nome: s.item.nome,
+          item_categoria: s.item.categoria,
+          item_unidade: s.item.unidade,
+          quantidade_solicitada: s.qty,
+          item_livre: false,
+          comentario: s.comentario || null,
+          ...snapshotPacote(s.item),
+        })),
+        p_status:           'enviada',
+        p_data_competencia: competencia,
+      });
       if (error) {
         if (ehEnvioDuplicado(error)) {
           showToast('Esta solicitação já havia sido enviada — nenhuma duplicata foi criada.', 'info');
@@ -786,13 +799,6 @@ async function enviar(modo) {
         showToast('Erro: ' + error.message, 'error');
         return;
       }
-      const itens = sel.map(s => ({
-        solicitacao_id: solc.id, item_id: s.item.id,
-        item_nome: s.item.nome, item_categoria: s.item.categoria, item_unidade: s.item.unidade,
-        quantidade_solicitada: s.qty, item_livre: false, comentario: s.comentario || null,
-        ...snapshotPacote(s.item),
-      }));
-      await sb.from('solicitacao_compra_itens').insert(itens);
       showToast('Solicitação de compra enviada para aprovação.', 'success');
     } else {
       const { data: req, error } = await inserirIdempotente(sb, 'requisicoes', {

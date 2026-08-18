@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608181140">
+<link rel="stylesheet" href="style.css?v=202608181320">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608181140"></script>
+<script src="config.js?v=202608181320"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -2506,14 +2506,23 @@ async function enviarCompraCommissary() {
   const itensDoCarrinho = sel.map(s => s.item);
   const competencia = isoDate(calcularCompetenciaFinal(dataEntrega, itensDoCarrinho));
 
-  const { data: solc, error } = await inserirIdempotente(sb, 'solicitacoes_compra', {
-    pdv_id: state.pdvComissariaId,
-    usuario_id: state.perfil.id,
-    status: 'enviada',
-    data_competencia: competencia,
-    data_entrega_desejada: dataEntrega,
-    observacao: obs || 'Reposição estoque commissary',
-  }, 'compraComis');
+  // Transação única (migration 43): cabeçalho e itens, ou nada.
+  const { error } = await sb.rpc('criar_solicitacao_compra', {
+    p_pdv_id:           state.pdvComissariaId,
+    p_data_entrega:     dataEntrega,
+    p_observacao:       obs || 'Reposição estoque commissary',
+    p_client_token:     tokenCarrinho('compraComis'),
+    p_itens:            sel.map(s => ({
+      item_id: s.item.id,
+      item_nome: s.item.nome,
+      item_categoria: s.item.categoria,
+      item_unidade: s.item.unidade,
+      quantidade_solicitada: s.qty,
+      item_livre: false,
+    })),
+    p_status:           'enviada',
+    p_data_competencia: competencia,
+  });
   if (error) {
     if (ehEnvioDuplicado(error)) {
       showToast('Esta solicitação já havia sido enviada — nenhuma duplicata foi criada.', 'info');
@@ -2523,18 +2532,6 @@ async function enviarCompraCommissary() {
     showToast('Erro: ' + error.message, 'error');
     return;
   }
-
-  const itens = sel.map(s => ({
-    solicitacao_id: solc.id,
-    item_id: s.item.id,
-    item_nome: s.item.nome,
-    item_categoria: s.item.categoria,
-    item_unidade: s.item.unidade,
-    quantidade_solicitada: s.qty,
-    item_livre: false,
-  }));
-  const { error: ei } = await sb.from('solicitacao_compra_itens').insert(itens);
-  if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
 
   showToast('Solicitação de compra enviada para o Gerente de Compras.', 'success');
   limparCompraComis();
@@ -3559,25 +3556,31 @@ async function enviarListaCompras() {
     return;
   }
   const obs = document.getElementById('gl-obs').value.trim() || null;
-  const { data: sol, error } = await sb.from('solicitacoes_compra').insert({
-    pdv_id: state.pdvComissariaId,
-    usuario_id: state.perfil.id,
-    status: 'enviada',
-    data_competencia: new Date().toISOString().slice(0,10),
-    observacao: obs || 'Lista gerada pelo Checklist do Estoque',
-  }).select('id').single();
-  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-  const itensPayload = listaCompras.map(r => ({
-    solicitacao_id: sol.id,
-    item_id: r.item_id,
-    item_nome: r.item_nome,
-    item_categoria: r.item_categoria,
-    item_unidade: r.item_unidade,
-    quantidade_solicitada: r.qty_final,
-  }));
-  const { error: ei } = await sb.from('solicitacao_compra_itens').insert(itensPayload);
-  if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
+  // Transação única (migration 43): cabeçalho e itens, ou nada.
+  const { error } = await sb.rpc('criar_solicitacao_compra', {
+    p_pdv_id:           state.pdvComissariaId,
+    p_data_entrega:     null,
+    p_observacao:       obs || 'Lista gerada pelo Checklist do Estoque',
+    p_client_token:     tokenCarrinho('checklistCompras'),
+    p_itens:            listaCompras.map(r => ({
+      item_id: r.item_id,
+      item_nome: r.item_nome,
+      item_categoria: r.item_categoria,
+      item_unidade: r.item_unidade,
+      quantidade_solicitada: r.qty_final,
+    })),
+    p_status:           'enviada',
+    p_data_competencia: new Date().toISOString().slice(0, 10),
+  });
+  if (error) {
+    if (ehEnvioDuplicado(error)) {
+      showToast('Esta lista já havia sido enviada — nada foi duplicado.', 'info');
+      fecharGerarLista(); listaCompras = []; return;
+    }
+    showToast('Erro: ' + error.message, 'error'); return;
+  }
   showToast(`Lista de compras enviada — ${listaCompras.length} item(ns) aguardando aprovação.`, 'success');
+  resetTokenCarrinho('checklistCompras');
   fecharGerarLista();
   listaCompras = [];
 }

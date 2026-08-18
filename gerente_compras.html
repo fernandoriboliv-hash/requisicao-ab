@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608181140">
+<link rel="stylesheet" href="style.css?v=202608181320">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608181140"></script>
+<script src="config.js?v=202608181320"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -2384,15 +2384,18 @@ async function confirmarEnvioLista() {
     if (avulsos.length) {
       // pdv_id NULL = compra do hotel. Nasce 'aprovada' porque quem aprova é
       // justamente quem está lançando.
-      const { data: sol, error } = await inserirIdempotente(sb, 'solicitacoes_compra', {
-        pdv_id: null,
-        usuario_id: state.perfil.id,
-        status: 'aprovada',
-        data_competencia: data,
-        aprovado_por: state.perfil.id,
-        aprovado_em: new Date().toISOString(),
-        observacao: 'Itens avulsos lançados pelo gerente (compra do hotel)',
-      }, 'ger-lista', 'id');
+      // Transação única (migration 43). Quem carimba aprovado_por/aprovado_em
+      // agora é o banco, a partir de quem chamou — a tela não precisa (nem
+      // deve) dizer quem aprovou.
+      const { error } = await sb.rpc('criar_solicitacao_compra', {
+        p_pdv_id:           null,
+        p_data_entrega:     null,
+        p_observacao:       'Itens avulsos lançados pelo gerente (compra do hotel)',
+        p_client_token:     tokenCarrinho('ger-lista'),
+        p_itens:            avulsos,
+        p_status:           'aprovada',
+        p_data_competencia: data,
+      });
       if (error) {
         if (ehEnvioDuplicado(error)) {
           showToast('Esta lista já havia sido enviada — nada foi duplicado.', 'info');
@@ -2401,12 +2404,12 @@ async function confirmarEnvioLista() {
         }
         throw error;
       }
-      const { error: e2 } = await sb.from('solicitacao_compra_itens')
-        .insert(avulsos.map(l => ({ ...l, solicitacao_id: sol.id })));
-      if (e2) throw e2;
       numAvulsos = avulsos.length;
       // Gravado no banco, some da memória: senão o próximo envio duplicaria.
       listaManualItens[data] = [];
+      // E o token tem que morrer junto: ele é a chave de idempotência da
+      // função, e reaproveitado faria a próxima lista voltar esta aqui.
+      resetTokenCarrinho('ger-lista');
     }
 
     fecharRevisaoLista();
