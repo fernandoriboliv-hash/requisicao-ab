@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608181320">
+<link rel="stylesheet" href="style.css?v=202608181551">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608181320"></script>
+<script src="config.js?v=202608181551"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -309,6 +309,7 @@
         </div>
       </div>
 
+      <div id="listaOutrasDatas"></div>
       <div id="listaContainer"><div class="loading-text">Carregando...</div></div>
     </div>
   </div>
@@ -1039,12 +1040,22 @@ function toggleAprovDet(id) {
 }
 
 async function aprovar(id) {
-  const { error } = await sb.from('solicitacoes_compra').update({
+  const { data, error } = await sb.from('solicitacoes_compra').update({
     status: 'aprovada',
     aprovado_por: state.perfil.id,
-  }).eq('id', id);
+  }).eq('id', id).select('data_competencia').maybeSingle();
   if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-  showToast('Solicitação aprovada.', 'success');
+
+  // A competência decide em QUAL Lista do Dia a solicitação entra. Pedido
+  // feito depois das 10h vai para a lista de amanhã — e até aqui o gerente
+  // aprovava, não via nada aparecer e concluía que o sistema tinha perdido.
+  // O aviso não muda a regra; só para de esconder o que ela faz.
+  const hoje = isoDate(new Date());
+  const comp = data?.data_competencia;
+  showToast(comp && comp !== hoje
+    ? `Aprovada — entra na lista de ${ptDate(comp)}, não na de hoje.`
+    : 'Solicitação aprovada — já está na Lista do Dia.', 'success');
+
   await Promise.all([carregarAprovacao(), atualizarBadges()]);
 }
 
@@ -1069,6 +1080,36 @@ async function confirmarRejeicao() {
 // =====================================================================
 // LISTA DO DIA — consolidação por categoria (auto + manual)
 // =====================================================================
+
+// Mostra, acima da lista, o que está aprovado esperando em outras datas.
+// A regra das 10h joga pedido da tarde para o dia seguinte; quem aprovou
+// precisa conseguir chegar lá com um clique, e não descobrir por acaso.
+function renderOutrasDatas(outras, dataAtual) {
+  const box = document.getElementById('listaOutrasDatas');
+  if (!box) return;
+  const porData = {};
+  outras.forEach(s => {
+    (porData[s.data_competencia] ||= []).push(s.pdvs?.nome || 'Hotel');
+  });
+  const datas = Object.keys(porData).sort();
+  if (!datas.length) { box.innerHTML = ''; return; }
+
+  box.innerHTML = `<div class="aviso aviso-info">
+    Também há solicitações aprovadas esperando em outras datas:
+    ${datas.map(d => `<button class="btn btn-sm btn-secondary" style="margin:2px 4px 0 0"
+        onclick="irParaData('${d}')">${ptDate(d)} — ${porData[d].length} ${
+        porData[d].length === 1 ? 'solicitação' : 'solicitações'}</button>`).join('')}
+    <div class="text-muted mt-2" style="font-size:11px">
+      Pedido aprovado depois das 10h entra na lista do dia seguinte.
+    </div>
+  </div>`;
+}
+
+function irParaData(d) {
+  document.getElementById('lista-data').value = d;
+  carregarLista();
+}
+
 let listaConsolidada = null;
 // Persistem por sessão (limpam ao trocar de data ou recarregar página).
 let listaManualItens = {}; // { 'YYYY-MM-DD': [ {cat,key,item_id,nome,unidade,qtd_final} ] }
@@ -1162,6 +1203,15 @@ async function carregarLista() {
     .select('*, pdvs(nome), solicitacao_compra_itens(*)')
     .eq('data_competencia', data)
     .eq('status', 'aprovada');
+
+  // Aprovadas que caíram em OUTRAS datas. Sem isto a tela mostra uma lista
+  // vazia e não conta que existem três solicitações esperando em 19/08.
+  const { data: outras } = await sb.from('solicitacoes_compra')
+    .select('data_competencia, pdvs(nome)')
+    .eq('status', 'aprovada')
+    .neq('data_competencia', data)
+    .gte('data_competencia', isoDate(new Date()));
+  renderOutrasDatas(outras || [], data);
 
   const cont = document.getElementById('listaContainer');
 

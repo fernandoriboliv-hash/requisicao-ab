@@ -211,12 +211,12 @@ function _montarEditorItem() {
         <button class="modal-close" onclick="fecharModal('itemEditorModal')">×</button>
       </div>
       <div class="modal-body">
-        <div class="ed-secao">Os três nomes do mesmo produto</div>
+        <div class="ed-secao">Nome</div>
         <div class="field">
           <label class="field-label">Nome de compra — o que a compradora manda ao fornecedor</label>
           <input class="input" id="ed-nome">
         </div>
-        <div class="form-row col2">
+        <div class="form-row col2 so-gerente">
           <div><label class="field-label">Nome na requisição — o que o cozinheiro vê</label>
             <input class="input" id="ed-curto" placeholder="vazio = usa o nome de compra"></div>
           <div><label class="field-label">Nome no inventário — o que aparece na contagem</label>
@@ -235,16 +235,31 @@ function _montarEditorItem() {
           <div><label class="field-label">Unidade de compra</label>
             <input class="input" id="ed-unid" placeholder="KG, UN, CX..."></div>
           <div><label class="field-label">Fornecedor principal</label>
-            <input class="input" id="ed-forn"></div>
+            <select class="select" id="ed-forn"></select></div>
         </div>
-        <div class="ed-checks">
+        <div class="ed-nota" id="ed-nota-forn"></div>
+
+        <div class="ed-secao so-gerente">Como este item é adquirido</div>
+        <div class="form-row col2 so-gerente">
+          <div><label class="field-label">Tipo de aquisição</label>
+            <select class="select" id="ed-tipo">
+              <option value="comprado">Comprado — aparece na lista de compras</option>
+              <option value="transformado">Transformado na cozinha — não se compra</option>
+              <option value="ambos">Ambos — comprado pronto e também produzido</option>
+            </select></div>
+          <div class="ed-nota" style="align-self:end;padding-bottom:8px">
+            Transformado sai da lista de compras: quem se compra é o item bruto.
+          </div>
+        </div>
+
+        <div class="ed-checks so-gerente">
           <label><input type="checkbox" id="ed-req"> Aparece na lista de requisição</label>
           <label><input type="checkbox" id="ed-chk"> Entra no checklist da Comissaria</label>
           <label><input type="checkbox" id="ed-inv"> Conta no inventário</label>
         </div>
 
-        <div class="ed-secao">Como a cozinha pede</div>
-        <div class="form-row col3">
+        <div class="ed-secao so-gerente">Como a cozinha pede</div>
+        <div class="form-row col3 so-gerente">
           <div><label class="field-label">Pede por</label>
             <select class="select" id="ed-pede" onchange="_edPedePor()">
               <option value="peso">Peso / unidade simples</option>
@@ -257,10 +272,10 @@ function _montarEditorItem() {
             <input class="input" id="ed-peso" type="number" step="0.001" min="0"
                    placeholder="em branco = o sistema aprende pesando"></div>
         </div>
-        <div class="ed-nota" id="ed-nota-pacote"></div>
+        <div class="ed-nota so-gerente" id="ed-nota-pacote"></div>
 
-        <div class="ed-secao">Aproveitamento — usado no fechamento do inventário</div>
-        <div class="form-row col2">
+        <div class="ed-secao so-gerente">Aproveitamento — usado no fechamento do inventário</div>
+        <div class="form-row col2 so-gerente">
           <div><label class="field-label">Aproveitamento (%)</label>
             <input class="input" id="ed-aprov" type="number" step="1" min="1" max="100"
                    placeholder="62 = sobram 62% do peso comprado"
@@ -268,8 +283,12 @@ function _montarEditorItem() {
           <div><label class="field-label">Vem de qual item bruto</label>
             <select class="select" id="ed-origem"></select></div>
         </div>
-        <div class="ed-nota" id="ed-nota-aprov">Deixe em branco quando o item é
+        <div class="ed-nota so-gerente" id="ed-nota-aprov">Deixe em branco quando o item é
           contado do mesmo jeito que é comprado.</div>
+        <div class="ed-nota" id="ed-aviso-perfil" style="display:none">
+          Os campos de cozinha — nome do cozinheiro, inventário, aproveitamento —
+          são editados pelo Gerente de Compras.
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="fecharModal('itemEditorModal')">Cancelar</button>
@@ -287,6 +306,13 @@ async function abrirEditorItem(itemId, catalogo, aoSalvar) {
   if (error) { showToast('Não consegui ler o item: ' + error.message, 'error'); return; }
   _edItem = data; _edAoSalvar = aoSalvar || null;
 
+  // Só o gerente enxerga e edita o que é gestão de cozinha.
+  const soGerente = ['gerente_compras', 'master_sistema'].includes(window.state?.perfil?.perfil);
+  document.querySelectorAll('#itemEditorModal .so-gerente')
+    .forEach(el => el.style.display = soGerente ? '' : 'none');
+  const avisoPerfil = document.getElementById('ed-aviso-perfil');
+  if (avisoPerfil) avisoPerfil.style.display = soGerente ? 'none' : '';
+
   const v = (id, val) => document.getElementById(id).value = val ?? '';
   const c = (id, val) => document.getElementById(id).checked = !!val;
   v('ed-nome', data.nome);
@@ -294,7 +320,41 @@ async function abrirEditorItem(itemId, catalogo, aoSalvar) {
   v('ed-inv-nome', data.nome_inventario);
   v('ed-cat', data.categoria || 'proteina');
   v('ed-unid', data.unidade);
-  v('ed-forn', data.fornecedor_principal);
+  // Fornecedor principal: escolha entre os que atendem ESTE item, não texto
+  // livre. Nome digitado à mão não casa com a matriz e vira fornecedor
+  // fantasma na hora de gerar a PO.
+  const { data: vinc } = await sb.from('item_fornecedores')
+    .select('fornecedor_id, preferencia, fornecedores(nome)')
+    .eq('item_id', itemId).eq('ativo', true);
+  const opcoes = (vinc || [])
+    .map(x => ({ nome: x.fornecedores?.nome, pref: x.preferencia }))
+    .filter(x => x.nome)
+    .sort((a, b) => a.pref - b.pref || a.nome.localeCompare(b.nome));
+
+  const atual = data.fornecedor_principal;
+  const nomes = opcoes.map(o => o.nome);
+  // O que está gravado hoje pode não estar na matriz. Some-lo seria apagar
+  // dado por efeito colateral, então ele entra na lista marcado.
+  if (atual && !nomes.includes(atual)) nomes.unshift(atual);
+
+  document.getElementById('ed-forn').innerHTML =
+    '<option value="">— sem fornecedor principal —</option>'
+    + nomes.map(n => {
+        const o = opcoes.find(x => x.nome === n);
+        const rot = !o ? ' (fora da matriz)'
+                  : o.pref === 1 ? ' · principal'
+                  : o.pref === 3 ? ' · esporádico' : ' · secundário';
+        return `<option value="${_escEd(n)}">${_escEd(n)}${rot}</option>`;
+      }).join('');
+  v('ed-forn', atual);
+
+  document.getElementById('ed-nota-forn').textContent = opcoes.length
+    ? opcoes.length + ' fornecedor(es) cadastrado(s) para este item. '
+      + 'Para incluir outro, use Itens × Fornecedores.'
+    : 'Nenhum fornecedor cadastrado para este item ainda — cadastre em Itens × Fornecedores '
+      + 'para ele poder entrar numa ordem de compra.';
+
+  v('ed-tipo', data.tipo_aquisicao || 'comprado');
   c('ed-req', ehDeRequisicao(data));
   c('ed-chk', data.no_checklist_estoque);
   c('ed-inv', data.inventario);
@@ -365,32 +425,52 @@ async function salvarEditorItem() {
             + 'Para 62%, escreva 62 — não 0,62.', 'error'); return;
   }
 
+  const soGerente = ['gerente_compras', 'master_sistema'].includes(window.state?.perfil?.perfil);
+
+  // O comprador manda só nos campos de compra. Os de cozinha nem entram no
+  // patch — enviar o valor da tela escondida gravaria o que estava em branco.
   const patch = {
     nome,
-    nome_curto:      t('ed-curto') || null,
-    nome_inventario: t('ed-inv-nome') || null,
     categoria:       document.getElementById('ed-cat').value,
     unidade:         t('ed-unid') || _edItem.unidade,
-    fornecedor_principal: t('ed-forn') || null,
-    req_ativo:            b('ed-req'),
-    no_checklist_estoque: b('ed-chk'),
-    inventario:           b('ed-inv'),
-    pede_por:             pacote ? 'pacote' : 'peso',
-    rotulo_pacote:        pacote ? document.getElementById('ed-rotulo').value : _edItem.rotulo_pacote,
-    // Fora do regime de pacote o peso médio é inerte — nenhuma tela lê. Não
-    // apago: em 9 itens ele foi medido na balança, e apagar medição real
-    // para limpar campo que ninguém lê é perda pura.
-    peso_medio_pacote: pacote ? (isNaN(peso) || peso <= 0 ? null : peso) : _edItem.peso_medio_pacote,
-    aproveitamento_pct: aprov,
-    item_origem_id:     document.getElementById('ed-origem').value || null,
-    // Editado à mão resolve a ambiguidade que a carga automática deixou.
-    req_revisar: false,
+    fornecedor_principal: document.getElementById('ed-forn').value || null,
   };
+
+  // Gestão de cozinha — só o gerente escreve. Para o comprador estes campos
+  // estão escondidos, e um <input> escondido devolve o valor que estava nele:
+  // incluí-los no patch gravaria em branco o que ele nem viu.
+  if (soGerente) {
+    Object.assign(patch, {
+      nome_curto:           t('ed-curto') || null,
+      nome_inventario:      t('ed-inv-nome') || null,
+      tipo_aquisicao:       document.getElementById('ed-tipo').value || 'comprado',
+      req_ativo:            b('ed-req'),
+      no_checklist_estoque: b('ed-chk'),
+      inventario:           b('ed-inv'),
+      pede_por:             pacote ? 'pacote' : 'peso',
+      rotulo_pacote:        pacote ? document.getElementById('ed-rotulo').value : _edItem.rotulo_pacote,
+      // Fora do regime de pacote o peso médio é inerte — nenhuma tela lê. Não
+      // apago: em 9 itens ele foi medido na balança, e apagar medição real
+      // para limpar campo que ninguém lê é perda pura.
+      peso_medio_pacote: pacote ? (isNaN(peso) || peso <= 0 ? null : peso) : _edItem.peso_medio_pacote,
+      aproveitamento_pct: aprov,
+      item_origem_id:     document.getElementById('ed-origem').value || null,
+      // Editado à mão resolve a ambiguidade que a carga automática deixou.
+      req_revisar: false,
+    });
+  }
 
   const btn = document.getElementById('ed-salvar');
   btn.disabled = true; btn.textContent = 'Salvando...';
-  const { data, error } = await sb.from('itens')
+  let { data, error } = await sb.from('itens')
     .update(patch).eq('id', _edItem.id).select().maybeSingle();
+  // Sem a migration 44 a coluna tipo_aquisicao nao existe. Grava o resto em
+  // vez de recusar o salvamento inteiro por causa de um campo novo.
+  if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+    const { tipo_aquisicao, ...semTipo } = patch;
+    ({ data, error } = await sb.from('itens')
+      .update(semTipo).eq('id', _edItem.id).select().maybeSingle());
+  }
   btn.disabled = false; btn.textContent = 'Salvar';
 
   if (error) { showToast(_msgErroEditor(error), 'error'); return; }
@@ -605,6 +685,21 @@ async function inserirIdempotente(sb, tabela, payload, chaveToken, selectStr = '
     r = await sb.from(tabela).insert(payload).select(selectStr).single();
   }
   return r;
+}
+
+// =====================================================================
+// DATA AINDA SENDO DIGITADA
+// =====================================================================
+// Num <input type="date">, o navegador dispara change a cada segmento que
+// a pessoa completa — inclusive com o ano pela metade. Se o handler grava e
+// redesenha a tela, o campo é recriado no meio da digitação e a pessoa nunca
+// termina de escrever o ano. Foi o que aconteceu na validade do recebimento
+// e de novo na validade da proposta, na cotação.
+//
+// A regra é simples: enquanto o ano não fizer sentido, ignore o evento.
+function dataIncompleta(iso) {
+  const ano = parseInt(String(iso || '').slice(0, 4), 10);
+  return !ano || ano < 1900;
 }
 
 // =====================================================================

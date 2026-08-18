@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprador — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608181320">
+<link rel="stylesheet" href="style.css?v=202608181551">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608181320"></script>
+<script src="config.js?v=202608181551"></script>
 <style>
   /* Bloco de um fornecedor na fila de aprovados */
   .forn-bloco {
@@ -115,6 +115,11 @@
     padding: 9px 10px; border-bottom: 1px solid var(--border-subtle);
   }
   .po-linha-edit:last-child { border-bottom: none; }
+  .po-cabecalho {
+    font-size: 10px; letter-spacing: 0.08em; color: var(--muted);
+    background: rgba(255,255,255,0.03); padding-top: 7px; padding-bottom: 7px;
+  }
+  .po-cabecalho .right { text-align: right; }
   .po-linha-edit.removida { opacity: 0.35; text-decoration: line-through; }
   .po-inp {
     width: 100%; background: rgba(255,255,255,0.06);
@@ -124,6 +129,11 @@
   }
   .po-inp:focus { border-color: rgba(184,150,62,0.5); }
   .po-inp.alerta { border-color: var(--orange); color: var(--orange); }
+  .if-extra > summary {
+    cursor: pointer; color: var(--muted); font-size: 12px;
+    padding: 4px 0; list-style: revert;
+  }
+  .if-extra[open] > summary { color: var(--text); }
   .po-del {
     background: none; border: 1px solid var(--border-subtle); color: var(--muted);
     cursor: pointer; font-size: 15px; padding: 4px 0; width: 30px;
@@ -162,7 +172,7 @@
   .cot-body { display: none; border-top: 1px solid var(--border-subtle); padding: 4px 0; }
   .cot-body.open { display: block; }
   .cot-forn {
-    display: grid; grid-template-columns: 1.6fr 1fr 0.8fr 0.9fr 1fr auto;
+    display: grid; grid-template-columns: 1.6fr 1fr 0.8fr 1fr auto;
     gap: 10px; align-items: center; padding: 9px 16px;
     border-bottom: 1px solid var(--border-subtle); font-size: 12px;
   }
@@ -172,6 +182,12 @@
     background: var(--bg); border: 1px solid var(--border-subtle); color: var(--text); }
   .cot-melhor { color: var(--green); font-weight: 700; }
   .cot-sem { color: var(--muted); font-style: italic; }
+  .cot-recusa { color: var(--orange); font-style: italic; }
+  .cot-btn-recusa {
+    background: none; border: 1px solid var(--border-subtle); color: var(--muted);
+    font-family: inherit; font-size: 11px; padding: 4px 7px; cursor: pointer;
+  }
+  .cot-btn-recusa:hover { color: var(--orange); border-color: var(--orange); }
   @media (max-width: 900px) {
     .cot-forn { grid-template-columns: 1fr 1fr; }
     .refs-linha { flex-direction: column; gap: 2px; }
@@ -226,7 +242,7 @@
   </div>
   <div class="sidebar-nav">
     <div class="nav-item active" onclick="goTab('fila',this)">
-      <span class="nav-icon">$</span> A Comprar
+      <span class="nav-icon">$</span> Solicitações de Compra
       <span class="nav-badge" id="badgeFila"></span>
     </div>
     <div class="nav-item" onclick="goTab('ordens',this)">
@@ -261,7 +277,7 @@
   <div class="top-bar">
     <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Abrir menu">☰</button>
     <div class="top-bar-hero">
-      <div class="top-title" id="topTitle">A Comprar</div>
+      <div class="top-title" id="topTitle">Solicitações de Compra</div>
       <div class="top-sub" id="topSub">Solicitações aprovadas, agrupadas por fornecedor</div>
     </div>
   </div>
@@ -373,7 +389,7 @@
         <button class="btn btn-sm btn-gold" onclick="abrirNovaOrdem()">+ Nova ordem</button>
       </div>
       <div class="aviso aviso-info">
-        A fila <strong>A Comprar</strong> cobre o que os PDVs pediram. Use <strong>+ Nova ordem</strong>
+        A fila <strong>Solicitações de Compra</strong> cobre o que os PDVs pediram. Use <strong>+ Nova ordem</strong>
         para o que não nasce de pedido: compra de contrato, reposição da Comissaria
         ou complemento de uma entrega já feita.
       </div>
@@ -565,6 +581,22 @@
           O sistema não paga nem lança título.
         </div>
       </div>
+      <div class="form-row col2">
+        <div>
+          <label class="field-label">Faturamento mínimo (R$)</label>
+          <input class="input" id="fm-fat-min" type="number" step="0.01" min="0"
+                 placeholder="deixe vazio se não houver">
+        </div>
+        <div>
+          <label class="field-label">Frete</label>
+          <select class="select" id="fm-frete">
+            <option value="">— não informado —</option>
+            <option value="nao">Incluso no preço</option>
+            <option value="sim">Cobrado à parte</option>
+          </select>
+        </div>
+      </div>
+      <input class="input" id="fm-frete-obs" placeholder="opcional — condição do frete (ex.: grátis acima de R$ 800)">
       <label class="field-label">Categorias que atende</label>
       <div id="fm-cats" style="display:flex;gap:14px;flex-wrap:wrap;padding:6px 0 2px"></div>
       <label class="field-label mt-2">Observação</label>
@@ -903,9 +935,12 @@ async function carregarMatriz() {
   }
   state.matrizOk = true;
 
-  const { data: itens } = await buscarTudo('itens',
-    'id, nome, categoria, unidade, fornecedor_principal, ativo, producao_propria',
-    q => q.eq('ativo', true));
+  const COLS_ITEM = 'id, nome, categoria, unidade, fornecedor_principal, ativo, producao_propria';
+  let { data: itens, error: eItens } = await buscarTudo('itens',
+    COLS_ITEM + ', tipo_aquisicao', q => q.eq('ativo', true));
+  // Sem a migration 44 a coluna não existe e o select inteiro falha —
+  // aí tudo volta a ser comprável, que é o comportamento antigo.
+  if (eItens) ({ data: itens } = await buscarTudo('itens', COLS_ITEM, q => q.eq('ativo', true)));
   state.itens = itens || [];
 
   const porForn = Object.fromEntries(state.fornecedores.map(f => [f.id, f]));
@@ -943,6 +978,14 @@ async function carregarMatriz() {
 function opcaoPadrao(itemId) {
   const ops = (state.matriz[itemId] || []).filter(o => o.ativo);
   return ops[0] || null;
+}
+
+// Item transformado nasce dentro da cozinha (peixe porcionado, carne
+// porcionada) e não tem o que comprar — quem se compra é o item bruto.
+// Sem a migration 44 o campo não existe e tudo volta a ser comprável,
+// que é o comportamento antigo.
+function ehCompravel(item) {
+  return item?.tipo_aquisicao !== 'transformado';
 }
 
 function opcoesDe(itemId) {
@@ -1322,14 +1365,21 @@ function iniciarOrdemAvulsa() {
   abrirModal('poModal');
 }
 
-// Itens que este fornecedor atende, pela matriz. Os demais aparecem
-// depois, marcados — comprar de quem não está na matriz é legítimo
-// (item novo, compra pontual), só não deve ser o caminho fácil.
+// SOURCE LIST — só aparece o que ESTE fornecedor atende.
+//
+// Antes a busca mostrava o catálogo inteiro, com os de fora apenas marcados.
+// Na prática isso deixava montar uma PO pedindo item que o fornecedor nem
+// vende, e o erro só aparecia quando ele respondia o e-mail. É o mesmo
+// desenho da lista de fontes de um ERP: para comprar de alguém, o item
+// precisa estar cadastrado para aquele alguém.
+//
+// O caminho para incluir um item novo continua existindo, e é explícito:
+// cadastrar o fornecedor no item, em Itens × Fornecedores.
 function itensParaAdicionar(termo) {
   const fid = state.poAtual?.fornecedor?.id;
   const jaNoPedido = new Set(state.poAtual.linhas.map(l => l.item_id));
   const casa = i => !jaNoPedido.has(i.id) && i.ativo !== false
-    && !i.producao_propria && itemAtendeBusca(i, termo);
+    && !i.producao_propria && ehCompravel(i) && itemAtendeBusca(i, termo);
 
   const doForn = [], outros = [];
   for (const i of state.itens) {
@@ -1337,7 +1387,8 @@ function itensParaAdicionar(termo) {
     (opcoesDe(i.id).some(o => o.fornecedor_id === fid) ? doForn : outros).push(i);
   }
   const ord = (a, b) => a.nome.localeCompare(b.nome);
-  return { doForn: doForn.sort(ord).slice(0, 12), outros: outros.sort(ord).slice(0, 6) };
+  // `outros` volta só para a tela saber quantos existem e dizer onde cadastrar.
+  return { doForn: doForn.sort(ord).slice(0, 12), outros: outros.sort(ord), soDoFornecedor: true };
 }
 
 function renderBuscaItemPO() {
@@ -1349,8 +1400,20 @@ function renderBuscaItemPO() {
     return;
   }
   const { doForn, outros } = itensParaAdicionar(termo);
-  if (!doForn.length && !outros.length) {
-    cont.innerHTML = `<div class="empty-text">Nenhum item encontrado para "${escapeHtml(termo)}".</div>`;
+  if (!doForn.length) {
+    const nomeF = state.poAtual?.fornecedor?.nome || 'este fornecedor';
+    cont.innerHTML = outros.length
+      ? `<div class="empty-text">
+          <strong>${escapeHtml(nomeF)}</strong> não tem esse item cadastrado.
+          ${outros.length === 1 ? 'Existe 1 item' : 'Existem ' + outros.length + ' itens'}
+          com esse nome no catálogo, mas de outros fornecedores.
+          <div class="text-muted mt-2" style="font-size:11px">
+            Para comprar dele, cadastre o fornecedor no item em
+            <strong>Itens × Fornecedores</strong> — com preço e prazo. Aí ele passa
+            a aparecer aqui.
+          </div>
+        </div>`
+      : `<div class="empty-text">Nenhum item encontrado para "${escapeHtml(termo)}".</div>`;
     return;
   }
   const linha = (i, deOutro) => {
@@ -1367,10 +1430,7 @@ function renderBuscaItemPO() {
       <span class="po-add-mais">＋</span>
     </div>`;
   };
-  cont.innerHTML =
-    doForn.map(i => linha(i, false)).join('') +
-    (outros.length ? `<div class="text-muted" style="font-size:11px;padding:8px 4px 4px">
-       Outros itens do catálogo</div>` + outros.map(i => linha(i, true)).join('') : '');
+  cont.innerHTML = doForn.map(i => linha(i, false)).join('');
 }
 
 function adicionarItemPO(itemId) {
@@ -1486,6 +1546,13 @@ function renderPOEdit() {
       ${state.poAtual.avulsa ? 'ele some do pedido.' : 'ele volta para a fila e entra no próximo.'}
     </div>
     <div style="border:1px solid var(--border-subtle)">
+      <div class="po-linha-edit po-cabecalho">
+        <div>ITEM</div>
+        <div class="right">QUANTIDADE</div>
+        <div class="right">PREÇO UN. (R$)</div>
+        <div class="right">TOTAL</div>
+        <div></div>
+      </div>
       ${linhas.length ? linhas.map(linhaHtml).join('')
         : '<div class="empty-text">Pedido vazio — busque um item abaixo para começar.</div>'}
     </div>
@@ -1756,13 +1823,26 @@ async function abrirEmail(ordemId) {
   // Quando o item tem código no catálogo do fornecedor, ele vai junto —
   // é o que evita o fornecedor separar o corte errado.
   const temCodigo = itens.some(i => i.codigo_fornecedor);
+  const temPreco  = itens.some(i => i.preco_unitario != null);
   const listaTxt = itens.map(i => {
     const q = `${fmtQtd(i.quantidade)} ${i.item_unidade || ''}`.trim();
-    return temCodigo
-      ? `${i.codigo_fornecedor || ''}\t${i.item_nome}\t${q}`
-      : `${i.item_nome}\t${q}`;
+    const campos = [];
+    if (temCodigo) campos.push(i.codigo_fornecedor || '');
+    campos.push(i.item_nome, q);
+    if (temPreco) {
+      campos.push(i.preco_unitario != null ? fmtMoeda(i.preco_unitario) : '—');
+      campos.push(i.preco_unitario != null ? fmtMoeda(i.quantidade * i.preco_unitario) : '—');
+    }
+    return campos.join('\t');
   }).join('\n');
-  blocos.push('ITENS\n' + listaTxt);
+
+  const cabTxt = [
+    ...(temCodigo ? ['CÓDIGO'] : []),
+    'ITEM', 'QTD', ...(temPreco ? ['PREÇO UN.', 'TOTAL'] : []),
+  ].join('\t');
+
+  blocos.push('ITENS\n' + cabTxt + '\n' + listaTxt
+    + (temPreco ? '\n\nTOTAL DO PEDIDO: ' + fmtMoeda(ordem.valor_total) : ''));
 
   if (ordem.observacao?.trim()) blocos.push('OBSERVAÇÃO\n' + ordem.observacao.trim());
   if (cfg.pedido_dados_entrega?.trim()) blocos.push(cfg.pedido_dados_entrega.trim());
@@ -1775,12 +1855,21 @@ async function abrirEmail(ordemId) {
   const corpoTexto = blocos.join('\n\n');
 
   // ── Versão com tabela, para colar formatado no Outlook ──
+  const td = 'border:1px solid #999;padding:6px 10px';
   const linhasHtml = itens.map(i => `<tr>
-      ${temCodigo ? `<td style="border:1px solid #999;padding:6px 10px">${escapeHtml(i.codigo_fornecedor || '')}</td>` : ''}
-      <td style="border:1px solid #999;padding:6px 10px">${escapeHtml(i.item_nome)}</td>
-      <td style="border:1px solid #999;padding:6px 10px;text-align:right;white-space:nowrap">${fmtQtd(i.quantidade)}</td>
-      <td style="border:1px solid #999;padding:6px 10px">${escapeHtml(i.item_unidade || '')}</td>
-    </tr>`).join('');
+      ${temCodigo ? `<td style="${td}">${escapeHtml(i.codigo_fornecedor || '')}</td>` : ''}
+      <td style="${td}">${escapeHtml(i.item_nome)}</td>
+      <td style="${td};text-align:right;white-space:nowrap">${fmtQtd(i.quantidade)}</td>
+      <td style="${td}">${escapeHtml(i.item_unidade || '')}</td>
+      ${temPreco ? `<td style="${td};text-align:right;white-space:nowrap">${
+        i.preco_unitario != null ? fmtMoeda(i.preco_unitario) : '—'}</td>
+      <td style="${td};text-align:right;white-space:nowrap">${
+        i.preco_unitario != null ? fmtMoeda(i.quantidade * i.preco_unitario) : '—'}</td>` : ''}
+    </tr>`).join('')
+    + (temPreco ? `<tr>
+      <td colspan="${temCodigo ? 4 : 3}" style="${td};text-align:right;font-weight:bold">TOTAL DO PEDIDO</td>
+      <td colspan="2" style="${td};text-align:right;font-weight:bold;white-space:nowrap">${fmtMoeda(ordem.valor_total)}</td>
+    </tr>` : '');
 
   const antesTabela = blocos.slice(0, 2).join('\n\n');
   const depoisTabela = blocos.slice(3).join('\n\n');
@@ -1795,6 +1884,8 @@ async function abrirEmail(ordemId) {
           <th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:left">Item</th>
           <th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:right">Qtd</th>
           <th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:left">Un</th>
+          ${temPreco ? '<th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:right">Preço un.</th>'
+            + '<th style="border:1px solid #999;padding:6px 10px;background:#eee;text-align:right">Total</th>' : ''}
         </tr></thead>
         <tbody>${linhasHtml}</tbody>
       </table>
@@ -2018,7 +2109,7 @@ function renderOrdens() {
         <td data-label="Entrega">${o.data_entrega_prevista ? ptDate(o.data_entrega_prevista) : '—'} ${pillPrazo(o)}</td>
         <td data-label="Status"><span class="badge">${statusLabel[o.status] || o.status}</span></td>
         <td class="td-acoes">
-          <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();abrirEmail('${o.id}')">E-mail</button>
+          <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();abrirEmail('${o.id}')">Abrir</button>
           ${['rascunho','enviada','confirmada'].includes(o.status)
             ? `<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();cancelarOrdem('${o.id}', ${o.numero})">Cancelar</button>` : ''}
         </td>
@@ -2460,40 +2551,39 @@ function abrirIF(ifId, itemIdNovo) {
         <input class="input" type="number" step="0.01" min="0" id="if-preco" value="${op?.preco ?? ''}">
       </div>
       <div>
-        <label class="field-label">Pedido mínimo (${escapeHtml(item.unidade || 'un')})</label>
-        <input class="input" type="number" step="0.001" min="0" id="if-moq" value="${op?.moq ?? ''}"
-               placeholder="deixe vazio se não houver">
-      </div>
-    </div>
-    <div class="form-row col2">
-      <div>
         <label class="field-label">Prazo de entrega (dias)</label>
         <input class="input" type="number" min="0" id="if-prazo" value="${op?.prazo_proprio ?? ''}"
                placeholder="vazio = usa o prazo do fornecedor">
       </div>
-      <div>
-        <label class="field-label">Código no fornecedor</label>
-        <input class="input" id="if-codigo" value="${escapeAttr(op?.codigo || '')}"
-               placeholder="o que ele usa no catálogo dele">
-      </div>
     </div>
-    <div class="form-row col2">
-      <div>
-        <label class="field-label">Embalagem</label>
-        <input class="input" id="if-emb" value="${escapeAttr(op?.embalagem || '')}"
-               placeholder="Ex.: CX 12x1KG">
+    <label class="field-label">Preferência</label>
+    <select class="select" id="if-pref">
+      <option value="1" ${op?.preferencia === 1 ? 'selected' : ''}>1 — Principal</option>
+      <option value="2" ${!op || op.preferencia === 2 ? 'selected' : ''}>2 — Secundário</option>
+      <option value="3" ${op?.preferencia === 3 ? 'selected' : ''}>3 — Esporádico</option>
+    </select>
+
+    <details class="if-extra mt-2">
+      <summary>Dados do catálogo do fornecedor (opcional)</summary>
+      <div class="form-row col2 mt-2">
+        <div>
+          <label class="field-label">Código no fornecedor</label>
+          <input class="input" id="if-codigo" value="${escapeAttr(op?.codigo || '')}"
+                 placeholder="o que ele usa no catálogo dele">
+        </div>
+        <div>
+          <label class="field-label">Embalagem</label>
+          <input class="input" id="if-emb" value="${escapeAttr(op?.embalagem || '')}"
+                 placeholder="Ex.: CX 12x1KG">
+        </div>
       </div>
-      <div>
-        <label class="field-label">Preferência</label>
-        <select class="select" id="if-pref">
-          <option value="1" ${op?.preferencia === 1 ? 'selected' : ''}>1 — Primário</option>
-          <option value="2" ${!op || op.preferencia === 2 ? 'selected' : ''}>2 — Alternativo</option>
-          <option value="3" ${op?.preferencia === 3 ? 'selected' : ''}>3 — Eventual</option>
-        </select>
-      </div>
+      <label class="field-label">Observação</label>
+      <input class="input" id="if-obs" value="${escapeAttr(op?.observacao || '')}" placeholder="opcional">
+    </details>
+    <div class="text-muted mt-2" style="font-size:11px">
+      Faturamento mínimo e frete são do fornecedor, não do item — ficam no
+      cadastro dele, em <strong>Fornecedores</strong>.
     </div>
-    <label class="field-label">Observação</label>
-    <input class="input" id="if-obs" value="${escapeAttr(op?.observacao || '')}" placeholder="opcional">
     ${op?.preco_em ? `<div class="text-muted mt-2" style="font-size:11px">
       Preço atualizado em ${ptDate(op.preco_em)}.</div>` : ''}`;
   abrirModal('ifModal');
@@ -2509,7 +2599,9 @@ async function salvarIF() {
 
   const payload = {
     preco_unitario:     num('if-preco'),
-    quantidade_minima:  num('if-moq'),
+    // if-moq saiu da tela (migration 44): o minimo e de faturamento e mora no
+    // fornecedor. Mantem o que ja estava gravado em vez de zerar por omissao.
+    quantidade_minima:  state.ifAtual?.op?.moq ?? null,
     prazo_entrega_dias: num('if-prazo'),
     codigo_fornecedor:  txt('if-codigo'),
     embalagem:          txt('if-emb'),
@@ -2680,7 +2772,9 @@ function renderFornecedores() {
         <td data-label="E-mail">${f.email ? escapeHtml(f.email) : '<span class="text-error">— sem e-mail —</span>'}</td>
         <td class="center" data-label="Itens">${itensPorForn[f.id] || 0}</td>
         <td class="center" data-label="Prazo">${f.prazo_entrega_dias}d</td>
-        <td data-label="Pagamento">${escapeHtml(f.condicao_pagamento || '—')}</td>
+        <td data-label="Pagamento">${escapeHtml(f.condicao_pagamento || '—')}${
+          f.faturamento_minimo ? `<div class="linha-origem">mín. ${fmtMoeda(f.faturamento_minimo)}${
+            f.cobra_frete === true ? ' · frete à parte' : f.cobra_frete === false ? ' · frete incluso' : ''}</div>` : ''}</td>
         <td data-label="Documentação">${doc}</td>
         <td class="td-acoes"><button class="btn btn-sm btn-secondary" onclick="abrirFornecedor('${f.id}')">Editar</button></td>
       </tr>`;
@@ -2703,6 +2797,10 @@ function abrirFornecedor(id) {
   document.getElementById('fm-prazo').value   = f?.prazo_entrega_dias ?? 1;
   document.getElementById('fm-pgto').value    = f?.condicao_pagamento || '';
   document.getElementById('fm-prazo-pgto').value = f?.prazo_pagamento_dias ?? '';
+  document.getElementById('fm-fat-min').value    = f?.faturamento_minimo ?? '';
+  document.getElementById('fm-frete').value      =
+    f?.cobra_frete === true ? 'sim' : f?.cobra_frete === false ? 'nao' : '';
+  document.getElementById('fm-frete-obs').value  = f?.frete_observacao || '';
   document.getElementById('fm-obs').value     = f?.observacao || '';
 
   const marcadas = new Set(f?.categorias || []);
@@ -2739,6 +2837,16 @@ async function salvarFornecedor() {
       const v = document.getElementById('fm-prazo-pgto').value.trim();
       return v === '' ? null : (parseInt(v, 10) || 0);
     })(),
+    faturamento_minimo: (() => {
+      const v = document.getElementById('fm-fat-min').value.trim();
+      return v === '' ? null : (parseFloat(v.replace(',', '.')) || 0);
+    })(),
+    // NULL não é "não cobra": é "ninguém perguntou ainda".
+    cobra_frete: (() => {
+      const v = document.getElementById('fm-frete').value;
+      return v === 'sim' ? true : v === 'nao' ? false : null;
+    })(),
+    frete_observacao: document.getElementById('fm-frete-obs').value.trim() || null,
     observacao:         document.getElementById('fm-obs').value.trim() || null,
     categorias:         cats.length ? cats : null,
     atualizado_em:      new Date().toISOString(),
@@ -2753,6 +2861,9 @@ async function salvarFornecedor() {
   // o campo novo e opcional, nao pode derrubar o que ja funcionava.
   if (error && (error.code === 'PGRST204' || error.code === '42703')) {
     delete payload.prazo_pagamento_dias;
+    delete payload.faturamento_minimo;
+    delete payload.cobra_frete;
+    delete payload.frete_observacao;
     ({ error } = id
       ? await sb.from('fornecedores').update(payload).eq('id', id)
       : await sb.from('fornecedores').insert(payload));
@@ -2842,7 +2953,7 @@ function exportarHistorico() {
 // HELPERS
 // =====================================================================
 const TITULOS = {
-  fila:         ['A Comprar', 'Solicitações aprovadas, agrupadas por fornecedor'],
+  fila:         ['Solicitações de Compra', 'Aprovadas pelo gerente, agrupadas por fornecedor'],
   matriz:       ['Itens × Fornecedores', 'Quem atende cada item, por quanto e em quantos dias'],
   cotacoes:     ['Cotações', 'Peça preço a vários fornecedores e compare lado a lado'],
   ordens:       ['Ordens de Compra', 'Acompanhe prazo e status de cada PO'],
@@ -2890,7 +3001,7 @@ async function carregarCotacoes() {
              itens(nome, unidade),
              cotacao_fornecedores(id, fornecedor_id, enviada_em, respondida_em, preco_unitario,
                                   prazo_entrega_dias, quantidade_minima, validade_proposta,
-                                  observacao, escolhida)`)
+                                  observacao, escolhida, situacao)`)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -2937,6 +3048,8 @@ function renderCotacoes() {
         const ehMenor = p != null && menor != null && p <= menor + 0.005;
         const venceu = f.escolhida;
         const fechada = c.status === 'fechada' || c.status === 'cancelada';
+        const recusa = f.situacao === 'nao_respondeu' ? 'sem retorno'
+                     : f.situacao === 'sem_estoque'   ? 'sem estoque' : '';
         return `
         <div class="cot-forn ${venceu ? 'vencedora' : ''}">
           <div>${escapeHtml(nomeF(f.fornecedor_id))}
@@ -2953,16 +3066,21 @@ function renderCotacoes() {
           ${fechada ? `<div>${f.prazo_entrega_dias ?? '—'}d</div>`
             : `<input class="cot-inp" type="number" step="1" min="0" placeholder="prazo"
                  value="${f.prazo_entrega_dias ?? ''}" onchange="salvarRespostaCotacao('${f.id}','prazo_entrega_dias',this.value)">`}
-          ${fechada ? `<div>${f.quantidade_minima != null ? fmtQtd(f.quantidade_minima) : '—'}</div>`
-            : `<input class="cot-inp" type="number" step="0.001" min="0" placeholder="mín."
-                 value="${f.quantidade_minima ?? ''}" onchange="salvarRespostaCotacao('${f.id}','quantidade_minima',this.value)">`}
           ${fechada ? `<div>${f.validade_proposta ? ptDate(f.validade_proposta) : '—'}</div>`
             : `<input class="cot-inp" type="date" title="Até quando o preço vale"
                  value="${f.validade_proposta ?? ''}" onchange="salvarRespostaCotacao('${f.id}','validade_proposta',this.value)">`}
-          <div style="display:flex;gap:6px;justify-content:flex-end">
+          <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center">
+            ${recusa ? `<span class="cot-recusa">${recusa}</span>` : ''}
             ${fechada ? '' : `
-              <button class="btn btn-sm btn-secondary" onclick="abrirTextoCotacao('${c.id}','${f.id}')"
-                      title="Gerar o texto para copiar no e-mail">Texto</button>
+              ${recusa
+                ? `<button class="cot-btn-recusa" onclick="marcarSituacaoCotacao('${f.id}','aguardando')"
+                        title="Desfazer">↺</button>`
+                : `<button class="btn btn-sm btn-secondary" onclick="abrirTextoCotacao('${c.id}','${f.id}')"
+                        title="Gerar o texto para copiar no e-mail">Texto</button>
+                   <button class="cot-btn-recusa" onclick="marcarSituacaoCotacao('${f.id}','nao_respondeu')"
+                        title="Registrar que este fornecedor não respondeu">sem retorno</button>
+                   <button class="cot-btn-recusa" onclick="marcarSituacaoCotacao('${f.id}','sem_estoque')"
+                        title="Registrar que ele não tem o item">sem estoque</button>`}
               ${p != null ? `<button class="btn btn-sm btn-gold" onclick="escolherFornecedorCotacao('${c.id}','${f.id}')"
                       title="Fecha a cotação e grava este preço na matriz">Escolher</button>` : ''}`}
           </div>
@@ -2970,6 +3088,7 @@ function renderCotacoes() {
       }).join('');
 
     const respondidos = comPreco.length, total = forns.length;
+    const recusaram = forns.filter(f => ['nao_respondeu','sem_estoque'].includes(f.situacao)).length;
     const economia = comPreco.length > 1
       ? Math.max(...comPreco.map(f => parseFloat(f.preco_unitario))) - menor : 0;
 
@@ -2979,7 +3098,8 @@ function renderCotacoes() {
           <span class="cot-nome"><strong>${escapeHtml(c.itens?.nome || '—')}</strong>
             ${c.quantidade ? `<span class="opc-tag">${fmtQtd(c.quantidade)} ${escapeHtml(c.itens?.unidade || '')}</span>` : ''}
           </span>
-          <span class="forn-meta">${respondidos} de ${total} respondeu</span>
+          <span class="forn-meta">${respondidos} de ${total} respondeu${
+            recusaram ? ' · ' + recusaram + ' sem retorno' : ''}</span>
           ${vencedora ? `<span class="forn-valor">${fmtMoeda(vencedora.preco_unitario)}</span>`
             : menor != null ? `<span class="forn-valor">menor ${fmtMoeda(menor)}</span>` : ''}
           <span class="badge ${c.status === 'fechada' ? 'badge-green'
@@ -3112,8 +3232,12 @@ async function criarCotacao() {
 // digita conforme chegam; esperar um "salvar" no fim perderia o que já tinha.
 async function salvarRespostaCotacao(linhaId, campo, valor) {
   const patch = {};
-  if (campo === 'validade_proposta') patch[campo] = valor || null;
-  else {
+  if (campo === 'validade_proposta') {
+    // Ano pela metade: guarda nada e, sobretudo, NÃO redesenha — era isso
+    // que impedia terminar de digitar o ano. Ver dataIncompleta em config.js.
+    if (valor && dataIncompleta(valor)) return;
+    patch[campo] = valor || null;
+  } else {
     const n = parseFloat(String(valor).replace(',', '.'));
     patch[campo] = isNaN(n) || n < 0 ? null : n;
   }
@@ -3122,14 +3246,42 @@ async function salvarRespostaCotacao(linhaId, campo, valor) {
   if (campo === 'preco_unitario' && patch[campo] != null) {
     patch.respondida_em = new Date().toISOString();
   }
-  const { error } = await sb.from('cotacao_fornecedores').update(patch).eq('id', linhaId);
+  if (patch.respondida_em) patch.situacao = 'respondida';
+
+  let { error } = await sb.from('cotacao_fornecedores').update(patch).eq('id', linhaId);
+  // Sem a migration 44 a coluna situacao não existe — grava o resto.
+  if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+    const { situacao, ...basico } = patch;
+    ({ error } = await sb.from('cotacao_fornecedores').update(basico).eq('id', linhaId));
+  }
   if (error) { showToast('Erro ao salvar: ' + error.message, 'error'); return; }
 
+  // Só redesenha quando o cabeçalho muda de verdade. Redesenhar a cada campo
+  // faz o cursor pular para fora do campo que está sendo preenchido.
+  const cot = state.cotacoes.find(c => (c.cotacao_fornecedores || []).some(f => f.id === linhaId));
+  const linha = cot?.cotacao_fornecedores?.find(f => f.id === linhaId);
+  if (linha) Object.assign(linha, patch);
+
   if (campo === 'preco_unitario' && patch[campo] != null) {
-    const cot = state.cotacoes.find(c => (c.cotacao_fornecedores || []).some(f => f.id === linhaId));
     if (cot && cot.status === 'aberta') {
       await sb.from('cotacoes').update({ status: 'respondida' }).eq('id', cot.id);
+      cot.status = 'respondida';
     }
+    renderCotacoes();
+  }
+}
+
+// Silêncio e falta de estoque também são resposta: sem registrar, não dá
+// para medir quem atende de verdade. É o mesmo motivo de rejeição que o
+// ciclo de cotação de ERP guarda na proposta.
+async function marcarSituacaoCotacao(linhaId, situacao) {
+  const { error } = await sb.from('cotacao_fornecedores')
+    .update({ situacao }).eq('id', linhaId);
+  if (error) {
+    showToast(error.code === 'PGRST204' || error.code === '42703'
+      ? 'Rode a migration 44 para habilitar este registro.'
+      : 'Erro: ' + error.message, 'error');
+    return;
   }
   await carregarCotacoes();
 }

@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Recebimento — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608181320">
+<link rel="stylesheet" href="style.css?v=202608181551">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608181320"></script>
+<script src="config.js?v=202608181551"></script>
 <style>
   /* Card de PO aguardando chegada */
   .po-card {
@@ -522,10 +522,7 @@ function temperaturaOk(it) {
 // um ano completo e dispara change a cada dígito: 0002, 0020, 0202, 2026.
 // Sem esta guarda, o sistema anunciava VENCIDO três vezes antes de a
 // pessoa terminar de escrever o ano.
-function dataIncompleta(iso) {
-  const ano = parseInt(String(iso || '').slice(0, 4), 10);
-  return !ano || ano < 1900;
-}
+// dataIncompleta() agora vive no config.js — a cotação precisava do mesmo.
 
 // 'vencido' | 'curta' | 'ok' | null
 function statusValidade(it) {
@@ -775,6 +772,8 @@ function textoPrazoFornecedor(ordem) {
 function mudarEmissaoNF(valor) {
   guardarCamposVolateis();
   state.conf.nfEmissao = valor;
+  // Mesmo motivo da validade: sem isto o campo se recria no meio do ano.
+  if (dataIncompleta(valor)) return;
   const dias = state.conf.ordem?.fornecedores?.prazo_pagamento_dias;
   if (valor && dias != null && dias !== '' && !state.conf.nfVencimento) {
     const d = new Date(valor + 'T12:00:00');   // meio-dia evita o pulo de fuso
