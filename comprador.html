@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprador — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608181551">
+<link rel="stylesheet" href="style.css?v=202608181844">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608181551"></script>
+<script src="config.js?v=202608181844"></script>
 <style>
   /* Bloco de um fornecedor na fila de aprovados */
   .forn-bloco {
@@ -172,12 +172,18 @@
   .cot-body { display: none; border-top: 1px solid var(--border-subtle); padding: 4px 0; }
   .cot-body.open { display: block; }
   .cot-forn {
-    display: grid; grid-template-columns: 1.6fr 1fr 0.8fr 1fr auto;
+    display: grid; grid-template-columns: 1.6fr 1fr 0.8fr 1fr 232px;
     gap: 10px; align-items: center; padding: 9px 16px;
     border-bottom: 1px solid var(--border-subtle); font-size: 12px;
   }
   .cot-forn:last-child { border-bottom: 0; }
   .cot-forn.vencedora { background: rgba(46,125,50,0.10); }
+  .cot-forn.esperando { background: rgba(224,140,62,0.10); }
+  .cot-forn.completa  { background: rgba(46,125,50,0.06); }
+  /* A coluna de ações muda de largura quando o botão Escolher aparece, e a
+     tabela inteira sai do prumo do cabeçalho. Largura fixa resolve. */
+  .cot-acoes { display: flex; gap: 6px; justify-content: flex-end;
+               align-items: center; min-width: 232px; }
   .cot-inp { padding: 5px 7px; font-size: 12px; width: 100%;
     background: var(--bg); border: 1px solid var(--border-subtle); color: var(--text); }
   .cot-melhor { color: var(--green); font-weight: 700; }
@@ -331,6 +337,50 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="novoItemModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Novo item</span>
+        <button class="modal-close" onclick="fecharModal('novoItemModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">Nome de compra *</label>
+        <input class="input" id="ni-nome" placeholder="como o fornecedor chama">
+        <div class="form-row col2 mt-2">
+          <div>
+            <label class="field-label">Categoria</label>
+            <select class="select" id="ni-cat">
+              <option value="proteina">Proteína</option>
+              <option value="laticinios">Laticínios</option>
+              <option value="hortifruti">Hortifruti</option>
+              <option value="diversos">Diversos</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Unidade de compra</label>
+            <input class="input" id="ni-unid" placeholder="KG, UN, CX...">
+          </div>
+        </div>
+        <label class="field-label mt-2">Fornecedor</label>
+        <select class="select" id="ni-forn"></select>
+        <div class="form-row col2 mt-2">
+          <div>
+            <label class="field-label">Preço unitário (R$)</label>
+            <input class="input" id="ni-preco" type="number" step="0.01" min="0">
+          </div>
+          <div>
+            <label class="field-label">Prazo de entrega (dias)</label>
+            <input class="input" id="ni-prazo" type="number" min="0" placeholder="vazio = prazo do fornecedor">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="fecharModal('novoItemModal')">Cancelar</button>
+        <button class="btn btn-gold" id="ni-salvar" onclick="salvarNovoItem()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="tab-content" id="tab-matriz">
     <div class="main full">
       <div class="stats-grid mb-3">
@@ -339,10 +389,9 @@
         <div class="stat-card"><div class="stat-label">Economia possível</div><div class="stat-val" id="mtEcon">—</div><div class="stat-sub">se comprar sempre o menor</div></div>
       </div>
 
-      <div class="aviso aviso-info">
-        Cada item pode ter vários fornecedores. O <strong>primário</strong> (círculo dourado) é o
-        que o sistema usa ao montar a ordem de compra — a compradora troca a qualquer momento,
-        e pode trocar só naquele pedido sem mexer no cadastro.
+      <div class="section-title">
+        <span>Itens × Fornecedores</span>
+        <button class="btn btn-sm btn-gold" onclick="abrirNovoItem()">+ Novo item</button>
       </div>
 
       <div class="filters-bar mb-3" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -986,6 +1035,84 @@ function opcaoPadrao(itemId) {
 // que é o comportamento antigo.
 function ehCompravel(item) {
   return item?.tipo_aquisicao !== 'transformado';
+}
+
+// Só aparece quando o fornecedor tem faturamento mínimo cadastrado — e aí é
+// informação, não explicação de como o sistema funciona.
+function abrirNovoItem() {
+  const forns = [...state.fornecedores].filter(f => f.ativo !== false)
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+  document.getElementById('ni-nome').value = '';
+  document.getElementById('ni-unid').value = 'KG';
+  document.getElementById('ni-preco').value = '';
+  document.getElementById('ni-prazo').value = '';
+  document.getElementById('ni-forn').innerHTML =
+    '<option value="">— sem fornecedor por enquanto —</option>'
+    + forns.map(f => `<option value="${f.id}">${escapeHtml(f.nome)}</option>`).join('');
+  abrirModal('novoItemModal');
+}
+
+async function salvarNovoItem() {
+  const nome = document.getElementById('ni-nome').value.trim();
+  if (!nome) { showToast('Informe o nome do item.', 'error'); return; }
+
+  const btn = document.getElementById('ni-salvar');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+
+  const cat  = document.getElementById('ni-cat').value;
+  const unid = document.getElementById('ni-unid').value.trim() || 'UN';
+  const fid  = document.getElementById('ni-forn').value;
+  const forn = state.fornecedores.find(f => f.id === fid);
+  const preco = parseFloat(String(document.getElementById('ni-preco').value).replace(',', '.'));
+  const prazo = parseInt(document.getElementById('ni-prazo').value, 10);
+
+  // Item novo NASCE fora da lista de requisição. Quem decide o que a cozinha
+  // enxerga é o gerente, e um item recém-criado pela compra ainda não tem
+  // nome de cozinha nem categoria revisada.
+  const base = {
+    nome, categoria: cat, unidade: unid, ativo: true, req_ativo: false,
+    fornecedor_principal: forn?.nome || null,
+    tipo_aquisicao: 'comprado',
+  };
+
+  let { data: item, error } = await sb.from('itens').insert(base).select().single();
+  if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+    const { tipo_aquisicao, ...semTipo } = base;
+    ({ data: item, error } = await sb.from('itens').insert(semTipo).select().single());
+  }
+  btn.disabled = false; btn.textContent = 'Salvar';
+
+  if (error) {
+    showToast(ehEnvioDuplicado(error)
+      ? 'Já existe um item com este nome nesta categoria.'
+      : 'Erro: ' + error.message, 'error');
+    return;
+  }
+
+  if (fid) {
+    const { error: ev } = await sb.from('item_fornecedores').insert({
+      item_id: item.id, fornecedor_id: fid,
+      preco_unitario: isNaN(preco) ? null : preco,
+      prazo_entrega_dias: isNaN(prazo) ? null : prazo,
+      preco_atualizado_em: isNaN(preco) ? null : new Date().toISOString().slice(0, 10),
+      preferencia: 1, ativo: true,
+    });
+    if (ev) showToast('Item criado, mas o vínculo com o fornecedor falhou: ' + ev.message, 'error');
+  }
+
+  fecharModal('novoItemModal');
+  showToast('Item criado.', 'success');
+  await carregarMatriz();
+  renderMatriz();
+}
+
+function _avisoFaturamentoMinimo(fornecedorId) {
+  const f = state.fornecedores.find(x => x.id === fornecedorId);
+  if (!f?.faturamento_minimo) return '';
+  return `<div class="text-muted mt-2" style="font-size:11px">
+    Faturamento mínimo de ${escapeHtml(f.nome)}: <strong>${fmtMoeda(f.faturamento_minimo)}</strong>${
+      f.cobra_frete === true ? ' · frete cobrado à parte' : ''}.
+  </div>`;
 }
 
 function opcoesDe(itemId) {
@@ -2580,10 +2707,7 @@ function abrirIF(ifId, itemIdNovo) {
       <label class="field-label">Observação</label>
       <input class="input" id="if-obs" value="${escapeAttr(op?.observacao || '')}" placeholder="opcional">
     </details>
-    <div class="text-muted mt-2" style="font-size:11px">
-      Faturamento mínimo e frete são do fornecedor, não do item — ficam no
-      cadastro dele, em <strong>Fornecedores</strong>.
-    </div>
+    ${_avisoFaturamentoMinimo(op?.fornecedor_id)}
     ${op?.preco_em ? `<div class="text-muted mt-2" style="font-size:11px">
       Preço atualizado em ${ptDate(op.preco_em)}.</div>` : ''}`;
   abrirModal('ifModal');
@@ -3050,8 +3174,14 @@ function renderCotacoes() {
         const fechada = c.status === 'fechada' || c.status === 'cancelada';
         const recusa = f.situacao === 'nao_respondeu' ? 'sem retorno'
                      : f.situacao === 'sem_estoque'   ? 'sem estoque' : '';
+        // Amarelo = pedido enviado, resposta pendente. Verde = respondeu tudo
+        // (preço, prazo e até quando o preço vale). Sem os três não é proposta
+        // fechada, e pintar de verde antes disso mentiria sobre o estado.
+        const completa = f.preco_unitario != null && f.prazo_entrega_dias != null && f.validade_proposta;
+        const esperando = !!f.enviada_em && !completa && !recusa;
+        const estado = venceu ? 'vencedora' : completa ? 'completa' : esperando ? 'esperando' : '';
         return `
-        <div class="cot-forn ${venceu ? 'vencedora' : ''}">
+        <div class="cot-forn ${estado}">
           <div>${escapeHtml(nomeF(f.fornecedor_id))}
             ${venceu ? '<span class="opc-tag">escolhido</span>' : ''}
             <div class="linha-origem">${
@@ -3069,14 +3199,14 @@ function renderCotacoes() {
           ${fechada ? `<div>${f.validade_proposta ? ptDate(f.validade_proposta) : '—'}</div>`
             : `<input class="cot-inp" type="date" title="Até quando o preço vale"
                  value="${f.validade_proposta ?? ''}" onchange="salvarRespostaCotacao('${f.id}','validade_proposta',this.value)">`}
-          <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center">
+          <div class="cot-acoes">
             ${recusa ? `<span class="cot-recusa">${recusa}</span>` : ''}
             ${fechada ? '' : `
               ${recusa
                 ? `<button class="cot-btn-recusa" onclick="marcarSituacaoCotacao('${f.id}','aguardando')"
                         title="Desfazer">↺</button>`
                 : `<button class="btn btn-sm btn-secondary" onclick="abrirTextoCotacao('${c.id}','${f.id}')"
-                        title="Gerar o texto para copiar no e-mail">Texto</button>
+                        title="Gerar o texto para copiar no e-mail">Enviar</button>
                    <button class="cot-btn-recusa" onclick="marcarSituacaoCotacao('${f.id}','nao_respondeu')"
                         title="Registrar que este fornecedor não respondeu">sem retorno</button>
                    <button class="cot-btn-recusa" onclick="marcarSituacaoCotacao('${f.id}','sem_estoque')"
@@ -3110,7 +3240,7 @@ function renderCotacoes() {
           ${c.prazo_resposta ? `<div style="padding:8px 16px;font-size:11px;color:var(--muted)">
             Prazo para responder: ${ptDate(c.prazo_resposta)}${c.observacao ? ' · ' + escapeHtml(c.observacao) : ''}</div>` : ''}
           <div class="cot-forn" style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">
-            <div>Fornecedor</div><div>Preço</div><div>Prazo</div><div>Mínimo</div><div>Validade</div><div></div>
+            <div>Fornecedor</div><div>Preço</div><div>Prazo</div><div>Validade da proposta</div><div></div>
           </div>
           ${linhas}
           ${economia > 0 && c.status !== 'fechada' ? `<div style="padding:10px 16px;font-size:11.5px;color:var(--green)">

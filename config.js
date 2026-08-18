@@ -213,13 +213,13 @@ function _montarEditorItem() {
       <div class="modal-body">
         <div class="ed-secao">Nome</div>
         <div class="field">
-          <label class="field-label">Nome de compra — o que a compradora manda ao fornecedor</label>
+          <label class="field-label">Nome de compra</label>
           <input class="input" id="ed-nome">
         </div>
         <div class="form-row col2 so-gerente">
-          <div><label class="field-label">Nome na requisição — o que o cozinheiro vê</label>
+          <div><label class="field-label">Nome na requisição</label>
             <input class="input" id="ed-curto" placeholder="vazio = usa o nome de compra"></div>
-          <div><label class="field-label">Nome no inventário — o que aparece na contagem</label>
+          <div><label class="field-label">Nome no inventário</label>
             <input class="input" id="ed-inv-nome" placeholder="vazio = usa o nome da requisição"></div>
         </div>
 
@@ -239,17 +239,14 @@ function _montarEditorItem() {
         </div>
         <div class="ed-nota" id="ed-nota-forn"></div>
 
-        <div class="ed-secao so-gerente">Como este item é adquirido</div>
         <div class="form-row col2 so-gerente">
           <div><label class="field-label">Tipo de aquisição</label>
             <select class="select" id="ed-tipo">
-              <option value="comprado">Comprado — aparece na lista de compras</option>
-              <option value="transformado">Transformado na cozinha — não se compra</option>
-              <option value="ambos">Ambos — comprado pronto e também produzido</option>
+              <option value="comprado">Comprado</option>
+              <option value="transformado">Transformado na cozinha</option>
+              <option value="ambos">Ambos</option>
             </select></div>
-          <div class="ed-nota" style="align-self:end;padding-bottom:8px">
-            Transformado sai da lista de compras: quem se compra é o item bruto.
-          </div>
+          <div></div>
         </div>
 
         <div class="ed-checks so-gerente">
@@ -285,10 +282,7 @@ function _montarEditorItem() {
         </div>
         <div class="ed-nota so-gerente" id="ed-nota-aprov">Deixe em branco quando o item é
           contado do mesmo jeito que é comprado.</div>
-        <div class="ed-nota" id="ed-aviso-perfil" style="display:none">
-          Os campos de cozinha — nome do cozinheiro, inventário, aproveitamento —
-          são editados pelo Gerente de Compras.
-        </div>
+
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="fecharModal('itemEditorModal')">Cancelar</button>
@@ -310,9 +304,6 @@ async function abrirEditorItem(itemId, catalogo, aoSalvar) {
   const soGerente = ['gerente_compras', 'master_sistema'].includes(window.state?.perfil?.perfil);
   document.querySelectorAll('#itemEditorModal .so-gerente')
     .forEach(el => el.style.display = soGerente ? '' : 'none');
-  const avisoPerfil = document.getElementById('ed-aviso-perfil');
-  if (avisoPerfil) avisoPerfil.style.display = soGerente ? 'none' : '';
-
   const v = (id, val) => document.getElementById(id).value = val ?? '';
   const c = (id, val) => document.getElementById(id).checked = !!val;
   v('ed-nome', data.nome);
@@ -348,11 +339,8 @@ async function abrirEditorItem(itemId, catalogo, aoSalvar) {
       }).join('');
   v('ed-forn', atual);
 
-  document.getElementById('ed-nota-forn').textContent = opcoes.length
-    ? opcoes.length + ' fornecedor(es) cadastrado(s) para este item. '
-      + 'Para incluir outro, use Itens × Fornecedores.'
-    : 'Nenhum fornecedor cadastrado para este item ainda — cadastre em Itens × Fornecedores '
-      + 'para ele poder entrar numa ordem de compra.';
+  document.getElementById('ed-nota-forn').textContent =
+    opcoes.length ? '' : 'Nenhum fornecedor cadastrado para este item.';
 
   v('ed-tipo', data.tipo_aquisicao || 'comprado');
   c('ed-req', ehDeRequisicao(data));
