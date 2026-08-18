@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprador — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608161514">
+<link rel="stylesheet" href="style.css?v=202608181140">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608161514"></script>
+<script src="config.js?v=202608181140"></script>
 <style>
   /* Bloco de um fornecedor na fila de aprovados */
   .forn-bloco {
@@ -242,6 +242,10 @@
       <span class="nav-icon">◎</span> Fornecedores
       <span class="nav-badge" id="badgeCert"></span>
     </div>
+    <div class="nav-item" onclick="goTab('notas',this)">
+      <span class="nav-icon">▤</span> Notas Fiscais
+      <span class="nav-badge" id="badgeNF"></span>
+    </div>
     <div class="nav-item" onclick="goTab('historico',this)"><span class="nav-icon">▣</span> Histórico</div>
     <div class="nav-item" onclick="abrirConfigPedido()"><span class="nav-icon">≡</span> Textos do Pedido</div>
   </div>
@@ -394,6 +398,34 @@
     </div>
   </div>
 
+  <!-- ================= NOTAS FISCAIS ================= -->
+  <div class="tab-content" id="tab-notas">
+    <div class="main full">
+      <div class="aviso aviso-info">
+        Isto é <strong>visualização</strong>, não contas a pagar. O sistema não lança título,
+        não baixa pagamento e não fala com o financeiro. Serve para você enxergar,
+        num lugar só, quais notas já chegaram e quando cada uma vence.
+      </div>
+      <div class="stats-grid mb-3">
+        <div class="stat-card"><div class="stat-label">Vencidas</div><div class="stat-val" id="nfVencidas">—</div><div class="stat-sub">passaram da data</div></div>
+        <div class="stat-card"><div class="stat-label">Vencem em 7 dias</div><div class="stat-val" id="nfProximas">—</div><div class="stat-sub">próximo vencimento</div></div>
+        <div class="stat-card"><div class="stat-label">Sem vencimento</div><div class="stat-val" id="nfSemData">—</div><div class="stat-sub">data não informada na doca</div></div>
+        <div class="stat-card"><div class="stat-label">Valor em nota</div><div class="stat-val" id="nfValor">—</div><div class="stat-sub">no filtro atual</div></div>
+      </div>
+      <div class="filters-bar mb-3" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select class="select" id="nf-filtro" onchange="renderNotas()" style="max-width:220px">
+          <option value="aberto">A vencer e vencidas</option>
+          <option value="vencidas">Só vencidas</option>
+          <option value="semdata">Sem vencimento informado</option>
+          <option value="">Todas</option>
+        </select>
+        <input class="input" id="nf-busca" placeholder="Buscar por nº da NF, PO ou fornecedor..." oninput="renderNotas()">
+      </div>
+      <div class="section-title"><span>Notas recebidas (<span id="nfCount">0</span>)</span></div>
+      <div id="notasContainer"><div class="loading-text">Carregando...</div></div>
+    </div>
+  </div>
+
   <!-- ================= HISTÓRICO ================= -->
   <div class="tab-content" id="tab-historico">
     <div class="main full">
@@ -522,6 +554,16 @@
       <div class="form-row col2">
         <div><label class="field-label">Prazo de entrega (dias)</label><input class="input" id="fm-prazo" type="number" min="0" value="1"></div>
         <div><label class="field-label">Condição de pagamento</label><input class="input" id="fm-pgto" placeholder="Ex.: 28 dias"></div>
+      </div>
+      <div class="form-row col2">
+        <div>
+          <label class="field-label">Prazo de pagamento (dias)</label>
+          <input class="input" id="fm-prazo-pgto" type="number" min="0" max="365" placeholder="Ex.: 28">
+        </div>
+        <div class="text-muted" style="font-size:11px;align-self:end;padding-bottom:8px">
+          Só para <strong>sugerir</strong> o vencimento da NF na doca.
+          O sistema não paga nem lança título.
+        </div>
       </div>
       <label class="field-label">Categorias que atende</label>
       <div id="fm-cats" style="display:flex;gap:14px;flex-wrap:wrap;padding:6px 0 2px"></div>
@@ -1985,6 +2027,139 @@ function renderOrdens() {
 }
 
 // =====================================================================
+// NOTAS FISCAIS — quando chegou, quando vence
+// =====================================================================
+// ESCOPO: visualização. Não é contas a pagar. O sistema não lança título,
+// não baixa pagamento e não conversa com o financeiro — e essa fronteira
+// precisa ficar visível na própria tela, senão alguém começa a tratar isto
+// como controle fiscal e para de olhar o sistema que de fato paga.
+//
+// A nota chega na doca junto com a mercadoria; é lá que as datas são
+// digitadas. Aqui a compradora só lê o que o recebimento registrou.
+
+async function carregarNotas() {
+  const cont = document.getElementById('notasContainer');
+  cont.innerHTML = '<div class="loading-text">Carregando...</div>';
+
+  // select(*) de propósito: se a migration 42 ainda não rodou, as colunas de
+  // data não existem e um select nominal derrubaria a tela inteira. Assim as
+  // datas apenas vêm indefinidas e a coluna mostra "—".
+  const { data, error } = await sb.from('recebimentos')
+    .select('*, ordens_compra(numero, fornecedores(nome))')
+    .not('nota_fiscal_numero', 'is', null)
+    .order('data_recebimento', { ascending: false })
+    .limit(500);
+
+  if (error) {
+    cont.innerHTML = '<div class="empty-text">Erro: ' + escapeHtml(error.message) + '</div>';
+    return;
+  }
+  state.notas = data || [];
+  renderNotas();
+}
+
+// Dias até o vencimento. Meio-dia dos dois lados para o fuso não mover a data.
+function diasAteVencimento(iso) {
+  if (!iso) return null;
+  const venc = new Date(iso + 'T12:00:00');
+  const hoje = new Date(); hoje.setHours(12, 0, 0, 0);
+  return Math.round((venc - hoje) / 86400000);
+}
+
+function chipVencimento(dias) {
+  if (dias === null) return '<span class="badge">sem data</span>';
+  if (dias < 0)   return `<span class="badge badge-error">vencida há ${Math.abs(dias)}d</span>`;
+  if (dias === 0) return '<span class="badge badge-orange">vence hoje</span>';
+  if (dias <= 7)  return `<span class="badge badge-orange">em ${dias}d</span>`;
+  return `<span class="badge">em ${dias}d</span>`;
+}
+
+function renderNotas() {
+  const filtro = document.getElementById('nf-filtro').value;
+  const busca  = (document.getElementById('nf-busca').value || '').toLowerCase();
+  const todas  = state.notas || [];
+
+  // Os KPIs olham o conjunto inteiro, não o filtro — um indicador que muda
+  // junto com o filtro deixa de medir a operação e passa a medir o filtro.
+  let vencidas = 0, proximas = 0, semData = 0;
+  todas.forEach(r => {
+    const d = diasAteVencimento(r.nota_fiscal_vencimento);
+    if (d === null) semData++;
+    else if (d < 0) vencidas++;
+    else if (d <= 7) proximas++;
+  });
+  document.getElementById('nfVencidas').textContent = vencidas;
+  document.getElementById('nfProximas').textContent = proximas;
+  document.getElementById('nfSemData').textContent  = semData;
+
+  const bad = document.getElementById('badgeNF');
+  if (bad) {
+    const n = vencidas + proximas;
+    bad.textContent = n || '';
+    bad.style.display = n ? '' : 'none';
+  }
+
+  let lista = todas.filter(r => {
+    const d = diasAteVencimento(r.nota_fiscal_vencimento);
+    if (filtro === 'vencidas') return d !== null && d < 0;
+    if (filtro === 'semdata')  return d === null;
+    if (filtro === 'aberto')   return d !== null;
+    return true;
+  });
+
+  if (busca) lista = lista.filter(r =>
+    (r.nota_fiscal_numero || '').toLowerCase().includes(busca) ||
+    fmtPO(r.ordens_compra?.numero).toLowerCase().includes(busca) ||
+    (r.ordens_compra?.fornecedores?.nome || '').toLowerCase().includes(busca));
+
+  // Vencimento crescente: o que vence antes aparece antes. Sem data vai ao fim.
+  lista.sort((a, b) => {
+    const da = diasAteVencimento(a.nota_fiscal_vencimento);
+    const db = diasAteVencimento(b.nota_fiscal_vencimento);
+    if (da === null && db === null) return 0;
+    if (da === null) return 1;
+    if (db === null) return -1;
+    return da - db;
+  });
+
+  document.getElementById('nfCount').textContent = lista.length;
+  document.getElementById('nfValor').textContent =
+    fmtMoeda(lista.reduce((t, r) => t + (parseFloat(r.nota_fiscal_valor) || 0), 0));
+
+  const cont = document.getElementById('notasContainer');
+  if (!lista.length) {
+    cont.innerHTML = '<div class="empty-text">Nenhuma nota neste filtro.</div>';
+    return;
+  }
+
+  cont.innerHTML = `<table class="data-table tabela-cards">
+    <thead><tr>
+      <th>Fornecedor</th><th>NF</th><th>PO</th>
+      <th class="num right">Valor</th><th>Mercadoria em</th>
+      <th>Emissão</th><th>Vencimento</th><th class="center">Conferência</th>
+    </tr></thead>
+    <tbody>${lista.map(r => {
+      const d = diasAteVencimento(r.nota_fiscal_vencimento);
+      const okNF = r.match_nf_receb;
+      const conf = okNF === false ? '<span class="badge badge-error">divergente</span>'
+                 : okNF === true  ? '<span class="badge badge-green">confere</span>'
+                 : '<span class="badge">—</span>';
+      return `
+      <tr class="clicavel" onclick="verOrdem('${r.ordem_id}')">
+        <td class="td-titulo">${escapeHtml(r.ordens_compra?.fornecedores?.nome || '—')}</td>
+        <td data-label="NF">${escapeHtml(r.nota_fiscal_numero || '—')}</td>
+        <td class="po-num" data-label="PO">${fmtPO(r.ordens_compra?.numero)}</td>
+        <td class="num right" data-label="Valor da NF">${r.nota_fiscal_valor != null ? fmtMoeda(r.nota_fiscal_valor) : '—'}</td>
+        <td data-label="Mercadoria em">${r.data_recebimento ? ptDate(r.data_recebimento) : '—'}</td>
+        <td data-label="Emissão">${r.nota_fiscal_emissao ? ptDate(r.nota_fiscal_emissao) : '—'}</td>
+        <td data-label="Vencimento">${r.nota_fiscal_vencimento ? ptDate(r.nota_fiscal_vencimento) + ' ' : ''}${chipVencimento(d)}</td>
+        <td class="center" data-label="Conferência">${conf}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+// =====================================================================
 // DETALHE DE UMA ORDEM DE COMPRA
 // =====================================================================
 // A lista mostrava número, fornecedor e valor. Para saber O QUE foi pedido,
@@ -2527,6 +2702,7 @@ function abrirFornecedor(id) {
   document.getElementById('fm-tel').value     = f?.telefone || '';
   document.getElementById('fm-prazo').value   = f?.prazo_entrega_dias ?? 1;
   document.getElementById('fm-pgto').value    = f?.condicao_pagamento || '';
+  document.getElementById('fm-prazo-pgto').value = f?.prazo_pagamento_dias ?? '';
   document.getElementById('fm-obs').value     = f?.observacao || '';
 
   const marcadas = new Set(f?.categorias || []);
@@ -2559,6 +2735,10 @@ async function salvarFornecedor() {
     telefone:           document.getElementById('fm-tel').value.trim() || null,
     prazo_entrega_dias: parseInt(document.getElementById('fm-prazo').value, 10) || 1,
     condicao_pagamento: document.getElementById('fm-pgto').value.trim() || null,
+    prazo_pagamento_dias: (() => {
+      const v = document.getElementById('fm-prazo-pgto').value.trim();
+      return v === '' ? null : (parseInt(v, 10) || 0);
+    })(),
     observacao:         document.getElementById('fm-obs').value.trim() || null,
     categorias:         cats.length ? cats : null,
     atualizado_em:      new Date().toISOString(),
@@ -2567,6 +2747,16 @@ async function salvarFornecedor() {
   let { error } = id
     ? await sb.from('fornecedores').update(payload).eq('id', id)
     : await sb.from('fornecedores').insert(payload);
+
+  // Antes da migration 42 prazo_pagamento_dias nao existe. Tentar de novo sem
+  // ele mantem o cadastro salvavel numa base que ainda nao rodou a migration —
+  // o campo novo e opcional, nao pode derrubar o que ja funcionava.
+  if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+    delete payload.prazo_pagamento_dias;
+    ({ error } = id
+      ? await sb.from('fornecedores').update(payload).eq('id', id)
+      : await sb.from('fornecedores').insert(payload));
+  }
 
   // Antes da migration 22 as colunas categorias/atualizado_em não existem
   if (error && (error.code === 'PGRST204' || error.code === '42703')) {
@@ -2657,6 +2847,7 @@ const TITULOS = {
   cotacoes:     ['Cotações', 'Peça preço a vários fornecedores e compare lado a lado'],
   ordens:       ['Ordens de Compra', 'Acompanhe prazo e status de cada PO'],
   fornecedores: ['Fornecedores', 'Contato, prazo, pagamento e documentação'],
+  notas:        ['Notas Fiscais', 'Quando a nota chegou e quando ela vence'],
   historico:    ['Histórico', 'Ordens emitidas por período'],
 };
 
@@ -2670,6 +2861,7 @@ function goTab(tab, el) {
   document.getElementById('topSub').textContent = s;
   if (tab === 'matriz') renderMatriz();
   if (tab === 'cotacoes') carregarCotacoes();
+  if (tab === 'notas') carregarNotas();
   if (window.innerWidth <= 900) fecharSidebar();
 }
 

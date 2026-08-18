@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Recebimento — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608161514">
+<link rel="stylesheet" href="style.css?v=202608181140">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608161514"></script>
+<script src="config.js?v=202608181140"></script>
 <style>
   /* Card de PO aguardando chegada */
   .po-card {
@@ -451,7 +451,7 @@ function renderAChegar() {
 // =====================================================================
 async function abrirConferencia(ordemId) {
   const { data: ordem, error } = await sb.from('ordens_compra')
-    .select('*, fornecedores(nome, contato_nome, telefone), ordem_compra_itens(*)')
+    .select('*, fornecedores(nome, contato_nome, telefone, condicao_pagamento, prazo_pagamento_dias), ordem_compra_itens(*)')
     .eq('id', ordemId).single();
   if (error) { showToast('Erro: ' + error.message, 'error'); return; }
 
@@ -470,6 +470,11 @@ async function abrirConferencia(ordemId) {
 
   state.conf = {
     ordem,
+    // Datas da nota. A emissao comeca vazia de proposito: quem preenche esta
+    // com a NF na mao e a data esta impressa nela. Preencher com hoje seria
+    // gravar a data do recebimento, que e justamente a que nao vale para o prazo.
+    nfEmissao: '',
+    nfVencimento: '',
     itens: itens.map(i => {
       const cons = porItem[i.item_id]?.conservacao || 'ambiente';
       return {
@@ -664,6 +669,20 @@ function renderConferencia() {
         </div>
       </div>
 
+      <div class="form-row col2 mt-2">
+        <div>
+          <label class="field-label">Emissão da NF</label>
+          <input class="input" id="nf-emissao" type="date"
+                 value="${state.conf.nfEmissao || ''}" onchange="mudarEmissaoNF(this.value)">
+        </div>
+        <div>
+          <label class="field-label">Vencimento</label>
+          <input class="input" id="nf-vencimento" type="date"
+                 value="${state.conf.nfVencimento || ''}" onchange="guardarCamposVolateis()">
+        </div>
+      </div>
+      <div class="text-muted mt-1" style="font-size:11px">${textoPrazoFornecedor(ordem)}</div>
+
       <!-- Three-way match: pedido × físico × fiscal -->
       <div class="match-3">
         <div class="match-cel">
@@ -730,6 +749,39 @@ function guardarCamposVolateis() {
   if (nf)  state.conf.nfValor = nf.value;
   if (num) state.conf.nfNumero = num.value;
   if (obs) state.conf.obsGeral = obs.value;
+  const em = document.getElementById('nf-emissao');
+  const vc = document.getElementById('nf-vencimento');
+  if (em) state.conf.nfEmissao    = em.value;
+  if (vc) state.conf.nfVencimento = vc.value;
+}
+
+// ── Vencimento da nota ─────────────────────────────────
+// O prazo do cadastro SUGERE; a nota decide. Por isso a sugestão só preenche
+// um vencimento vazio — se o conferente já digitou uma data, ela vale, mesmo
+// contrariando o cadastro do fornecedor.
+function textoPrazoFornecedor(ordem) {
+  const f = ordem?.fornecedores || {};
+  const d = f.prazo_pagamento_dias;
+  const txt = (f.condicao_pagamento || '').trim();
+  if (d != null && d !== '')
+    return 'Prazo cadastrado: ' + d + ' dia(s)' + (txt ? ' — ' + escapeHtml(txt) : '')
+         + '. O vencimento é sugerido a partir da emissão e pode ser corrigido.';
+  if (txt)
+    return 'Condição de pagamento: ' + escapeHtml(txt)
+         + '. Sem prazo em dias no cadastro do fornecedor, então o vencimento não é sugerido.';
+  return 'Sem prazo de pagamento no cadastro deste fornecedor — informe o vencimento pela nota.';
+}
+
+function mudarEmissaoNF(valor) {
+  guardarCamposVolateis();
+  state.conf.nfEmissao = valor;
+  const dias = state.conf.ordem?.fornecedores?.prazo_pagamento_dias;
+  if (valor && dias != null && dias !== '' && !state.conf.nfVencimento) {
+    const d = new Date(valor + 'T12:00:00');   // meio-dia evita o pulo de fuso
+    d.setDate(d.getDate() + parseInt(dias, 10));
+    state.conf.nfVencimento = isoDate(d);
+  }
+  renderConferencia();
 }
 
 function mudarQtd(i, v) {
@@ -905,6 +957,9 @@ async function finalizar(decisao) {
       data_recebimento: isoDate(new Date()),
       nota_fiscal_numero: nfNum || null,
       nota_fiscal_valor: isNaN(nfValor) ? null : nfValor,
+      // migration 42 — visualização de vencimento, não gestão fiscal
+      nota_fiscal_emissao: state.conf.nfEmissao || null,
+      nota_fiscal_vencimento: state.conf.nfVencimento || null,
       valor_po: valorPO,
       valor_confere: confere,
       divergencia: obs || null,
@@ -922,7 +977,8 @@ async function finalizar(decisao) {
 
     // Sem a migration 23 as colunas do match não existem — grava o essencial
     if (error && (error.code === 'PGRST204' || error.code === '42703')) {
-      const { valor_recebido, match_po_receb, match_nf_receb, temperatura_ok, ...basico } = cabecalho;
+      const { valor_recebido, match_po_receb, match_nf_receb, temperatura_ok,
+              nota_fiscal_emissao, nota_fiscal_vencimento, ...basico } = cabecalho;
       ({ data: rec, error } = await inserirIdempotente(sb, 'recebimentos', basico, 'rec-' + ordem.id));
     }
 
