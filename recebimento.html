@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Recebimento — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608181844">
+<link rel="stylesheet" href="style.css?v=202608181909">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608181844"></script>
+<script src="config.js?v=202608181909"></script>
 <style>
   /* Card de PO aguardando chegada */
   .po-card {
@@ -1160,6 +1160,12 @@ async function verRecebimento(id) {
   const itens = (r.recebimento_itens || []).sort((a, b) => a.item_nome.localeCompare(b.item_nome));
   const comProblema = itens.filter(i => i.divergencia).length;
 
+  // Devoluções desta entrega. A tabela pode não existir ainda (migration 45),
+  // e nesse caso o bloco simplesmente não aparece.
+  const { data: devs } = await sb.from('devolucoes')
+    .select('*, usuarios(nome)').eq('recebimento_id', id)
+    .order('data_devolucao', { ascending: false });
+
   // Os três vértices do match, do jeito que aparecem na conferência
   const cel = (rot, val, sub, cls) => `
     <div class="match-cel">
@@ -1232,7 +1238,26 @@ async function verRecebimento(id) {
        <tbody>${linhas}</tbody>
      </table>
      ${!r.estoque_atualizado ? `<div class="text-muted mt-2" style="font-size:11px">
-       Este recebimento não somou no saldo de estoque — a entrada automática está desligada.</div>` : ''}`
+       Este recebimento não somou no saldo de estoque — a entrada automática está desligada.</div>` : ''}
+
+     <div class="section-title mt-3">
+       <span>Devoluções${devs?.length ? ' (' + devs.length + ')' : ''}</span>
+       <button class="btn btn-sm btn-secondary" onclick="abrirDevolucao('${r.id}', () => verRecebimento('${r.id}'))">
+         Registrar devolução</button>
+     </div>
+     ${devs?.length ? `<table class="data-table tabela-cards">
+       <thead><tr><th>Item</th><th class="num">Quantidade</th><th>Motivo</th>
+         <th>Data</th><th>NF devolução</th></tr></thead>
+       <tbody>${devs.map(d => `<tr>
+         <td class="td-titulo">${escapeHtml(d.item_nome)}
+           ${d.observacao ? `<br><span class="linha-origem">${escapeHtml(d.observacao)}</span>` : ''}</td>
+         <td class="num" data-label="Quantidade">${fmtQtd(d.quantidade)} ${escapeHtml(d.item_unidade || '')}</td>
+         <td data-label="Motivo">${escapeHtml(ROTULO_DEVOLUCAO[d.motivo_codigo] || d.motivo_codigo)}</td>
+         <td data-label="Data">${ptDate(d.data_devolucao)}
+           ${d.usuarios?.nome ? `<br><span class="linha-origem">${escapeHtml(d.usuarios.nome)}</span>` : ''}</td>
+         <td data-label="NF devolução">${escapeHtml(d.nota_fiscal_numero || '—')}</td>
+       </tr>`).join('')}</tbody>
+     </table>` : '<div class="empty-text">Nenhuma devolução nesta entrega.</div>'}`
   );
 }
 

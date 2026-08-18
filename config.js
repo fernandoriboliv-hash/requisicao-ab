@@ -199,6 +199,234 @@ function _escEd(s) {
     ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 }
 
+// =====================================================================
+// DEVOLUÇÃO DE MERCADORIA JÁ RECEBIDA
+// =====================================================================
+// Recusar a carga na doca o sistema já sabia. O que faltava é o caso real:
+// a mercadoria entra, e dois dias depois a cozinha abre a caixa e devolve
+// parte. Migration 45.
+//
+// A quantidade recebida NÃO é sobrescrita — ela é o que foi conferido na
+// doca, e a auditoria pergunta por ela. O líquido é recebido menos devolvido.
+
+const MOTIVOS_DEVOLUCAO = [
+  ['qualidade',      'Qualidade'],
+  ['validade',       'Validade'],
+  ['produto_errado', 'Produto errado'],
+  ['embalagem',      'Embalagem'],
+  ['temperatura',    'Temperatura'],
+  ['excesso',        'Veio a mais'],
+  ['outro',          'Outro'],
+];
+
+const ROTULO_DEVOLUCAO = Object.fromEntries(MOTIVOS_DEVOLUCAO);
+
+let _devRec = null;      // recebimento aberto
+let _devAoSalvar = null;
+
+function _montarModalDevolucao() {
+  if (document.getElementById('devolucaoModal')) return;
+  const div = document.createElement('div');
+  div.className = 'modal-overlay';
+  div.id = 'devolucaoModal';
+  div.innerHTML = `
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <span id="devTitulo">Registrar devolução</span>
+        <button class="modal-close" onclick="fecharModal('devolucaoModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="devItens"></div>
+
+        <div class="form-row col3 mt-3">
+          <div>
+            <label class="field-label">Motivo</label>
+            <select class="select" id="dev-motivo">
+              ${MOTIVOS_DEVOLUCAO.map(([v, r]) => `<option value="${v}">${r}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Data da devolução</label>
+            <input class="input" id="dev-data" type="date">
+          </div>
+          <div>
+            <label class="field-label">NF de devolução</label>
+            <input class="input" id="dev-nf" placeholder="opcional">
+          </div>
+        </div>
+
+        <label class="field-label mt-2">Observação</label>
+        <input class="input" id="dev-obs" placeholder="opcional">
+
+        <label class="ed-checks mt-3" style="display:flex;gap:8px;align-items:center">
+          <input type="checkbox" id="dev-recompra" checked>
+          Recomprar o que foi devolvido
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="fecharModal('devolucaoModal')">Cancelar</button>
+        <button class="btn btn-gold" id="dev-salvar" onclick="salvarDevolucao()">Registrar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+async function abrirDevolucao(recebimentoId, aoSalvar) {
+  _montarModalDevolucao();
+  _devAoSalvar = aoSalvar || null;
+
+  const { data: rec, error } = await sb.from('recebimentos')
+    .select('*, ordens_compra(numero, fornecedor_id, fornecedores(nome)), recebimento_itens(*)')
+    .eq('id', recebimentoId).single();
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+  // O que já foi devolvido antes entra na conta: ninguém pode devolver
+  // 5 kg de um item do qual só sobraram 2.
+  const { data: jaDev } = await sb.from('devolucoes')
+    .select('recebimento_item_id, quantidade').eq('recebimento_id', recebimentoId);
+  const devolvido = {};
+  (jaDev || []).forEach(d => {
+    devolvido[d.recebimento_item_id] = (devolvido[d.recebimento_item_id] || 0) + parseFloat(d.quantidade);
+  });
+
+  _devRec = {
+    rec,
+    itens: (rec.recebimento_itens || [])
+      .map(i => ({
+        ...i,
+        jaDevolvido: devolvido[i.id] || 0,
+        disponivel: (parseFloat(i.quantidade_recebida) || 0) - (devolvido[i.id] || 0),
+        devolver: '',
+      }))
+      .filter(i => i.disponivel > 0.0001)
+      .sort((a, b) => String(a.item_nome).localeCompare(String(b.item_nome))),
+  };
+
+  document.getElementById('devTitulo').textContent =
+    'Devolução — ' + fmtPO(rec.ordens_compra?.numero) + ' · ' + (rec.ordens_compra?.fornecedores?.nome || '');
+  document.getElementById('dev-data').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('dev-nf').value = '';
+  document.getElementById('dev-obs').value = '';
+  document.getElementById('dev-recompra').checked = true;
+  document.getElementById('dev-motivo').value = 'qualidade';
+
+  _renderItensDevolucao();
+  abrirModal('devolucaoModal');
+}
+
+function _renderItensDevolucao() {
+  const cont = document.getElementById('devItens');
+  if (!_devRec.itens.length) {
+    cont.innerHTML = '<div class="empty-text">Não há saldo para devolver nesta entrega.</div>';
+    return;
+  }
+  cont.innerHTML = `
+    <div class="dev-linha dev-cabecalho">
+      <div>ITEM</div><div class="right">RECEBIDO</div><div class="right">DEVOLVER</div>
+    </div>
+    ${_devRec.itens.map((i, n) => `
+      <div class="dev-linha">
+        <div>${_escEd(i.item_nome)}
+          ${i.jaDevolvido ? `<div class="linha-origem">já devolvido: ${i.jaDevolvido}</div>` : ''}
+        </div>
+        <div class="right">${i.disponivel} ${_escEd(i.item_unidade || '')}</div>
+        <input class="po-inp" type="number" step="0.001" min="0" max="${i.disponivel}"
+               value="${i.devolver}" placeholder="0"
+               onchange="_mudarDevolucao(${n}, this.value)">
+      </div>`).join('')}`;
+}
+
+function _mudarDevolucao(n, valor) {
+  const it = _devRec.itens[n];
+  const v = parseFloat(String(valor).replace(',', '.'));
+  if (!isNaN(v) && v > it.disponivel) {
+    showToast(`Só há ${it.disponivel} ${it.item_unidade || ''} disponível deste item.`, 'error');
+    it.devolver = it.disponivel;
+    _renderItensDevolucao();
+    return;
+  }
+  it.devolver = isNaN(v) ? '' : v;
+}
+
+async function salvarDevolucao() {
+  const linhas = _devRec.itens.filter(i => parseFloat(i.devolver) > 0);
+  if (!linhas.length) { showToast('Informe a quantidade de ao menos um item.', 'error'); return; }
+
+  const btn = document.getElementById('dev-salvar');
+  btn.disabled = true; btn.textContent = 'Registrando...';
+
+  const motivo = document.getElementById('dev-motivo').value;
+  const data   = document.getElementById('dev-data').value || new Date().toISOString().slice(0, 10);
+  const nf     = document.getElementById('dev-nf').value.trim() || null;
+  const obs    = document.getElementById('dev-obs').value.trim() || null;
+  const recomprar = document.getElementById('dev-recompra').checked;
+
+  const { error } = await sb.from('devolucoes').insert(linhas.map(i => ({
+    recebimento_id:      _devRec.rec.id,
+    recebimento_item_id: i.id,
+    item_id:             i.item_id,
+    item_nome:           i.item_nome,
+    item_unidade:        i.item_unidade,
+    quantidade:          parseFloat(i.devolver),
+    motivo_codigo:       motivo,
+    observacao:          obs,
+    nota_fiscal_numero:  nf,
+    data_devolucao:      data,
+    gerou_pendencia:     recomprar,
+    registrado_por:      window.state?.perfil?.id ?? null,
+  })));
+
+  btn.disabled = false; btn.textContent = 'Registrar';
+  if (error) {
+    showToast(error.code === 'PGRST204' || error.code === '42P01'
+      ? 'Rode a migration 45 para habilitar a devolução.'
+      : 'Erro: ' + error.message, 'error');
+    return;
+  }
+
+  // A devolução vira pendência de recompra, do mesmo jeito que a falta na
+  // entrega — quem devolveu continua precisando do produto.
+  if (recomprar) {
+    const { error: ep } = await sb.from('pendencias_compra').insert(linhas.map(i => ({
+      origem_recebimento_id: _devRec.rec.id,
+      origem_ordem_id:       _devRec.rec.ordem_id,
+      item_id:               i.item_id,
+      item_nome:             i.item_nome,
+      item_unidade:          i.item_unidade,
+      quantidade:            parseFloat(i.devolver),
+      fornecedor_id:         _devRec.rec.ordens_compra?.fornecedor_id ?? null,
+      motivo_codigo:         motivo === 'excesso' ? 'outro' : motivo,
+      observacao:            'Devolvido em ' + data + (obs ? ' — ' + obs : ''),
+      criada_por:            window.state?.perfil?.id ?? null,
+    })));
+    if (ep) showToast('Devolução registrada, mas a recompra não entrou na fila: ' + ep.message, 'error');
+  }
+
+  // Uma entrega com devolução é divergente por definição, mesmo que tenha
+  // sido aceita limpa na doca.
+  if (_devRec.rec.status === 'aceito') {
+    await sb.from('recebimentos')
+      .update({ status: 'aceito_com_divergencia' }).eq('id', _devRec.rec.id);
+  }
+
+  fecharModal('devolucaoModal');
+  showToast(`Devolução registrada — ${linhas.length} item(ns).`, 'success');
+  if (_devAoSalvar) _devAoSalvar();
+}
+
+// Total devolvido por recebimento, para as telas mostrarem o líquido.
+async function devolucoesPorRecebimento(ids) {
+  if (!ids?.length) return {};
+  const { data, error } = await sb.from('devolucoes')
+    .select('recebimento_id, quantidade').in('recebimento_id', ids);
+  if (error) return {};
+  const t = {};
+  (data || []).forEach(d => {
+    t[d.recebimento_id] = (t[d.recebimento_id] || 0) + parseFloat(d.quantidade);
+  });
+  return t;
+}
+
 function _montarEditorItem() {
   if (document.getElementById('itemEditorModal')) return;
   const div = document.createElement('div');
@@ -224,7 +452,7 @@ function _montarEditorItem() {
         </div>
 
         <div class="ed-secao">Cadastro</div>
-        <div class="form-row col3">
+        <div class="form-row col2">
           <div><label class="field-label">Categoria</label>
             <select class="select" id="ed-cat">
               <option value="proteina">Proteína</option>
@@ -234,10 +462,12 @@ function _montarEditorItem() {
             </select></div>
           <div><label class="field-label">Unidade de compra</label>
             <input class="input" id="ed-unid" placeholder="KG, UN, CX..."></div>
-          <div><label class="field-label">Fornecedor principal</label>
-            <select class="select" id="ed-forn"></select></div>
         </div>
+
+        <div class="ed-secao">Fornecedores deste item</div>
+        <div id="ed-forn-lista"></div>
         <div class="ed-nota" id="ed-nota-forn"></div>
+        <button class="btn btn-sm btn-secondary mt-2" onclick="_edAddFornecedor()">+ Adicionar fornecedor</button>
 
         <div class="form-row col2 so-gerente">
           <div><label class="field-label">Tipo de aquisição</label>
@@ -311,36 +541,31 @@ async function abrirEditorItem(itemId, catalogo, aoSalvar) {
   v('ed-inv-nome', data.nome_inventario);
   v('ed-cat', data.categoria || 'proteina');
   v('ed-unid', data.unidade);
-  // Fornecedor principal: escolha entre os que atendem ESTE item, não texto
-  // livre. Nome digitado à mão não casa com a matriz e vira fornecedor
-  // fantasma na hora de gerar a PO.
+  // Preço e prazo são do PAR item + fornecedor, então moram aqui dentro:
+  // é a mesma tela onde se decide quem é o principal.
   const { data: vinc } = await sb.from('item_fornecedores')
-    .select('fornecedor_id, preferencia, fornecedores(nome)')
+    .select('id, fornecedor_id, preco_unitario, prazo_entrega_dias, preferencia, fornecedores(nome)')
     .eq('item_id', itemId).eq('ativo', true);
-  const opcoes = (vinc || [])
-    .map(x => ({ nome: x.fornecedores?.nome, pref: x.preferencia }))
-    .filter(x => x.nome)
-    .sort((a, b) => a.pref - b.pref || a.nome.localeCompare(b.nome));
 
-  const atual = data.fornecedor_principal;
-  const nomes = opcoes.map(o => o.nome);
-  // O que está gravado hoje pode não estar na matriz. Some-lo seria apagar
-  // dado por efeito colateral, então ele entra na lista marcado.
-  if (atual && !nomes.includes(atual)) nomes.unshift(atual);
+  _edForn = (vinc || []).map(x => ({
+    id: x.id,
+    fornecedor_id: x.fornecedor_id,
+    nome: x.fornecedores?.nome || '(fornecedor removido)',
+    preco: x.preco_unitario ?? '',
+    prazo: x.prazo_entrega_dias ?? '',
+    preferencia: x.preferencia ?? 2,
+    remover: false,
+    original: {
+      preco: x.preco_unitario, prazo: x.prazo_entrega_dias, preferencia: x.preferencia,
+    },
+  })).sort((a, b) => a.preferencia - b.preferencia || a.nome.localeCompare(b.nome));
 
-  document.getElementById('ed-forn').innerHTML =
-    '<option value="">— sem fornecedor principal —</option>'
-    + nomes.map(n => {
-        const o = opcoes.find(x => x.nome === n);
-        const rot = !o ? ' (fora da matriz)'
-                  : o.pref === 1 ? ' · principal'
-                  : o.pref === 3 ? ' · esporádico' : ' · secundário';
-        return `<option value="${_escEd(n)}">${_escEd(n)}${rot}</option>`;
-      }).join('');
-  v('ed-forn', atual);
+  // Lista de fornecedores para o seletor de novos vínculos
+  const { data: todosF } = await sb.from('fornecedores')
+    .select('id, nome').eq('ativo', true).order('nome');
+  _edTodosForn = todosF || [];
 
-  document.getElementById('ed-nota-forn').textContent =
-    opcoes.length ? '' : 'Nenhum fornecedor cadastrado para este item.';
+  _edRenderForn();
 
   v('ed-tipo', data.tipo_aquisicao || 'comprado');
   c('ed-req', ehDeRequisicao(data));
@@ -363,6 +588,149 @@ async function abrirEditorItem(itemId, catalogo, aoSalvar) {
 
   _edPedePor(); _edAproveitamento();
   abrirModal('itemEditorModal');
+}
+
+// ── Fornecedores do item ─────────────────────────────────────────
+let _edForn = [];
+let _edTodosForn = [];
+
+function _edRenderForn() {
+  const cont = document.getElementById('ed-forn-lista');
+  const visiveis = _edForn.filter(f => !f.remover);
+
+  if (!visiveis.length) {
+    cont.innerHTML = '<div class="empty-text" style="padding:10px">Nenhum fornecedor cadastrado.</div>';
+  } else {
+    cont.innerHTML = `
+      <div class="ed-forn-linha ed-forn-cab">
+        <div>FORNECEDOR</div><div class="right">PREÇO UN. (R$)</div>
+        <div class="right">PRAZO (DIAS)</div><div>PREFERÊNCIA</div><div></div>
+      </div>
+      ${_edForn.map((f, n) => f.remover ? '' : `
+        <div class="ed-forn-linha">
+          <div>${_escEd(f.nome)}</div>
+          <input class="po-inp" type="number" step="0.01" min="0" value="${f.preco}"
+                 onchange="_edMudarForn(${n},'preco',this.value)">
+          <input class="po-inp" type="number" step="1" min="0" value="${f.prazo}"
+                 placeholder="padrão" onchange="_edMudarForn(${n},'prazo',this.value)">
+          <select class="select" onchange="_edMudarForn(${n},'preferencia',this.value)">
+            <option value="1" ${f.preferencia === 1 ? 'selected' : ''}>Principal</option>
+            <option value="2" ${f.preferencia === 2 ? 'selected' : ''}>Secundário</option>
+            <option value="3" ${f.preferencia === 3 ? 'selected' : ''}>Esporádico</option>
+          </select>
+          <button class="po-del" title="Tirar este fornecedor do item"
+                  onclick="_edMudarForn(${n},'remover',true)">✕</button>
+        </div>`).join('')}`;
+  }
+
+  const principais = visiveis.filter(f => f.preferencia === 1).length;
+  const nota = document.getElementById('ed-nota-forn');
+  nota.className = principais > 1 ? 'ed-nota ed-nota-erro' : 'ed-nota';
+  nota.textContent = principais > 1
+    ? 'Mais de um fornecedor marcado como principal — só um pode ser.'
+    : '';
+}
+
+function _edMudarForn(n, campo, valor) {
+  const f = _edForn[n];
+  if (campo === 'preferencia') {
+    const novo = parseInt(valor, 10);
+    // Principal é exclusivo: marcar um rebaixa o anterior, em vez de deixar
+    // dois principais e a PO escolher no sorteio.
+    if (novo === 1) _edForn.forEach(o => { if (o !== f && o.preferencia === 1) o.preferencia = 2; });
+    f.preferencia = novo;
+  } else if (campo === 'remover') {
+    f.remover = true;
+  } else {
+    f[campo] = valor === '' ? '' : parseFloat(String(valor).replace(',', '.'));
+  }
+  _edRenderForn();
+}
+
+function _edAddFornecedor() {
+  const jaTem = new Set(_edForn.filter(f => !f.remover).map(f => f.fornecedor_id));
+  const livres = _edTodosForn.filter(f => !jaTem.has(f.id));
+  if (!livres.length) { showToast('Todos os fornecedores já estão neste item.', 'info'); return; }
+
+  const cont = document.getElementById('ed-forn-lista');
+  const div = document.createElement('div');
+  div.className = 'ed-forn-linha';
+  div.id = 'ed-forn-novo';
+  div.innerHTML = `
+    <select class="select" id="ed-forn-novo-id">
+      ${livres.map(f => `<option value="${f.id}">${_escEd(f.nome)}</option>`).join('')}
+    </select>
+    <input class="po-inp" type="number" step="0.01" min="0" id="ed-forn-novo-preco" placeholder="preço">
+    <input class="po-inp" type="number" step="1" min="0" id="ed-forn-novo-prazo" placeholder="padrão">
+    <select class="select" id="ed-forn-novo-pref">
+      <option value="1">Principal</option>
+      <option value="2" selected>Secundário</option>
+      <option value="3">Esporádico</option>
+    </select>
+    <button class="po-del" onclick="_edConfirmarNovoForn()" title="Incluir">✓</button>`;
+  cont.appendChild(div);
+  document.getElementById('ed-forn-novo-id').focus();
+}
+
+function _edConfirmarNovoForn() {
+  const id = document.getElementById('ed-forn-novo-id').value;
+  const f = _edTodosForn.find(x => x.id === id);
+  if (!f) return;
+  const preco = document.getElementById('ed-forn-novo-preco').value;
+  const prazo = document.getElementById('ed-forn-novo-prazo').value;
+  const pref  = parseInt(document.getElementById('ed-forn-novo-pref').value, 10);
+
+  if (pref === 1) _edForn.forEach(o => { if (o.preferencia === 1) o.preferencia = 2; });
+  _edForn.push({
+    id: null, fornecedor_id: f.id, nome: f.nome,
+    preco: preco === '' ? '' : parseFloat(preco),
+    prazo: prazo === '' ? '' : parseInt(prazo, 10),
+    preferencia: pref, remover: false, original: null,
+  });
+  _edRenderForn();
+}
+
+// Grava os vínculos. Só toca no que mudou — reescrever tudo carimbaria
+// preco_atualizado_em em linha que ninguém editou, e a data do preço é
+// exatamente o que a compradora usa para decidir se a referência vale.
+async function _edSalvarFornecedores(itemId) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const erros = [];
+
+  for (const f of _edForn) {
+    const preco = f.preco === '' ? null : f.preco;
+    const prazo = f.prazo === '' ? null : f.prazo;
+
+    if (f.remover) {
+      if (f.id) {
+        const { error } = await sb.from('item_fornecedores').update({ ativo: false }).eq('id', f.id);
+        if (error) erros.push(f.nome + ': ' + error.message);
+      }
+      continue;
+    }
+
+    if (!f.id) {
+      const { error } = await sb.from('item_fornecedores').insert({
+        item_id: itemId, fornecedor_id: f.fornecedor_id,
+        preco_unitario: preco, prazo_entrega_dias: prazo,
+        preferencia: f.preferencia, ativo: true,
+        preco_atualizado_em: preco != null ? hoje : null,
+      });
+      if (error) erros.push(f.nome + ': ' + error.message);
+      continue;
+    }
+
+    const mudou = preco !== f.original.preco || prazo !== f.original.prazo
+               || f.preferencia !== f.original.preferencia;
+    if (!mudou) continue;
+
+    const patch = { preco_unitario: preco, prazo_entrega_dias: prazo, preferencia: f.preferencia };
+    if (preco !== f.original.preco && preco != null) patch.preco_atualizado_em = hoje;
+    const { error } = await sb.from('item_fornecedores').update(patch).eq('id', f.id);
+    if (error) erros.push(f.nome + ': ' + error.message);
+  }
+
+  return erros;
 }
 
 // Rótulo e peso só existem no regime de pacote.
@@ -421,7 +789,10 @@ async function salvarEditorItem() {
     nome,
     categoria:       document.getElementById('ed-cat').value,
     unidade:         t('ed-unid') || _edItem.unidade,
-    fornecedor_principal: document.getElementById('ed-forn').value || null,
+    // Deixa de ser digitado: é o fornecedor marcado como principal na lista.
+    fornecedor_principal:
+      _edForn.find(f => !f.remover && f.preferencia === 1)?.nome
+      ?? _edItem.fornecedor_principal ?? null,
   };
 
   // Gestão de cozinha — só o gerente escreve. Para o comprador estes campos
@@ -462,6 +833,9 @@ async function salvarEditorItem() {
   btn.disabled = false; btn.textContent = 'Salvar';
 
   if (error) { showToast(_msgErroEditor(error), 'error'); return; }
+
+  const errosForn = await _edSalvarFornecedores(_edItem.id);
+  if (errosForn.length) showToast('Fornecedores: ' + errosForn[0], 'error');
   // A RLS não dá erro em UPDATE bloqueado: devolve zero linhas e a tela
   // acharia que salvou. Quem não pode editar precisa saber disso.
   if (!data) {

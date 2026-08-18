@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprador — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608181844">
+<link rel="stylesheet" href="style.css?v=202608181909">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608181844"></script>
+<script src="config.js?v=202608181909"></script>
 <style>
   /* Bloco de um fornecedor na fila de aprovados */
   .forn-bloco {
@@ -1364,6 +1364,11 @@ function renderFila() {
           ${idade ? `<br><span class="opc-tag">${escapeHtml(idade)}</span>` : ''}
           ${nAlt > 1 ? `<br><span class="opc-tag">${nAlt} fornecedores</span>` : ''}</td>
         <td class="num right" data-label="Total">${l.preco ? fmtMoeda(l.qtd * l.preco) : '—'}</td>
+        <td class="td-acoes">${l.item_id
+          ? `<button class="btn btn-sm btn-secondary"
+                  onclick="event.stopPropagation();cotarItemDaFila('${l.item_id}', ${l.qtd})"
+                  title="Pedir preço deste item a outros fornecedores">Cotar</button>`
+          : ''}</td>
       </tr>`;
     }).join('');
 
@@ -1384,7 +1389,8 @@ function renderFila() {
             <strong>${fmtMoeda(g.economia)}</strong> mais barato. A troca é feita item a item
             na tela de gerar a ordem.</div>` : ''}
           <table class="data-table tabela-cards">
-            <thead><tr><th>Item</th><th class="num">Qtd</th><th class="num">Preço un.</th><th class="num right">Total</th></tr></thead>
+            <thead><tr><th>Item</th><th class="num">Qtd</th><th class="num">Preço un.</th>
+              <th class="num right">Total</th><th class="center">Cotação</th></tr></thead>
             <tbody>${linhas}</tbody>
           </table>
           <div class="form-actions mt-3">
@@ -2273,6 +2279,7 @@ async function carregarNotas() {
     return;
   }
   state.notas = data || [];
+  state.devolucoes = await devolucoesPorRecebimento(state.notas.map(r => r.id));
   renderNotas();
 }
 
@@ -2355,10 +2362,12 @@ function renderNotas() {
       <th>Fornecedor</th><th>NF</th><th>PO</th>
       <th class="num right">Valor</th><th>Mercadoria em</th>
       <th>Emissão</th><th>Vencimento</th><th class="center">Conferência</th>
+      <th class="center">Ações</th>
     </tr></thead>
     <tbody>${lista.map(r => {
       const d = diasAteVencimento(r.nota_fiscal_vencimento);
       const okNF = r.match_nf_receb;
+      const dev = (state.devolucoes || {})[r.id] || 0;
       const conf = okNF === false ? '<span class="badge badge-error">divergente</span>'
                  : okNF === true  ? '<span class="badge badge-green">confere</span>'
                  : '<span class="badge">—</span>';
@@ -2371,7 +2380,12 @@ function renderNotas() {
         <td data-label="Mercadoria em">${r.data_recebimento ? ptDate(r.data_recebimento) : '—'}</td>
         <td data-label="Emissão">${r.nota_fiscal_emissao ? ptDate(r.nota_fiscal_emissao) : '—'}</td>
         <td data-label="Vencimento">${r.nota_fiscal_vencimento ? ptDate(r.nota_fiscal_vencimento) + ' ' : ''}${chipVencimento(d)}</td>
-        <td class="center" data-label="Conferência">${conf}</td>
+        <td class="center" data-label="Conferência">${conf}${
+          dev ? `<br><span class="badge badge-orange">devolvido ${fmtQtd(dev)}</span>` : ''}</td>
+        <td class="td-acoes">
+          <button class="btn btn-sm btn-secondary"
+                  onclick="event.stopPropagation();abrirDevolucao('${r.id}', carregarNotas)">Devolução</button>
+        </td>
       </tr>`;
     }).join('')}
     </tbody></table>`;
@@ -2573,7 +2587,7 @@ function renderMatriz() {
         <div class="center" style="font-size:12px;color:var(--muted)">
           ${o.moq != null ? fmtQtd(o.moq) : '—'}</div>
         <div class="center">
-          <button class="btn btn-sm btn-secondary" onclick="abrirIF('${o.id}')">Editar</button>
+          <button class="btn btn-sm btn-secondary" onclick="editarItemDaMatriz('${i.id}')">Editar</button>
         </div>
       </div>`).join('')
       : '<div style="padding:14px 16px;color:var(--muted);font-size:13px">Nenhum fornecedor cadastrado para este item.</div>';
@@ -2603,9 +2617,7 @@ function renderMatriz() {
           ${opsHtml}
           ${avisoEpocas}
           <div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-sm btn-secondary" onclick="abrirIF(null,'${i.id}')">+ Adicionar fornecedor</button>
-            <button class="btn btn-sm btn-outline" onclick="editarItemDaMatriz('${i.id}')"
-                    title="Nome que o cozinheiro vê, nome do inventário, aproveitamento, unidade de pedido">Editar cadastro do item</button>
+            <button class="btn btn-sm btn-outline" onclick="editarItemDaMatriz('${i.id}')">Editar item e fornecedores</button>
           </div>
         </div>
       </div>`;
@@ -2623,10 +2635,14 @@ function toggleMtz(i) {
 // parcial aqui — o editor relê o item inteiro do banco ao abrir; o que
 // passo é só a lista para o campo "vem de qual item bruto".
 function editarItemDaMatriz(itemId) {
-  abrirEditorItem(itemId, state.itens, item => {
+  abrirEditorItem(itemId, state.itens, async item => {
     const i = state.itens.findIndex(x => x.id === item.id);
     if (i >= 0) state.itens[i] = { ...state.itens[i], ...item };
+    // Preço e prazo agora são salvos junto com o item, então a matriz em
+    // memória está velha — recarrega antes de redesenhar.
+    await carregarMatriz();
     renderMatriz();
+    renderFila();
   });
 }
 
@@ -3258,6 +3274,18 @@ function renderCotacoes() {
 function toggleCot(i) {
   document.getElementById('bodyC-' + i).classList.toggle('open');
   document.getElementById('chevC-' + i).classList.toggle('open');
+}
+
+// Da fila para a cotação sem redigitar: a compradora está olhando o preço
+// daquele item e quer saber se alguém faz por menos. Abre a mesma tela de
+// nova cotação, já com o item escolhido, a quantidade da linha e os
+// fornecedores que atendem esse item marcados.
+function cotarItemDaFila(itemId, qtd) {
+  if (!state.cotacoesOk) { showToast('Rode a migration 38 para habilitar as cotações.', 'error'); return; }
+  goTab('cotacoes', document.querySelector('.nav-item[onclick*="cotacoes"]'));
+  abrirNovaCotacao();
+  escolherItemCotacao(itemId);
+  if (qtd) document.getElementById('nc-qtd').value = qtd;
 }
 
 function abrirNovaCotacao() {
