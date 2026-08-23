@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608181909">
+<link rel="stylesheet" href="style.css?v=202608222146">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608181909"></script>
+<script src="config.js?v=202608222146"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -388,9 +388,7 @@
     <div class="sub">A&amp;B · <span id="pdvChip">PDV</span></div>
   </div>
   <div class="sidebar-nav">
-    <!-- Início é da versão de celular. No desktop a sidebar já mostra tudo,
-         então o menu de entrada só somaria um clique. -->
-    <div class="nav-item so-celular" onclick="goTab('inicio',this)"><span class="nav-icon">⌂</span> Início</div>
+    <div class="nav-item" onclick="goTab('inicio',this)"><span class="nav-icon">⌂</span> Início</div>
     <div class="nav-item" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
     <div class="nav-item" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição Comissaria</div>
     <div class="nav-item" onclick="goTab('rascunhos',this)">
@@ -817,15 +815,16 @@ window.addEventListener('load', async () => {
   setCat('req', 'proteina');
 
   // Celular abre no Início; desktop continua abrindo em Solicitar Compra,
-  // como era antes de 13/08. O Início é a resposta para a sidebar virar
-  // gaveta no celular — no desktop ela está sempre à vista e não há problema
-  // a resolver.
+  // como era antes de 13/08. Desde 22/08 o Início vale em qualquer largura:
+  // o tablet da Comissaria e os PCs das cozinhas usam os mesmos atalhos
+  // grandes do celular, e quem entrava para pedir à Comissaria não cai mais
+  // na tela de pedir ao fornecedor.
   //
   // Precisa passar por switchAba (e não só pelo `active` do HTML) para o
   // título do topo e a barra inferior ficarem coerentes com a aba. Vem por
   // último porque carregarRascunhos() já rodou, então o cartão de rascunhos
   // aparece com a contagem certa.
-  switchAba(window.innerWidth <= 900 ? 'inicio' : 'compra');
+  switchAba('inicio');
 });
 
 function isoDate(d) { return d.toISOString().split('T')[0]; }
