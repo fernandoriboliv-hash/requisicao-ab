@@ -174,6 +174,16 @@ function ehDeRequisicao(item) {
   return item?.req_ativo !== false;
 }
 
+// true quando o item deve aparecer na lista de COMPRA (compradora e PDV).
+// Item transformado nasce dentro da cozinha (peixe porcionado, carne
+// porcionada) e não tem o que comprar — quem se compra é o item bruto.
+// "DA CASA" (produção própria) é a mesma lógica por outro campo: o item
+// só existe pela receita, nunca por nota fiscal de fornecedor.
+// Compartilhada entre comprador.html e pdv.html — antes só existia lá.
+function ehCompravel(item) {
+  return item?.tipo_aquisicao !== 'transformado' && !item?.producao_propria;
+}
+
 // =====================================================================
 // EDITOR DE ITEM — a paridade feita na tela, não na planilha
 // =====================================================================

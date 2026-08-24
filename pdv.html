@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608222146">
+<link rel="stylesheet" href="style.css?v=202608241044">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608222146"></script>
+<script src="config.js?v=202608241044"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -932,11 +932,15 @@ function renderItens(aba) {
   const cat = state.catAtual[aba];
   const q = (document.getElementById(`${aba}-search`).value || '').toLowerCase();
   // A requisição mostra só o que a Comissaria tem em estoque; a compra
-  // mostra o catálogo inteiro. A busca também olha o nome curto, senão
+  // mostra o catálogo comprável — sem o que é transformado dentro da
+  // cozinha (peixe/carne porcionados) nem produção própria ("DA CASA"),
+  // porque esses não têm fornecedor: quem se pede é o item bruto, por
+  // requisição, não por compra. A busca também olha o nome curto, senão
   // procurar "picanha peça" não acharia o item cadastrado como outra coisa.
   const itens = state.catalogo.filter(i =>
     i.categoria === cat &&
     (aba !== 'req' || ehDeRequisicao(i)) &&
+    (aba !== 'compra' || ehCompravel(i)) &&
     (itemAtendeBusca(i, q) || (aba === 'req' && i.nome_curto && itemCasaBusca(i.nome_curto, q)))
   );
 

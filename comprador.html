@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprador — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608222146">
+<link rel="stylesheet" href="style.css?v=202608241044">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608222146"></script>
+<script src="config.js?v=202608241044"></script>
 <style>
   /* Bloco de um fornecedor na fila de aprovados */
   .forn-bloco {
@@ -1029,14 +1029,6 @@ function opcaoPadrao(itemId) {
   return ops[0] || null;
 }
 
-// Item transformado nasce dentro da cozinha (peixe porcionado, carne
-// porcionada) e não tem o que comprar — quem se compra é o item bruto.
-// Sem a migration 44 o campo não existe e tudo volta a ser comprável,
-// que é o comportamento antigo.
-function ehCompravel(item) {
-  return item?.tipo_aquisicao !== 'transformado';
-}
-
 // Só aparece quando o fornecedor tem faturamento mínimo cadastrado — e aí é
 // informação, não explicação de como o sistema funciona.
 function abrirNovoItem() {
@@ -1512,7 +1504,7 @@ function itensParaAdicionar(termo) {
   const fid = state.poAtual?.fornecedor?.id;
   const jaNoPedido = new Set(state.poAtual.linhas.map(l => l.item_id));
   const casa = i => !jaNoPedido.has(i.id) && i.ativo !== false
-    && !i.producao_propria && ehCompravel(i) && itemAtendeBusca(i, termo);
+    && ehCompravel(i) && itemAtendeBusca(i, termo);
 
   const doForn = [], outros = [];
   for (const i of state.itens) {
