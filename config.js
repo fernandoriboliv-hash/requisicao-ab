@@ -1118,6 +1118,89 @@ document.addEventListener('focusin', e => {
 //   abrirDetalhe('PO-00012 — FABENE', '<table>...</table>')
 //   abrirDetalhe('Carregando...', null)   → mostra o estado de carga
 
+// =====================================================================
+// TIMELINE DO ITEM — onde o pedido está, sem precisar perguntar
+// =====================================================================
+// Hoje quem quer saber onde está o pedido pergunta para alguém, e a
+// resposta some quando a conversa acaba. A timeline responde sozinha.
+//
+// Fica ABAIXO da tabela, não como linha dela: no celular a tabela vira
+// card, e uma linha de colspan quebraria o layout — e a checagem de
+// consistência de tabela, que compara <th> com <td>.
+//
+// O conteúdo vem inteiro do servidor (migration 47). A tela não decide o
+// que mostrar nem calcula etapa: recebe a lista pronta e desenha. É o que
+// garante que preço não apareça — não é a tela que esconde, é o servidor
+// que não manda.
+
+const _ICONE_TIMELINE = { true: '●', false: '✕', null: '○' };
+
+async function abrirTimelineItem(sb, tipo, itemId, botao) {
+  const alvo = document.getElementById('timelineItem');
+  if (!alvo) return;
+
+  // Segundo clique no mesmo item fecha — é o que a pessoa espera.
+  if (alvo.dataset.itemId === itemId && alvo.innerHTML.trim()) {
+    alvo.innerHTML = ''; alvo.dataset.itemId = '';
+    document.querySelectorAll('.linha-item-detalhe.aberta').forEach(l => l.classList.remove('aberta'));
+    return;
+  }
+  document.querySelectorAll('.linha-item-detalhe.aberta').forEach(l => l.classList.remove('aberta'));
+  botao?.closest('.linha-item-detalhe')?.classList.add('aberta');
+
+  alvo.dataset.itemId = itemId;
+  alvo.innerHTML = '<div class="loading-text">Carregando o caminho deste item...</div>';
+
+  const fn = tipo === 'req' ? 'timeline_item_requisicao' : 'timeline_item_compra';
+  const { data, error } = await sb.rpc(fn, { p_item_id: itemId });
+
+  if (error) {
+    // Sem a migration 47 a função não existe. Diz isso em vez de mostrar
+    // um erro de banco que ninguém na cozinha sabe interpretar.
+    const faltaFn = error.code === 'PGRST202' || /timeline_item/.test(error.message || '');
+    alvo.innerHTML = `<div class="aviso aviso-warn">${faltaFn
+      ? 'O acompanhamento do item ainda não foi habilitado no banco (migration 47).'
+      : 'Não consegui carregar: ' + _esc(error.message)}</div>`;
+    return;
+  }
+  if (data?.erro) { alvo.innerHTML = `<div class="aviso aviso-warn">${_esc(data.erro)}</div>`; return; }
+
+  const eventos = data?.eventos || [];
+  alvo.innerHTML = `
+    <div class="section-title mt-3"><span>Onde está: ${_esc(data.item)}</span></div>
+    <div class="timeline">
+      ${eventos.map(e => {
+        const estado = e.ok === true ? 'feito' : e.ok === false ? 'ruim' : 'esperando';
+        const quando = e.em ? _dataHoraCurta(e.em) : '';
+        return `
+          <div class="tl-linha ${estado}${e.atual ? ' atual' : ''}">
+            <div class="tl-marca">${_ICONE_TIMELINE[String(e.ok)]}</div>
+            <div class="tl-texto">
+              <div class="tl-rotulo">${_esc(e.rotulo)}${
+                e.atual ? '<span class="tl-agora">agora</span>' : ''}</div>
+              ${e.detalhe ? `<div class="tl-detalhe">${_esc(e.detalhe)}</div>` : ''}
+            </div>
+            <div class="tl-quando">${quando}${
+              e.aproximado ? '<br><span class="tl-aprox">aprox.</span>' : ''}</div>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+// Data curta para a timeline: dia/mês e hora quando é timestamp, só
+// dia/mês quando é date. Ano só aparece se não for o ano corrente —
+// numa lista de etapas o ano repetido é ruído.
+function _dataHoraCurta(v) {
+  if (!v) return '';
+  const soData = /^\d{4}-\d{2}-\d{2}$/.test(String(v));
+  const d = new Date(soData ? v + 'T12:00:00' : v);
+  if (isNaN(d)) return '';
+  const ano = d.getFullYear() !== new Date().getFullYear() ? '/' + String(d.getFullYear()).slice(2) : '';
+  const dm = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + ano;
+  return soData ? dm : dm + '<br><span class="tl-hora">' +
+    String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + '</span>';
+}
+
 function abrirDetalhe(titulo, corpoHtml) {
   let mod = document.getElementById('detalheModal');
   if (!mod) {
@@ -1241,18 +1324,21 @@ async function verSolicitacaoCompra(sb, id) {
      ${s.motivo_rejeicao ? `<div class="aviso aviso-warn mt-2">Rejeitada — ${
        _esc(s.motivo_rejeicao)}</div>` : ''}
 
-     <div class="section-title mt-3"><span>Itens (${itens.length})</span></div>
+     <div class="section-title mt-3"><span>Itens (${itens.length})</span>
+       <span class="text-muted" style="font-size:11px">clique no item para ver onde ele está</span></div>
      <table class="data-table tabela-cards">
        <thead><tr><th>Item</th><th>Categoria</th><th>Fornecedor</th>
          <th class="num">Quantidade</th><th>Comentário</th></tr></thead>
-       <tbody>${itens.map(i => `<tr>
+       <tbody>${itens.map(i => `<tr class="linha-item-detalhe"
+           onclick="abrirTimelineItem(sb,'compra','${i.id}',this)">
          <td class="td-titulo">${_esc(i.item_nome)}</td>
          <td data-label="Categoria">${_esc(i.item_categoria || '—')}</td>
          <td data-label="Fornecedor">${_esc(i.itens?.fornecedor_principal || '—')}</td>
          <td class="num" data-label="Quantidade">${_qtd(i.quantidade_solicitada)} ${_esc(i.item_unidade || '')}</td>
          <td data-label="Comentário">${_esc(i.comentario || '—')}</td>
        </tr>`).join('')}</tbody>
-     </table>`
+     </table>
+     <div id="timelineItem"></div>`
   );
 }
 
@@ -1403,7 +1489,8 @@ async function verRequisicaoInterna(sb, id) {
      ${r.motivo_cancelamento ? `<div class="aviso aviso-warn mt-2">Cancelada — ${
        _esc(r.motivo_cancelamento)}</div>` : ''}
 
-     <div class="section-title mt-3"><span>Itens (${itens.length})</span></div>
+     <div class="section-title mt-3"><span>Itens (${itens.length})</span>
+       <span class="text-muted" style="font-size:11px">clique no item para ver onde ele está</span></div>
      <table class="data-table tabela-cards">
        <thead><tr><th>Item</th><th>Categoria</th><th class="num">Pedido</th>
          ${entregue ? '<th class="num">Entregue</th><th>Divergência</th>' : ''}</tr></thead>
@@ -1420,7 +1507,7 @@ async function verRequisicaoInterna(sb, id) {
                ? (+i.quantidade_solicitada) - (+i.quantidade_entregue) : 0);
          const uPeso = _esc(unidadePeso(i));
          const est = estimativaPeso(i.quantidade_solicitada, i.peso_medio_pacote, unidadePeso(i));
-         return `<tr>
+         return `<tr class="linha-item-detalhe" onclick="abrirTimelineItem(sb,'req','${i.id}',this)">
            <td class="td-titulo">${_esc(i.item_nome)}${pct ? ` <span class="pct-badge">por ${rot}</span>` : ''}${
              i.comentario ? `<span class="item-obs">${_esc(i.comentario)}</span>` : ''}</td>
            <td data-label="Categoria">${_esc(i.item_categoria || '—')}</td>
@@ -1443,14 +1530,15 @@ async function verRequisicaoInterna(sb, id) {
                  _qtd(i.peso_anterior)} · ${_esc(autorComPerfil(i.corrigido_por) || 'sistema')}</span>` : ''}${
                podeCorrigirPeso() && i.quantidade_entregue != null
                  ? `<br><button class="btn btn-sm btn-outline" style="font-size:10px;padding:2px 7px;margin-top:4px"
-                      onclick="corrigirPeso(sb,'${i.id}','${_esc(i.item_nome).replace(/'/g, "\\'")}',${
+                      onclick="event.stopPropagation();corrigirPeso(sb,'${i.id}','${_esc(i.item_nome).replace(/'/g, "\\'")}',${
                         i.quantidade_entregue},'${pct ? uPeso : un}','${r.id}')">corrigir peso</button>` : ''}</td>
              <td data-label="Divergência">${i.motivo_divergencia
                ? '<span class="text-error">' + _esc(i.motivo_divergencia) + '</span>'
                : '<span class="text-muted">—</span>'}</td>` : ''}
          </tr>`;
        }).join('')}</tbody>
-     </table>`
+     </table>
+     <div id="timelineItem"></div>`
   );
 }
 
