@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608251258">
+<link rel="stylesheet" href="style.css?v=202608251327">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608251258"></script>
+<script src="config.js?v=202608251327"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -855,9 +855,17 @@
         </select>
       </div>
       <div class="field">
+        <label class="field-label">Data da saída</label>
+        <input class="input" type="date" id="m-data">
+      </div>
+    </div>
+
+    <div class="form-row col2">
+      <div class="field">
         <label class="field-label">Como recebeu o pedido (opcional)</label>
         <input class="input" id="m-obs" placeholder="Ex.: planilha, WhatsApp Ana, retirada balcão">
       </div>
+      <div class="field"></div>
     </div>
 
     <div class="cat-tabs" id="m-cat-tabs">
@@ -1349,6 +1357,7 @@ window.addEventListener('load', async () => {
   // Datas padrão
   const hoje = new Date();
   document.getElementById('f-data').value = isoDate(hoje);
+  document.getElementById('m-data').value = isoDate(hoje);
   document.getElementById('chk-data').value = isoDate(hoje);
   const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
   document.getElementById('c-data-entrega').value = isoDate(amanha);
@@ -2148,15 +2157,28 @@ function atualizarCartSidebarComis() {
   if (total === 0) {
     body.innerHTML = '<div class="cart-sidebar-empty">Adicione itens do catálogo à esquerda.</div>';
   } else {
-    body.innerHTML = sels.map(s => `
+    body.innerHTML = sels.map(s => {
+      // Item de pacote tem duas grandezas. Antes esta tela gravava o peso
+      // igual ao numero de pacotes — 3 pacotes viravam "3 kg" no relatorio,
+      // que e o mesmo erro que contaminou os pesos de agosto. Agora o peso
+      // e campo proprio: em branco vale "nao pesado", que e a verdade, e
+      // nunca um numero inventado.
+      const pct = aba === 'manual' && ehPacote(s.item);
+      return `
       <div class="cart-sidebar-item">
         <div class="cs-name">
           ${escapeHtml(aba === 'manual' ? nomeExibicao(s.item) : s.item.nome)}
           <span class="cs-cat">${catLabels[s.item.categoria]||''}</span>
         </div>
-        <div class="cs-qty">${s.qty} ${s.item.unidade||''}</div>
+        <div class="cs-qty">${s.qty} ${pct ? escapeHtml(rotuloPacote(s.item)) : (s.item.unidade||'')}</div>
+        ${pct ? `<div class="cs-peso">
+          <input class="qty-input" type="number" step="0.001" min="0" placeholder="peso"
+                 value="${s.peso ?? ''}" onclick="this.select()"
+                 onchange="setPesoManual('${s.item.id}', this.value)">
+          <span>${escapeHtml(unidadePeso(s.item))}</span></div>` : ''}
         <button class="cs-del" onclick="${aba === 'manual' ? 'toggleManual' : 'toggleCompra'}('${s.item.id}')" title="Remover">✕</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
   const btn = document.getElementById('cartSendBtn');
   btn.textContent = botao;
@@ -2210,6 +2232,15 @@ function setQtyManual(itemId, val) {
 // toggleManual alias — cart sidebar chama pra remover
 function toggleManual(itemId) { removerManual(itemId); }
 
+// Peso pesado do item de pacote na saída de balcão. Vazio continua vazio:
+// "não pesado" é informação; peso inventado vira número no inventário.
+function setPesoManual(itemId, val) {
+  const sel = state.manual.selecionados[itemId];
+  if (!sel) return;
+  const v = parseFloat(String(val).replace(',', '.'));
+  sel.peso = (isNaN(v) || v <= 0) ? null : v;
+}
+
 let _enviandoManual = false;
 
 async function enviarManual() {
@@ -2220,6 +2251,14 @@ async function enviarManual() {
   if (!pdvId) { showToast('Selecione o PDV de destino.', 'error'); return; }
   if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
 
+  // Requisição de papel, feita semanas atrás, tem que cair no mês em que
+  // aconteceu — senão o relatório de consumo joga tudo no mês do
+  // lançamento e o fechamento sai errado nos dois meses.
+  const dataSaida = document.getElementById('m-data').value || isoDate(new Date());
+  if (dataSaida > isoDate(new Date())) {
+    showToast('A data da saída não pode ser no futuro.', 'error'); return;
+  }
+
   _enviandoManual = true;
   try {
     const { data: req, error } = await inserirIdempotente(sb, 'requisicoes', {
@@ -2227,8 +2266,8 @@ async function enviarManual() {
       usuario_id: state.perfil.id,
       criada_pelo_estoque: true,
       status: 'entregue',  // como é registro de saída balcão, já entra como entregue
-      data_competencia: isoDate(new Date()),
-      entregue_em: new Date().toISOString(),
+      data_competencia: dataSaida,
+      entregue_em: new Date(dataSaida + 'T12:00:00').toISOString(),
       observacao: obs || 'Retirada balcão',
     }, 'manual');
 
@@ -2243,21 +2282,31 @@ async function enviarManual() {
       return;
     }
 
-    // Saída de balcão: o que foi pedido é o que saiu, então pacotes
-    // entregues = pacotes pedidos e não há divergência a apurar.
-    const itens = sel.map(s => ({
-      requisicao_id: req.id,
-      item_id: s.item.id,
-      item_nome: nomeExibicao(s.item),
-      item_categoria: s.item.categoria,
-      item_unidade: s.item.unidade,
-      quantidade_solicitada: s.qty,
-      quantidade_entregue: s.qty,
-      divergencia: false,
-      item_livre: false,
-      ...snapshotPacote(s.item),
-      ...(ehPacote(s.item) ? { pacotes_entregues: s.qty } : {}),
-    }));
+    // Saída de balcão: o que foi pedido é o que saiu, então não há
+    // divergência a apurar.
+    //
+    // Item de pacote tem DUAS grandezas e elas não podem se misturar:
+    // `pacotes_entregues` conta pacotes, `quantidade_entregue` guarda o
+    // peso. Antes as duas recebiam `s.qty`, então 3 pacotes viravam 3 kg
+    // no relatório — e relatório vira inventário, que vira valor para a
+    // auditoria. Sem peso digitado, `quantidade_entregue` fica NULL: o
+    // relatório mostra "não pesado", que é a verdade.
+    const itens = sel.map(s => {
+      const pct = ehPacote(s.item);
+      return {
+        requisicao_id: req.id,
+        item_id: s.item.id,
+        item_nome: nomeExibicao(s.item),
+        item_categoria: s.item.categoria,
+        item_unidade: s.item.unidade,
+        quantidade_solicitada: s.qty,
+        quantidade_entregue: pct ? (s.peso ?? null) : s.qty,
+        divergencia: false,
+        item_livre: false,
+        ...snapshotPacote(s.item),
+        ...(pct ? { pacotes_entregues: s.qty } : {}),
+      };
+    });
     const { error: ei } = await sb.from('requisicao_itens').insert(itens);
     if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
 
@@ -2274,6 +2323,7 @@ function limparManual() {
   resetTokenCarrinho('manual');
   document.getElementById('m-pdv').value = '';
   document.getElementById('m-obs').value = '';
+  document.getElementById('m-data').value = isoDate(new Date());
   renderItensManual();
 }
 

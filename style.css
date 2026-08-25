@@ -1376,3 +1376,9 @@ body.has-cart .main-with-sidebar { padding-right: 340px; }
   .tl-quando br { display: none; }
   .tl-hora::before { content: ' · '; }
 }
+
+/* Peso pesado do item de pacote na saida de balcao da Comissaria.
+   Fica ao lado da contagem de pacotes, nunca no lugar dela. */
+.cs-peso { display: flex; align-items: center; gap: 4px; }
+.cs-peso .qty-input { width: 62px; text-align: right; }
+.cs-peso span { font-size: 11px; color: var(--muted); }

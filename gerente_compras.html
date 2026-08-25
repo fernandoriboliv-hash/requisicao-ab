@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608251258">
+<link rel="stylesheet" href="style.css?v=202608251327">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608251258"></script>
+<script src="config.js?v=202608251327"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -1997,9 +1997,137 @@ async function carregarPendentes() {
       <div class="text-muted" style="font-size:11px">sugerido: ${p.categoria_sugerida||'—'} ${p.unidade_sugerida||''}</div>
       <div class="form-actions">
         <button class="btn btn-sm btn-green" onclick='abrirModalPend(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Adicionar ao Catálogo</button>
+        <button class="btn btn-sm btn-outline" onclick='abrirVincularPend(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Já existe — vincular</button>
         <button class="btn btn-sm btn-secondary" onclick="rejeitarPend('${p.id}')">Manter só no histórico</button>
       </div>
     </div>`).join('');
+}
+
+// =====================================================================
+// "JÁ EXISTE — VINCULAR"
+// =====================================================================
+// Antes só havia cadastrar ou descartar. Boa parte do que o cozinheiro
+// digita à mão é item que JÁ está no catálogo com outro nome — "Apara de
+// carne", "Salmão inteiro". Cadastrar cria duplicata, que é a pendência
+// #68; descartar joga fora o pedido. Vincular resolve as duas: o item
+// pendente aponta para o item certo, e o nome digitado vira apelido de
+// busca para o próximo que procurar assim.
+let _pendVincular = null;
+
+function abrirVincularPend(p) {
+  _pendVincular = p;
+  _montarModalVincular();
+  document.getElementById('vp-digitado').textContent = p.nome_digitado;
+  document.getElementById('vp-busca').value = p.nome_digitado;
+  abrirModal('vincModal');
+  buscarParaVincular();
+  setTimeout(() => document.getElementById('vp-busca')?.focus(), 60);
+}
+
+function _montarModalVincular() {
+  if (document.getElementById('vincModal')) return;
+  const d = document.createElement('div');
+  d.className = 'modal-overlay';
+  d.id = 'vincModal';
+  d.innerHTML = `
+    <div class="modal" style="width:560px;max-width:96vw">
+      <div class="modal-header">
+        <span>Vincular a um item do catálogo</span>
+        <button class="modal-close" onclick="fecharModal('vincModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="ed-secao">O cozinheiro digitou: <b id="vp-digitado"></b></div>
+        <input class="input mt-2" id="vp-busca" placeholder="Buscar no catálogo..."
+               oninput="buscarParaVincular()">
+        <div id="vp-resultados" class="mt-2"></div>
+        <label class="mt-2" style="display:flex;gap:8px;align-items:flex-start;font-size:12px">
+          <input type="checkbox" id="vp-apelido" checked>
+          <span>Guardar "<span id="vp-eco"></span>" como nome que o cozinheiro usa,
+                para a busca achar da próxima vez</span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="fecharModal('vincModal')">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(d);
+}
+
+// Busca por RANQUEAMENTO, não por filtro. A busca normal do sistema exige
+// todas as palavras, e aqui o campo vem preenchido com o que o cozinheiro
+// digitou — "Medalhão filé mignon guidara 180g" não casa com nada, embora
+// "medalhao" case com três. Exigir tudo obrigaria o gerente a apagar
+// palavra por palavra até achar, 22 vezes.
+//
+// Aqui cada item ganha nota pela fração de palavras do termo que ele
+// contém, e as 12 melhores aparecem. Palavra curta não conta: "de", "com"
+// e "180g" não distinguem item nenhum.
+function _notaVincular(item, palavras) {
+  const alvo = _semAcento((item.nome || '') + ' ' + (item.nome_curto || '') + ' ' + (item.nome_inventario || ''));
+  const batem = palavras.filter(p => alvo.includes(p)).length;
+  return batem / palavras.length;
+}
+function _semAcento(s) {
+  return String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function buscarParaVincular() {
+  const q = (document.getElementById('vp-busca').value || '').trim();
+  document.getElementById('vp-eco').textContent = _pendVincular?.nome_digitado || '';
+  const cont = document.getElementById('vp-resultados');
+  if (q.length < 2) { cont.innerHTML = '<div class="empty-text">Digite ao menos 2 letras.</div>'; return; }
+
+  const palavras = _semAcento(q).split(/[^A-Z0-9]+/).filter(p => p.length >= 3);
+  const ativos = (state.catalogo || []).filter(i => i.ativo !== false);
+  const achados = (palavras.length ? ativos
+        .map(i => ({ i, n: _notaVincular(i, palavras) }))
+        .filter(x => x.n > 0)
+        .sort((a, b) => b.n - a.n || a.i.nome.length - b.i.nome.length)
+        .slice(0, 12).map(x => x.i)
+    : ativos.filter(i => itemAtendeBusca(i, q)).slice(0, 12));
+
+  if (!achados.length) {
+    cont.innerHTML = '<div class="empty-text">Nada encontrado. Se o item realmente não existe, use "Adicionar ao Catálogo".</div>';
+    return;
+  }
+  cont.innerHTML = achados.map(i => `
+    <div class="item-row">
+      <div class="item-name">${escapeHtml(i.nome)}
+        ${i.nome_curto && i.nome_curto !== i.nome
+          ? `<span class="item-obs">cozinha vê: ${escapeHtml(i.nome_curto)}</span>` : ''}
+      </div>
+      <div class="item-actions-cell">
+        <span class="est-peso">${escapeHtml(i.unidade || '')}${i.req_ativo ? '' : ' · fora da requisição'}</span>
+        <button class="item-action add" onclick="vincularPend('${i.id}')">É este</button>
+      </div>
+    </div>`).join('');
+}
+
+async function vincularPend(itemId) {
+  const p = _pendVincular; if (!p) return;
+  const item = (state.catalogo || []).find(i => i.id === itemId);
+  const guardarApelido = document.getElementById('vp-apelido').checked;
+
+  // O apelido entra em `nome_curto` só quando o campo está vazio: ele é o
+  // nome que a cozinha vê, e sobrescrever o que o gerente já escolheu seria
+  // pior que não guardar nada.
+  if (guardarApelido && item && !item.nome_curto) {
+    const { error } = await sb.from('itens')
+      .update({ nome_curto: p.nome_digitado }).eq('id', itemId).select('id').maybeSingle();
+    if (error) showToast('Vinculei, mas não consegui guardar o apelido: ' + error.message, 'info');
+  }
+
+  const { data, error } = await sb.from('itens_pendentes').update({
+    status: 'aprovado', decidido_por: state.perfil.id, decidido_em: new Date().toISOString(),
+  }).eq('id', p.id).select('id').maybeSingle();
+
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  if (!data)  { showToast('Seu perfil não pode decidir este item.', 'error'); return; }
+
+  fecharModal('vincModal');
+  showToast(`"${p.nome_digitado}" vinculado a ${item?.nome || 'item do catálogo'}.`, 'success');
+  await carregarCatalogoEPrecos();
+  await Promise.all([carregarPendentes(), atualizarBadges()]);
 }
 
 function abrirModalPend(p) {
