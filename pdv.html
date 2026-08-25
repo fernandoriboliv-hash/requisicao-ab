@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608251228">
+<link rel="stylesheet" href="style.css?v=202608251258">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608251228"></script>
+<script src="config.js?v=202608251258"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -136,7 +136,6 @@
     color: var(--text); font-family: inherit; font-size: 14px;
     padding: 4px; outline: none;
   }
-  .qty-alert { color: var(--orange); font-size: 11px; margin-left: 8px; }
   .est-badge {
     display: inline-block; font-size: 10px; padding: 1px 6px;
     margin-left: 8px; letter-spacing: 0.5px; text-transform: uppercase;
@@ -323,7 +322,6 @@
     }
     .item-coment { grid-area: coment; }
     .item-coment input { padding: 10px !important; font-size: 13px !important; }
-    .qty-alert { font-size: 10px; margin-left: 0; }
 
     /* Item livre em coluna */
     .livre-row { flex-direction: column; }
@@ -919,8 +917,12 @@ function renderItemRow(item, aba) {
   const sel = state.selecionados[aba][item.id];
   const qty = sel ? sel.qty : 1;
   const com = sel ? (sel.comentario || '') : '';
-  const alerta = sel && item.media_diaria > 0 && qty > item.media_diaria * 3
-    ? `<span class="qty-alert">⚠ ${(qty / item.media_diaria).toFixed(1)}× a média histórica</span>` : '';
+  // O aviso de "N× a média histórica" saiu em 2026-08-25 a pedido do
+  // Fernando: confundia mais do que ajudava. A média diária de um item que
+  // se pede uma vez por semana é baixa por natureza, então quase todo
+  // pedido normal disparava o alerta — e alerta que dispara sempre deixa
+  // de ser lido. Quem quiser o histórico agora tem a aba Histórico e a
+  // timeline do item, onde o número vem com contexto em vez de solto.
   let estoqueBadge = '';
   if (aba === 'req') {
     if (state.estoqueCritico.has(item.id)) {
@@ -950,7 +952,6 @@ function renderItemRow(item, aba) {
           <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',1)">+</button>
         </div>
         ${estimativa}
-        ${alerta}
         <button class="item-action add" onclick="adicionarItem('${aba}','${item.id}')">+ Adicionar</button>
         <button class="item-action remove" onclick="removerItem('${aba}','${item.id}')">Remover</button>
       </div>
