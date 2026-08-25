@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608241044">
+<link rel="stylesheet" href="style.css?v=202608242153">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608241044"></script>
+<script src="config.js?v=202608242153"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -391,6 +391,10 @@
     <div class="nav-item" onclick="goTab('inicio',this)"><span class="nav-icon">⌂</span> Início</div>
     <div class="nav-item" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
     <div class="nav-item" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição Comissaria</div>
+    <div class="nav-item" onclick="goTab('favoritos',this)">
+      <span class="nav-icon">★</span> Favoritos
+      <span class="nav-badge" id="badgeFavoritos"></span>
+    </div>
     <div class="nav-item" onclick="goTab('rascunhos',this)">
       <span class="nav-icon">✎</span> Rascunhos
       <span class="nav-badge" id="badgeRascunhos"></span>
@@ -437,6 +441,13 @@
         <span class="txt">
           <span class="rot">Solicitar Compra</span>
           <span class="desc">Item que a Comissaria não tem</span>
+        </span>
+      </button>
+      <button class="card-acao" id="cardFavoritos" onclick="switchAba('favoritos')" style="display:none">
+        <span class="glifo">★</span>
+        <span class="txt">
+          <span class="rot">Favoritos</span>
+          <span class="desc" id="cardFavoritosDesc">Pedidos que se repetem</span>
         </span>
       </button>
       <button class="card-acao" onclick="switchAba('historico')">
@@ -599,6 +610,18 @@
   </div>
 
   <!-- ========================================================== -->
+  <!-- FAVORITOS                                                   -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-favoritos">
+    <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-primary"   id="fav-tipo-req"    onclick="setTipoFav('requisicao')">Requisição da Comissaria</button>
+      <button class="btn btn-sm btn-secondary" id="fav-tipo-compra" onclick="setTipoFav('compra')">Solicitação de Compra</button>
+      <span id="fav-count" class="text-muted" style="font-size:12px;margin-left:auto"></span>
+    </div>
+    <div id="favoritos-lista"><div class="loading-text">Carregando...</div></div>
+  </div>
+
+  <!-- ========================================================== -->
   <!-- ABA HISTÓRICO — tudo o que o PDV já pediu                  -->
   <!-- ========================================================== -->
   <div class="tab-content" id="tab-historico">
@@ -690,6 +713,7 @@
     <div class="cart-sidebar-empty">Adicione itens do catálogo à esquerda.</div>
   </div>
   <div class="cart-sidebar-foot">
+    <button class="btn btn-secondary" id="btn-favorito" onclick="abrirSalvarFavorito()" disabled>★ Salvar como favorito</button>
     <button class="btn btn-secondary" id="btn-rascunho" onclick="salvarRascunho()" style="display:none">Salvar Rascunho</button>
     <button class="btn btn-primary" id="btn-enviar" onclick="abrirRevisao()" disabled>Revisar e Enviar</button>
   </div>
@@ -757,7 +781,12 @@ const state = {
   pdvId: null,
   pdvNome: '',
   catalogo: [],          // todos os itens ativos
-  abaAtual: 'inicio',    // 'inicio' | 'req' | 'compra' | 'rascunhos' | 'historico' | 'relatorios'
+  abaAtual: 'inicio',    // 'inicio' | 'req' | 'compra' | 'favoritos' | 'rascunhos' | 'historico' | 'relatorios'
+  favoritos: [],                           // modelos do PDV, os dois tipos juntos
+  favTipo: 'requisicao',                   // aba de dentro dos Favoritos
+  favAberto: null,                         // modelo aberto no modal
+  favUsadoId: null,                        // favorito que originou o carrinho atual
+  favEditandoId: null,                     // id quando está salvando por cima
   catAtual: { compra: 'proteina', req: 'proteina' },
   selecionados: { compra: {}, req: {} }, // { itemId: { item, qty, comentario } }
   livres: { compra: [], req: [] },        // [{ nome, qtd, unidade, comentario }]
@@ -805,7 +834,7 @@ window.addEventListener('load', async () => {
   document.getElementById('req-data-entrega').value = isoDate(hoje);
   document.getElementById('compra-data-entrega').value = isoDate(amanha);
 
-  await Promise.all([carregarCatalogo(), carregarHistorico('compra'), carregarHistorico('req'), carregarRascunhos()]);
+  await Promise.all([carregarCatalogo(), carregarHistorico('compra'), carregarHistorico('req'), carregarRascunhos(), carregarFavoritos()]);
   await carregarNiveisEstoque();
 
   atualizarAvisoCorte();
@@ -1168,6 +1197,10 @@ function atualizarCarrinho() {
   // Foot: botões
   document.getElementById('btn-rascunho').style.display = aba === 'compra' ? 'block' : 'none';
   document.getElementById('btn-enviar').disabled = total === 0;
+  // Favorito guarda item e quantidade. Item avulso não tem item_id, então
+  // não sobrevive à repetição — o favorito salva só o que veio do catálogo,
+  // e a tela avisa quando deixa avulso de fora.
+  document.getElementById('btn-favorito').disabled = sels.length === 0;
 
   // FAB badge
   document.getElementById('cartFabBadge').textContent = total;
@@ -1181,6 +1214,7 @@ const tabTitles = {
   inicio:     ['Início', 'O que você quer fazer?'],
   compra:     ['Solicitar Compra', 'Pedido para compra externa (aprovação do Gerente)'],
   req:        ['Requisição da Comissaria', 'Pedido de itens do estoque interno — sem aprovação'],
+  favoritos:  ['Favoritos', 'Pedidos que se repetem — abra, confira e envie'],
   rascunhos:  ['Rascunhos', 'Solicitações salvas pra continuar depois'],
   historico:  ['Histórico', 'Tudo o que o seu PDV já pediu'],
   relatorios: ['Relatórios', 'Aquisições finalizadas do seu PDV'],
@@ -1208,6 +1242,7 @@ function goTab(aba, el) {
   sincronizarBarraInferior(aba);
   if (aba === 'relatorios') setupRelatorio();
   if (aba === 'rascunhos') carregarRascunhos();
+  if (aba === 'favoritos') carregarFavoritos();
   if (aba === 'historico') setupHistoricoTab();
   if (aba === 'inicio') atualizarCardRascunhos();
   if (window.innerWidth <= 900) {
@@ -1547,6 +1582,7 @@ async function enviarCompra() {
   if (error) throw error;
 
   state.rascunhoIdCompra = null;
+  await marcarUsoFavorito();
   limparCarrinho('compra');
   mostrarSucesso(solcId, 'compra', competencia);
 }
@@ -1568,8 +1604,20 @@ async function enviarRequisicao() {
   });
   if (error) throw error;
 
+  await marcarUsoFavorito();
   limparCarrinho('req');
   mostrarSucesso(reqId, 'req', isoDate(new Date()));
+}
+
+// Conta o uso só quando o pedido saiu de verdade — abrir para olhar não é
+// usar, e é esse número que ordena a lista. Falha aqui não derruba o envio:
+// o pedido já está no banco, e ordenação errada é menos grave do que o
+// cozinheiro achar que não enviou.
+async function marcarUsoFavorito() {
+  const id = state.favUsadoId;
+  state.favUsadoId = null;
+  if (!id) return;
+  try { await sb.rpc('registrar_uso_modelo', { p_modelo_id: id }); } catch (e) { /* ordenação */ }
 }
 
 // Monta o array que a função do banco consome. O `pedido_por` continua sendo
@@ -1738,6 +1786,300 @@ async function descartarRascunho(id) {
   }
   showToast('Rascunho apagado.', 'info');
   await Promise.all([carregarHistorico('compra'), carregarRascunhos()]);
+}
+
+// =====================================================================
+// FAVORITOS — pedidos que se repetem
+// =====================================================================
+// O favorito é do PDV, não da pessoa: Banquetes tem três logins e a
+// cozinha é a mesma. Abre com a quantidade salva preenchida, mas o envio
+// só libera depois que a pessoa confirma que conferiu — a economia é de
+// digitação, não de conferência.
+//
+// Não guarda data de entrega. Ela é sempre escolhida no envio, senão a
+// regra das 10h e a competência sairiam da semana errada.
+
+async function carregarFavoritos() {
+  const { data, error } = await sb.from('modelos_solicitacao')
+    .select('*, modelo_itens(*, itens(id, nome, nome_curto, unidade, ativo, req_ativo, tipo_aquisicao, producao_propria, pede_por, rotulo_pacote))')
+    .eq('pdv_id', state.pdvId)
+    .order('vezes_usado', { ascending: false })
+    .order('nome');
+
+  // Sem a migration 46 a tela não existe ainda — degrada em silêncio em vez
+  // de encher o cozinheiro de erro vermelho, igual ao resto do sistema.
+  if (error) { state.favoritos = []; renderFavoritos(); return; }
+
+  state.favoritos = (data || []).map(m => ({
+    ...m,
+    modelo_itens: (m.modelo_itens || []).sort((a, b) => (a.ordem || 0) - (b.ordem || 0)),
+  }));
+
+  const badge = document.getElementById('badgeFavoritos');
+  if (badge) badge.textContent = state.favoritos.length || '';
+  const card = document.getElementById('cardFavoritos');
+  if (card) {
+    card.style.display = state.favoritos.length ? '' : 'none';
+    const d = document.getElementById('cardFavoritosDesc');
+    if (d) d.textContent = state.favoritos.length === 1
+      ? '1 pedido salvo para repetir'
+      : `${state.favoritos.length} pedidos salvos para repetir`;
+  }
+  renderFavoritos();
+}
+
+function setTipoFav(tipo) {
+  state.favTipo = tipo;
+  document.getElementById('fav-tipo-req').className =
+    'btn btn-sm ' + (tipo === 'requisicao' ? 'btn-primary' : 'btn-secondary');
+  document.getElementById('fav-tipo-compra').className =
+    'btn btn-sm ' + (tipo === 'compra' ? 'btn-primary' : 'btn-secondary');
+  renderFavoritos();
+}
+
+// Item que saiu do catálogo continua na lista, riscado. Some sozinho faria
+// o cozinheiro enviar um pedido menor sem perceber.
+function _favItemIndisponivel(mi, tipo) {
+  const it = mi.itens;
+  if (!mi.item_id || !it) return 'saiu do catálogo';
+  if (it.ativo === false) return 'item desativado';
+  if (tipo === 'requisicao' && it.req_ativo === false) return 'saiu da lista da Comissaria';
+  if (tipo === 'compra' && !ehCompravel(it)) return 'não é item de compra';
+  return null;
+}
+
+function renderFavoritos() {
+  const cont = document.getElementById('favoritos-lista');
+  if (!cont) return;
+  const lista = (state.favoritos || []).filter(m => m.tipo === state.favTipo);
+  const cnt = document.getElementById('fav-count');
+  if (cnt) cnt.textContent = lista.length === 0 ? 'nenhum' : `${lista.length} favorito(s)`;
+
+  if (lista.length === 0) {
+    cont.innerHTML = `<div class="empty-text">Nenhum favorito de ${
+      state.favTipo === 'compra' ? 'solicitação de compra' : 'requisição'} ainda.<br>
+      Monte um pedido na aba correspondente e use <strong>★ Salvar como favorito</strong> na lista.</div>`;
+    return;
+  }
+
+  cont.innerHTML = lista.map(m => {
+    const itens = m.modelo_itens || [];
+    const fora = itens.filter(i => _favItemIndisponivel(i, m.tipo)).length;
+    const resumo = itens.slice(0, 3).map(i => escapeHtml(i.item_nome)).join(' · ')
+      + (itens.length > 3 ? ` · +${itens.length - 3}` : '');
+    return `
+      <div class="item-row" style="cursor:pointer" onclick="abrirFavorito('${m.id}')">
+        <div class="item-name">
+          <strong>${escapeHtml(m.nome)}</strong>
+          <span class="item-obs">${itens.length} ${itens.length === 1 ? 'item' : 'itens'} — ${resumo}</span>
+          ${fora ? `<span class="item-obs text-error">${fora} ${fora === 1 ? 'item indisponível' : 'itens indisponíveis'}</span>` : ''}
+        </div>
+        <div class="item-actions-cell">
+          ${m.vezes_usado > 0
+            ? `<span class="est-peso">usado ${m.vezes_usado}×</span>`
+            : '<span class="est-peso">nunca usado</span>'}
+          <button class="item-action add" onclick="event.stopPropagation();abrirFavorito('${m.id}')">Abrir</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ---------- abrir e revisar ----------
+function abrirFavorito(id) {
+  const m = (state.favoritos || []).find(x => x.id === id);
+  if (!m) return;
+  state.favAberto = JSON.parse(JSON.stringify(m));
+  _montarModalFavorito();
+  _renderModalFavorito();
+  abrirModal('favModal');
+}
+
+function _montarModalFavorito() {
+  if (document.getElementById('favModal')) return;
+  const d = document.createElement('div');
+  d.className = 'modal-overlay';
+  d.id = 'favModal';
+  d.innerHTML = `
+    <div class="modal" style="width:560px;max-width:96vw">
+      <div class="modal-header">
+        <span id="fav-titulo">Favorito</span>
+        <button class="modal-close" onclick="fecharModal('favModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="fav-corpo"></div>
+        <label class="checkbox-line mt-2" style="display:flex;gap:8px;align-items:flex-start">
+          <input type="checkbox" id="fav-conferi" onchange="_favAtualizarEnvio()">
+          <span>Conferi as quantidades deste pedido</span>
+        </label>
+      </div>
+      <div class="modal-footer" style="gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="apagarFavorito()">Apagar</button>
+        <button class="btn btn-secondary" onclick="editarFavorito()">Editar no carrinho</button>
+        <button class="btn btn-gold" id="fav-enviar" onclick="usarFavorito()" disabled>Usar este pedido</button>
+      </div>
+    </div>`;
+  document.body.appendChild(d);
+}
+
+function _renderModalFavorito() {
+  const m = state.favAberto;
+  if (!m) return;
+  document.getElementById('fav-titulo').textContent = m.nome;
+  const itens = m.modelo_itens || [];
+
+  const linhas = itens.map((i, idx) => {
+    const motivo = _favItemIndisponivel(i, m.tipo);
+    const nome = escapeHtml(m.tipo === 'req' || m.tipo === 'requisicao'
+      ? (i.itens ? nomeExibicao(i.itens) : i.item_nome) : i.item_nome);
+    return `
+      <div class="cart-sidebar-item" style="${motivo ? 'opacity:.65' : ''}">
+        <div class="cs-name">
+          <span style="${motivo ? 'text-decoration:line-through' : ''}">${nome}</span>
+          ${motivo ? `<span class="cs-cat text-error">${motivo}</span>` : ''}
+        </div>
+        <div class="cs-qty">
+          <input class="qty-input" type="number" min="0.1" step="0.1" value="${i.quantidade}"
+                 ${motivo ? 'disabled' : ''}
+                 onchange="_favMudarQtd(${idx}, this.value)" onclick="this.select()">
+          ${escapeHtml(i.item_unidade || '')}
+        </div>
+      </div>`;
+  }).join('');
+
+  const fora = itens.filter(i => _favItemIndisponivel(i, m.tipo)).length;
+  document.getElementById('fav-corpo').innerHTML = `
+    <div class="ed-secao">${m.tipo === 'compra' ? 'Solicitação de compra' : 'Requisição da Comissaria'}
+      · ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}</div>
+    ${fora ? `<div class="aviso aviso-warn">${fora} ${fora === 1 ? 'item não está disponível e não será enviado' : 'itens não estão disponíveis e não serão enviados'}.</div>` : ''}
+    ${linhas}
+    <div class="ed-nota mt-2">A data de entrega você escolhe na tela do pedido, depois de usar o favorito.</div>`;
+
+  document.getElementById('fav-conferi').checked = false;
+  _favAtualizarEnvio();
+}
+
+function _favMudarQtd(idx, valor) {
+  const q = parseFloat(String(valor).replace(',', '.'));
+  if (!isNaN(q) && q > 0) state.favAberto.modelo_itens[idx].quantidade = q;
+}
+
+function _favAtualizarEnvio() {
+  const m = state.favAberto;
+  const validos = (m?.modelo_itens || []).filter(i => !_favItemIndisponivel(i, m.tipo)).length;
+  const ok = document.getElementById('fav-conferi')?.checked && validos > 0;
+  const btn = document.getElementById('fav-enviar');
+  if (btn) {
+    btn.disabled = !ok;
+    btn.textContent = validos === 0 ? 'Nenhum item disponível' : 'Usar este pedido';
+  }
+}
+
+// Carrega o favorito no carrinho da aba certa e leva a pessoa para lá. O
+// envio continua sendo o fluxo normal — favorito preenche, não envia.
+function _favParaCarrinho(m) {
+  const aba = m.tipo === 'compra' ? 'compra' : 'req';
+  state.selecionados[aba] = {};
+  state.livres[aba] = [];
+  let ignorados = 0;
+  (m.modelo_itens || []).forEach(mi => {
+    if (_favItemIndisponivel(mi, m.tipo)) { ignorados++; return; }
+    const item = state.catalogo.find(c => c.id === mi.item_id);
+    if (!item) { ignorados++; return; }
+    state.selecionados[aba][item.id] = {
+      item, qty: parseFloat(mi.quantidade), comentario: mi.comentario || '',
+    };
+  });
+  return { aba, ignorados };
+}
+
+async function usarFavorito() {
+  const m = state.favAberto;
+  if (!m) return;
+  const { aba, ignorados } = _favParaCarrinho(m);
+  state.favUsadoId = m.id;              // marcado no envio, não aqui
+  fecharModal('favModal');
+  switchAba(aba);
+  renderItens(aba);
+  renderLivres(aba);
+  atualizarCarrinho();
+  showToast(ignorados
+    ? `Favorito carregado. ${ignorados} item(ns) fora do catálogo ficaram de fora.`
+    : 'Favorito carregado. Confira a data de entrega e envie.', ignorados ? 'info' : 'success');
+}
+
+function editarFavorito() {
+  const m = state.favAberto;
+  if (!m) return;
+  const { aba } = _favParaCarrinho(m);
+  state.favEditandoId = m.id;
+  fecharModal('favModal');
+  switchAba(aba);
+  renderItens(aba);
+  renderLivres(aba);
+  atualizarCarrinho();
+  showToast('Ajuste os itens e use "★ Salvar como favorito" para gravar por cima.', 'info');
+}
+
+async function apagarFavorito() {
+  const m = state.favAberto;
+  if (!m) return;
+  if (!confirm(`Apagar o favorito "${m.nome}"?`)) return;
+  const { data, error } = await sb.from('modelos_solicitacao').delete().eq('id', m.id).select('id');
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  if (!data || !data.length) { showToast('Seu perfil não pode apagar este favorito.', 'error'); return; }
+  fecharModal('favModal');
+  showToast('Favorito apagado.', 'info');
+  await carregarFavoritos();
+}
+
+// ---------- salvar ----------
+function abrirSalvarFavorito() {
+  const aba = state.abaAtual === 'compra' ? 'compra' : 'req';
+  const sels = Object.values(state.selecionados[aba] || {});
+  if (!sels.length) { showToast('Adicione itens antes de salvar um favorito.', 'error'); return; }
+
+  const editando = state.favEditandoId
+    ? (state.favoritos || []).find(f => f.id === state.favEditandoId) : null;
+  const nome = prompt(
+    editando
+      ? `Salvar por cima de "${editando.nome}"? Para criar outro, mude o nome:`
+      : 'Nome deste favorito — ex.: "Pedido para produção semanal"',
+    editando ? editando.nome : '');
+  if (nome === null) return;
+  if (!nome.trim()) { showToast('O favorito precisa de um nome.', 'error'); return; }
+
+  const mesmoNome = editando && nome.trim().toLowerCase() === editando.nome.trim().toLowerCase();
+  salvarFavorito(nome.trim(), mesmoNome ? editando.id : null, sels, aba);
+}
+
+async function salvarFavorito(nome, modeloId, sels, aba) {
+  const livres = (state.livres[aba] || []).length;
+  const { data, error } = await sb.rpc('salvar_modelo', {
+    p_pdv_id:   state.pdvId,
+    p_tipo:     aba === 'compra' ? 'compra' : 'requisicao',
+    p_nome:     nome,
+    p_itens:    sels.map(s => ({
+      item_id: s.item.id, item_nome: s.item.nome,
+      item_unidade: s.item.unidade || '', quantidade: s.qty, comentario: s.comentario || '',
+    })),
+    p_modelo_id: modeloId,
+  });
+
+  if (error) {
+    const dup = /uq_modelos_nome|duplicate key/i.test(error.message);
+    showToast(dup
+      ? 'Já existe um favorito com esse nome nesta cozinha. Escolha outro nome.'
+      : (faltaColunaToken(error) || /salvar_modelo/.test(error.message)
+          ? 'Os favoritos ainda não foram habilitados no banco (migration 46).'
+          : 'Erro: ' + error.message), 'error');
+    return;
+  }
+
+  state.favEditandoId = null;
+  showToast(livres
+    ? `Favorito salvo. ${livres} item(ns) avulso(s) ficaram de fora — favorito só guarda item do catálogo.`
+    : 'Favorito salvo.', livres ? 'info' : 'success');
+  await carregarFavoritos();
 }
 
 // ==================== ABA RASCUNHOS ====================
