@@ -1586,7 +1586,7 @@ function instalarAvisoConexao() {
 
 const _INV = {
   raiz: null, pdvId: null, pdvNome: '', competencia: null,
-  inventarioId: null, status: 'aberto',
+  inventarioId: null, status: 'aberto', concluido: false,
   linhas: [],          // linhas da planilha do financeiro
   producoes: [],       // itens de produção do açougue (aba 2)
   contagem: new Map(), // chave -> { id, qtd }
@@ -1637,6 +1637,7 @@ async function montarInventario(seletor, opts) {
   }
   _INV.inventarioId = inv.id;
   _INV.status = inv.status;
+  _INV.concluido = !!inv.concluido_em;
 
   // Linhas da planilha ativa, na ordem dela — é a ordem da prateleira que
   // a equipe já usa no papel.
@@ -1677,14 +1678,27 @@ async function _invCarregarProducoes() {
   (lig || []).forEach(x => { (porLinha[x.linha_id] = porLinha[x.linha_id] || []).push(x); });
 
   const out = [];
-  (lin || []).forEach(l => (porLinha[l.id] || []).forEach(x => {
-    if (!x.itens) return;
-    out.push({
-      linha_id: null, item_id: x.itens.id,
-      nome: x.itens.nome, uom: x.itens.unidade,
-      commodity: 'PRODUÇÃO DO AÇOUGUE', receita: l.nome,
-    });
-  }));
+  (lin || []).forEach(l => {
+    const ligados = (porLinha[l.id] || []).filter(x => x.itens);
+    if (ligados.length) {
+      // Linha com item nosso: conta-se o item, e a exportação soma os que
+      // caem na mesma receita (hambúrguer 180g + kids).
+      ligados.forEach(x => out.push({
+        linha_id: null, item_id: x.itens.id,
+        nome: x.itens.nome, uom: x.itens.unidade,
+        commodity: 'PRODUÇÃO DO AÇOUGUE', receita: l.nome,
+      }));
+    } else {
+      // Sem item no catálogo: conta-se a própria linha da receita. É o que
+      // permite pesar o bacon e o salame da casa sem antes inventar um item
+      // de catálogo que ninguém confirmou que existe.
+      out.push({
+        linha_id: l.id, item_id: null,
+        nome: l.nome, uom: 'KG',
+        commodity: 'PRODUÇÃO DO AÇOUGUE', receita: 'sem item no catálogo',
+      });
+    }
+  });
   return out;
 }
 
@@ -1722,6 +1736,12 @@ function _invRender() {
     +       (fechado ? ' <span>contagem fechada</span>' : '') + '</div></div>'
     +     '<div class="inv-progresso"><strong>' + contados + '</strong><span>/ ' + total + '</span></div>'
     +   '</div>'
+    +   (fechado ? ''
+        : '<button class="btn ' + (_INV.concluido ? 'btn-outline' : 'btn-gold') + ' inv-concluir"'
+          + ' onclick="_invConcluir(' + (_INV.concluido ? 'false' : 'true') + ')">'
+          + (_INV.concluido ? '✓ Concluído — clique para voltar a contar'
+                            : 'Marcar inventário como concluído')
+          + '</button>')
     +   '<input class="input inv-busca" id="inv-busca" placeholder="Buscar item pelo nome"'
     +     ' value="' + escapeHtml(_INV.busca) + '" oninput="_invBuscar(this.value)"'
     +     ' autocomplete="off" spellcheck="false">'
@@ -1779,6 +1799,25 @@ function _invBuscar(v) {
 }
 
 function _invFiltrar(c) { _INV.commodity = c; _invRender(); }
+
+// Avisa o gerente que esta cozinha terminou. Não tranca nada: se aparecer
+// um item esquecido, é só clicar de novo e continuar contando. Quem tranca
+// é o gerente, ao fechar para mandar ao financeiro.
+async function _invConcluir(concluir) {
+  const falta = _invTodos().length - _INV.contagem.size;
+  if (concluir && falta && !confirm(
+      'Ainda faltam ' + falta + ' item(ns) sem contagem.\n\n'
+    + 'Marcar como concluído mesmo assim? Eles vão para o financeiro '
+    + 'como célula vazia, não como zero.')) return;
+
+  const { error } = await sb.rpc('concluir_inventario',
+    { p_inventario_id: _INV.inventarioId, p_concluir: !!concluir });
+  if (error) { showToast('Não consegui: ' + error.message, 'error'); return; }
+  _INV.concluido = !!concluir;
+  showToast(concluir ? 'Avisado ao gerente: contagem concluída.'
+                     : 'Voltou para em andamento.', 'success');
+  _invRender();
+}
 
 // Trocar o mês reabre a contagem daquele mês — cada uma é um registro
 // separado, então nada do que já foi contado se mistura.

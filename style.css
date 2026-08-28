@@ -1481,3 +1481,6 @@ body.has-cart .main-with-sidebar { padding-right: 340px; }
   font-family: inherit; font-size: 12px; padding: 0; cursor: pointer;
 }
 .inv-mes-sel:hover, .inv-mes-sel:focus { color: var(--gold); outline: none; }
+/* Botão de "terminei de contar": largura toda no celular, porque é o
+   último gesto da tarefa e não pode competir com o campo de quantidade. */
+.inv-concluir { width: 100%; margin-top: 10px; }

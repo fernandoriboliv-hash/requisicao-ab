@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608281924">
+<link rel="stylesheet" href="style.css?v=202608282016">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608281924"></script>
+<script src="config.js?v=202608282016"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -572,6 +572,7 @@
         <input class="input" type="month" id="fec-mes" style="max-width:160px">
         <button class="btn btn-gold" onclick="gerarFechamento()">Gerar</button>
       </div>
+      <div id="fec-painel"></div>
       <div id="fec-kpis" class="stats-grid" style="display:none"></div>
       <div id="fecContainer"><div class="empty-text">Escolha o PDV e o mês.</div></div>
     </div>
@@ -1765,9 +1766,10 @@ function initFechamento() {
   }
   const mes = document.getElementById('fec-mes');
   if (mes && !mes.value) {
-    // Fecha-se o mês que acabou, não o que está correndo.
-    const d = new Date(); d.setDate(0);
-    mes.value = d.toISOString().slice(0, 7);
+    // Mês corrente. O fechamento acontece nos últimos dias do mês, sobre o
+    // mês que está terminando — abrir em julho no dia 28 de agosto obrigava
+    // a corrigir toda vez, e quem esquecesse exportaria o mês errado.
+    mes.value = new Date().toISOString().slice(0, 7);
   }
 }
 
@@ -1784,6 +1786,9 @@ async function gerarFechamento() {
   const cont = document.getElementById('fecContainer');
   cont.innerHTML = '<div class="loading-text">Gerando...</div>';
   document.getElementById('fec-kpis').style.display = 'none';
+
+  if (tipo === 'inventario') await renderPainelInventario(de);
+  else document.getElementById('fec-painel').innerHTML = '';
 
   const { data, error } = tipo === 'inventario'
     ? await sb.rpc('exportar_inventario', { p_pdv_id: pdvId, p_competencia: de })
@@ -1871,10 +1876,10 @@ function renderFechamentoInventario(d) {
           </tr>`).join('')}
         </tbody>
       </table>` : '<div class="empty-text">Nenhuma produção contada neste PDV.</div>'}
-      ${r.sem_item.length ? `
+      ${(r.sem_contagem || []).length ? `
         <div class="text-muted" style="font-size:12px;margin-top:10px">
-          Sem item no catálogo, então ninguém consegue contar:
-          ${r.sem_item.map(l => `${r.coluna}${l.linha} ${escapeHtml(l.nome)}`).join(' · ')}
+          Ninguém contou ainda:
+          ${r.sem_contagem.map(l => `${r.coluna}${l.linha} ${escapeHtml(l.nome)}`).join(' · ')}
         </div>` : ''}
     </div>`);
 
@@ -2087,6 +2092,43 @@ async function copiarBloco(id) {
     el.focus(); el.select();
     showToast('Texto selecionado — use Ctrl+C.', 'info');
   }
+}
+
+// As 14 cozinhas de uma vez. Sem isto, saber quem já terminou exigiria
+// trocar o PDV no seletor 14 vezes — que é o trabalho que este painel
+// existe para tirar.
+async function renderPainelInventario(competencia) {
+  const cx = document.getElementById('fec-painel');
+  const { data, error } = await sb.rpc('painel_inventario', { p_competencia: competencia });
+  if (error) { cx.innerHTML = ''; return; }
+
+  const est = p => !p.existe          ? { t: 'não começou',  c: 'var(--muted2)' }
+                 : p.status === 'fechado' ? { t: 'fechada',  c: 'var(--muted)'  }
+                 : p.concluido        ? { t: 'concluída',    c: 'var(--green)'  }
+                 :                      { t: 'contando',     c: 'var(--gold)'   };
+
+  const prontas = data.pdvs.filter(p => p.concluido && p.status !== 'fechado').length;
+
+  cx.innerHTML = `
+    <div class="form-panel" style="display:block;margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">
+        <span>Contagens do mês</span>
+        <span class="text-muted" style="font-size:12px;font-weight:400">${
+          prontas ? prontas + ' pronta(s) para fechar' : 'nenhuma concluída ainda'}</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${data.pdvs.map(p => {
+        const e = est(p);
+        return `<button class="btn btn-sm btn-outline" style="border-color:${e.c};color:${e.c}"
+          onclick="verContagemDe('${p.pdv_id}')"
+          title="${p.contados} item(ns) contados">
+          ${escapeHtml(p.nome)} · ${e.t}${p.contados ? ' (' + p.contados + ')' : ''}</button>`;
+      }).join('')}</div>
+    </div>`;
+}
+
+function verContagemDe(pdvId) {
+  document.getElementById('fec-pdv').value = pdvId;
+  gerarFechamento();
 }
 
 async function fecharContagem(pdvId) {
