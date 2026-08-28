@@ -1586,7 +1586,7 @@ function instalarAvisoConexao() {
 
 const _INV = {
   raiz: null, pdvId: null, pdvNome: '', competencia: null,
-  inventarioId: null, status: 'aberto', concluido: false,
+  inventarioId: null, status: 'aberto', concluido: false, livres: [],
   linhas: [],          // linhas da planilha do financeiro
   producoes: [],       // itens de produção do açougue (aba 2)
   contagem: new Map(), // chave -> { id, qtd }
@@ -1597,8 +1597,15 @@ const _INV = {
 
 const _invChave = (l) => (l.linha_id ? 'L' + l.linha_id : 'I' + l.item_id);
 
+// Os campos de quantidade são type="text", não type="number", e é de
+// propósito: <input type="number"> RECUSA vírgula. Quem digita "1,8" no
+// celular em português vê o campo esvaziar sem aviso nenhum. Aqui a
+// validação é nossa, e aceita vírgula e ponto.
 function _invNum(v) {
-  const n = parseFloat(String(v).replace(',', '.'));
+  const t = String(v == null ? '' : v).trim().replace(',', '.');
+  if (t === '') return null;
+  if (!/^[0-9]+(.[0-9]+)?$/.test(t)) return null;
+  const n = parseFloat(t);
   return isNaN(n) || n < 0 ? null : n;
 }
 
@@ -1657,6 +1664,8 @@ async function montarInventario(seletor, opts) {
     .select('id, linha_id, item_id, quantidade').eq('inventario_id', inv.id);
   _INV.contagem = new Map((cont || []).map(c =>
     [_invChave(c), { id: c.id, qtd: parseFloat(c.quantidade) }]));
+
+  await _invCarregarLivres();
 
   _INV.commodity = null;
   _INV.busca = '';
@@ -1758,12 +1767,15 @@ function _invRender() {
     +   (lista.length ? lista.map(l => _invLinha(l, fechado)).join('')
                       : '<div class="empty-text">Nenhum item com esse nome.</div>')
     + '</div>'
+    + '<div class="inv-livres" id="inv-livres"></div>'
     + '<div class="inv-rodape">'
     +   (fechado
         ? '<span class="text-muted">Contagem fechada pelo gerente. Não dá mais para alterar.</span>'
         : '<span class="text-muted">' + (total - contados) + ' item(ns) ainda sem contagem</span>'
           + '<span class="text-muted" style="font-size:11px">grava sozinho a cada item</span>')
     + '</div>';
+
+  _invRenderLivres();
 }
 
 function _invLinha(l, fechado) {
@@ -1777,7 +1789,7 @@ function _invLinha(l, fechado) {
     +     (l.receita ? '<span class="inv-receita">' + escapeHtml(l.receita) + '</span>' : '')
     +   '</div>'
     +   '<div class="inv-campo">'
-    +     '<input class="input inv-qtd" type="number" inputmode="decimal" step="0.001" min="0"'
+    +     '<input class="input inv-qtd" type="text" inputmode="decimal"'
     +       ' value="' + (tem ? c.qtd : '') + '" placeholder="—" ' + (fechado ? 'disabled' : '')
     +       ' onchange="_invSalvar(\'' + k + '\', this.value)" onclick="this.select()">'
     +     '<span class="inv-uom">' + escapeHtml(l.uom || '') + '</span>'
@@ -1893,3 +1905,74 @@ function _invAtualizarLinha(chave) {
 // financeiro — quem fecha é o gerente, na tela Fechar o Mês. Se o chef
 // fechasse, uma correção de última hora exigiria pedir reabertura, e o
 // número que foi para o financeiro poderia não ser o número contado.
+
+// =====================================================================
+// ITENS FORA DA PLANILHA
+// =====================================================================
+// A cozinha às vezes tem em câmara um produto que a planilha do financeiro
+// não prevê. Ele não cabe na coluna colada — cairia em linha errada — e vai
+// no corpo do e-mail, com a planilha em anexo. Aqui a pessoa anota na hora
+// da contagem, com o produto na mão, em vez de lembrar depois.
+
+function _invRenderLivres() {
+  const cx = document.getElementById('inv-livres');
+  if (!cx) return;
+  const fechado = _INV.status === 'fechado';
+  const l = _INV.livres || [];
+
+  cx.innerHTML = ''
+    + '<div class="inv-livres-titulo">Itens que não estão na planilha'
+    +   (l.length ? ' <em>' + l.length + '</em>' : '') + '</div>'
+    + (l.length
+        ? '<div class="inv-livres-lista">' + l.map(x =>
+            '<div class="inv-livre">'
+          +   '<span class="inv-livre-nome">' + escapeHtml(x.nome) + '</span>'
+          +   '<span class="inv-livre-qtd">' + x.quantidade + ' ' + escapeHtml(x.unidade) + '</span>'
+          +   (fechado ? '' : '<button class="inv-apagar" title="Remover"'
+              + ' onclick="_invApagarLivre(\'' + x.id + '\')">×</button>')
+          + '</div>').join('') + '</div>'
+        : '')
+    + (fechado ? ''
+        : '<div class="inv-livre-form">'
+        +   '<input class="input" id="lv-nome" placeholder="Nome do item" autocomplete="off">'
+        +   '<input class="input" id="lv-qtd" type="text" inputmode="decimal" placeholder="Qtd">'
+        +   '<input class="input" id="lv-un" placeholder="KG" list="lv-unidades" autocomplete="off">'
+        +   '<datalist id="lv-unidades">'
+        +     ['KG', 'UN', 'CX', 'L', 'PCT', 'BDJ'].map(u => '<option value="' + u + '">').join('')
+        +   '</datalist>'
+        +   '<button class="btn btn-secondary" onclick="_invAddLivre()">Adicionar</button>'
+        + '</div>');
+}
+
+async function _invCarregarLivres() {
+  const { data } = await sb.rpc('inventario_livres_do_mes',
+    { p_pdv_id: _INV.pdvId, p_competencia: _INV.competencia });
+  _INV.livres = data || [];
+}
+
+async function _invAddLivre() {
+  const nome = (document.getElementById('lv-nome').value || '').trim();
+  const qtd  = _invNum(document.getElementById('lv-qtd').value);
+  const un   = ((document.getElementById('lv-un').value || 'KG').trim() || 'KG').toUpperCase();
+  if (!nome) { showToast('Escreva o nome do item.', 'error'); return; }
+  if (qtd === null) { showToast('Quantidade inválida.', 'error'); return; }
+
+  const eu = (window.state && window.state.perfil && window.state.perfil.id) || null;
+  const { data, error } = await sb.from('inventario_livres').insert({
+    inventario_id: _INV.inventarioId, nome, quantidade: qtd, unidade: un, anotado_por: eu,
+  }).select('id, nome, quantidade, unidade').single();
+  if (error) { showToast('Não gravou: ' + error.message, 'error'); return; }
+
+  _INV.livres.push({ ...data, quantidade: parseFloat(data.quantidade) });
+  _invRenderLivres();
+  // O foco volta pro nome: quem está anotando geralmente tem mais de um.
+  const n = document.getElementById('lv-nome');
+  if (n) n.focus();
+}
+
+async function _invApagarLivre(id) {
+  const { error } = await sb.from('inventario_livres').delete().eq('id', id);
+  if (error) { showToast('Não apagou: ' + error.message, 'error'); return; }
+  _INV.livres = (_INV.livres || []).filter(x => x.id !== id);
+  _invRenderLivres();
+}

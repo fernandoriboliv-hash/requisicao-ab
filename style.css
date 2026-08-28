@@ -1484,3 +1484,32 @@ body.has-cart .main-with-sidebar { padding-right: 340px; }
 /* Botão de "terminei de contar": largura toda no celular, porque é o
    último gesto da tarefa e não pode competir com o campo de quantidade. */
 .inv-concluir { width: 100%; margin-top: 10px; }
+
+/* Itens fora da planilha — bloco no fim da contagem. Fica depois da lista
+   porque é a exceção: quem abre a tela vem contar o que está previsto. */
+.inv-livres { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); }
+.inv-livres-titulo {
+  font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 10px;
+}
+.inv-livres-titulo em {
+  font-style: normal; color: var(--gold); margin-left: 4px;
+}
+.inv-livres-lista { display: flex; flex-direction: column; margin-bottom: 12px; }
+.inv-livre {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 4px; border-bottom: 1px solid var(--border-subtle);
+}
+.inv-livre-nome { flex: 1; font-size: 14px; }
+.inv-livre-qtd {
+  font-variant-numeric: tabular-nums; font-size: 14px; color: var(--gold);
+  white-space: nowrap;
+}
+.inv-livre-form { display: flex; gap: 6px; flex-wrap: wrap; }
+.inv-livre-form #lv-nome { flex: 1 1 200px; font-size: 16px; }
+.inv-livre-form #lv-qtd  { flex: 0 0 90px;  font-size: 16px; text-align: right; }
+.inv-livre-form #lv-un   { flex: 0 0 72px;  font-size: 16px; text-transform: uppercase; }
+@media (max-width: 560px) {
+  .inv-livre-form #lv-nome { flex: 1 1 100%; }
+  .inv-livre-form .btn { flex: 1 1 100%; }
+}
