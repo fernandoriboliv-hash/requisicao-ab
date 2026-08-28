@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608251327">
+<link rel="stylesheet" href="style.css?v=202608281924">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608251327"></script>
+<script src="config.js?v=202608281924"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -397,6 +397,7 @@
       <span class="nav-icon">✎</span> Rascunhos
       <span class="nav-badge" id="badgeRascunhos"></span>
     </div>
+    <div class="nav-item" id="navInventario" onclick="goTab('inventario',this)" style="display:none"><span class="nav-icon">▦</span> Inventário</div>
     <div class="nav-item" onclick="goTab('historico',this)"><span class="nav-icon">⏱</span> Histórico</div>
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
   </div>
@@ -622,6 +623,11 @@
   <!-- ========================================================== -->
   <!-- ABA HISTÓRICO — tudo o que o PDV já pediu                  -->
   <!-- ========================================================== -->
+  <!-- ====================== INVENTÁRIO ====================== -->
+  <div class="tab-content" id="tab-inventario">
+    <div class="main full"><div id="invRoot"></div></div>
+  </div>
+
   <div class="tab-content" id="tab-historico">
     <div class="aviso aviso-info">
       Tudo o que <b>o seu PDV</b> já pediu — inclusive o que outra pessoa da sua cozinha pediu.
@@ -788,6 +794,10 @@ const state = {
   catAtual: { compra: 'proteina', req: 'proteina' },
   selecionados: { compra: {}, req: {} }, // { itemId: { item, qty, comentario } }
   livres: { compra: [], req: [] },        // [{ nome, qtd, unidade, comentario }]
+  // Itens de pacote que o cozinheiro trocou para pedir por peso NESTE
+  // pedido. Não mexe no catálogo: o mesmo item volta a ser pacote no
+  // próximo. Vale só até o carrinho ser enviado ou limpo.
+  emPeso: { compra: new Set(), req: new Set() },
   rascunhoIdCompra: null,                  // id da solicitacao se editando rascunho
   historico: { compra: [], req: [] },
   estoqueCritico: new Set(),               // itemIds com nível vermelho na Comissaria
@@ -822,9 +832,18 @@ window.addEventListener('load', async () => {
     return;
   }
 
-  const { data: pdv } = await sb.from('pdvs').select('nome').eq('id', perfil.pdv_id).single();
+  const { data: pdv } = await sb.from('pdvs')
+    .select('nome, inventario_pelo_pdv').eq('id', perfil.pdv_id).single();
   state.pdvId = perfil.pdv_id;
   state.pdvNome = pdv?.nome || '—';
+
+  // Emerald Pool e Bela Vista não têm chef: ali quem conta a câmara é o
+  // cozinheiro. Nas outras cozinhas o menu nem aparece — o inventário é
+  // do chef, pelo executivo.html (ver migration 49).
+  if (pdv?.inventario_pelo_pdv) {
+    const nav = document.getElementById('navInventario');
+    if (nav) nav.style.display = '';
+  }
 
   document.getElementById('pdvChip').textContent = state.pdvNome;
   document.getElementById('userName').textContent = perfil.nome || perfil.email;
@@ -934,17 +953,25 @@ function renderItemRow(item, aba) {
   // Item de pacote: o pedido é em pacotes e o peso vem depois, na pesagem
   // da Comissaria. A estimativa serve pro cozinheiro saber a ordem de
   // grandeza do que está pedindo — quando ela já existe.
-  const pacote = ehPacote(item);
+  const pacote = pedidoEmPacote(aba, item);
   const estimativa = pacote
     ? `<span class="est-peso" id="est-${aba}-${item.id}">${
         estimativaPeso(qty, item.peso_medio_pacote, unidadePeso(item))}</span>`
     : '';
+  // Só item de pacote ganha o botão. Nos outros não há o que alternar.
+  const troca = ehPacote(item)
+    ? ` <button class="pct-badge pct-troca${pacote ? '' : ' em-peso'}"
+          onclick="event.stopPropagation();trocarUnidadePedido('${aba}','${item.id}')"
+          title="${pacote
+            ? 'Pedir este item por ' + unidadePeso(item) + ' em vez de ' + rotuloPacote(item)
+            : 'Voltar a pedir por ' + rotuloPacote(item)}"
+          >por ${escapeHtml(pacote ? rotuloPacote(item) : unidadePeso(item))} ⇄</button>`
+    : '';
   return `
     <div class="item-row ${sel ? 'selected' : ''}" id="row-${aba}-${item.id}">
       <div class="item-check alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${sel ? '✓' : ''}</div>
-      <div class="item-name alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${escapeHtml(aba === 'req' ? nomeExibicao(item) : item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}${
-        pacote ? ` <span class="pct-badge" title="Pedido em pacotes — a Comissaria pesa na separação">por ${escapeHtml(rotuloPacote(item))}</span>` : ''}</div>
-      <div class="item-unit">${pacote ? escapeHtml(rotuloPacote(item)) : item.unidade}</div>
+      <div class="item-name alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${escapeHtml(aba === 'req' ? nomeExibicao(item) : item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}${troca}</div>
+      <div class="item-unit">${escapeHtml(pacote ? rotuloPacote(item) : (ehPacote(item) ? unidadePeso(item) : item.unidade))}</div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
           <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',-1)">−</button>
@@ -1077,6 +1104,54 @@ function atualizarEstimativa(aba, itemId, valor) {
   el.textContent = estimativaPeso(valor, item?.peso_medio_pacote, unidadePeso(item));
 }
 
+// =====================================================================
+// PEDIR POR PESO UM ITEM CADASTRADO EM PACOTE
+// =====================================================================
+// O catálogo diz como o item costuma ser pedido; quem decide é quem está
+// pedindo. "3 caixas de atum" e "3 kg de atum" são pedidos diferentes, e
+// só o cozinheiro sabe qual ele quer hoje.
+//
+// A troca vale para ESTE pedido: `pedido_por` é fotografia da linha, não
+// do catálogo. Por isso a Comissaria continua respondendo em peso nos
+// dois casos — muda o que ela lê na coluna do pedido, não o que ela pesa.
+function pedidoEmPacote(aba, item) {
+  return ehPacote(item) && !state.emPeso[aba]?.has(item.id);
+}
+
+function trocarUnidadePedido(aba, itemId) {
+  const item = state.catalogo.find(i => i.id === itemId);
+  if (!item || !ehPacote(item)) return;
+
+  const conj = state.emPeso[aba];
+  const viraPeso = !conj.has(itemId);
+  viraPeso ? conj.add(itemId) : conj.delete(itemId);
+
+  // A quantidade muda de significado (3 pacotes ≠ 3 kg). Zerar seria pior:
+  // apaga o que a pessoa digitou. Volta para 1 na unidade nova, que é o
+  // mesmo ponto de partida de um item recém-aberto.
+  const sel = state.selecionados[aba][itemId];
+  if (sel) sel.qty = 1;
+
+  renderItens(aba);
+  atualizarCarrinho();
+  showToast(viraPeso
+    ? `${nomeExibicao(item)}: pedindo por ${unidadePeso(item)}.`
+    : `${nomeExibicao(item)}: pedindo por ${rotuloPacote(item)}.`, 'info');
+}
+
+// O que vai no snapshot da linha: o item como o catálogo o descreve, ou
+// com `pede_por` trocado quando a pessoa pediu por peso neste pedido.
+function itemComoPedido(aba, item) {
+  return pedidoEmPacote(aba, item) ? item : { ...item, pede_por: 'peso' };
+}
+
+// A unidade que vai gravada na linha. Item de pacote pedido por peso tem
+// que ir em kg, senão a requisição diz "2 PCT" com o número em quilo.
+function unidadeComoPedido(aba, item) {
+  return pedidoEmPacote(aba, item) ? item.unidade
+       : (ehPacote(item) ? unidadePeso(item) : item.unidade);
+}
+
 function setQty(aba, itemId, val) {
   const v = parseFloat(val);
   const qty = isNaN(v) || v <= 0 ? 1 : v;
@@ -1180,7 +1255,10 @@ function atualizarCarrinho() {
             ${escapeHtml(aba === 'req' ? nomeExibicao(s.item) : s.item.nome)}
             <span class="cs-cat">${catLabels[s.item.categoria]||''}</span>
           </div>
-          <div class="cs-qty">${s.qty} ${s.item.unidade||''}</div>
+          <div class="cs-qty">${s.qty} ${escapeHtml(
+            ehPacote(s.item)
+              ? (pedidoEmPacote(aba, s.item) ? rotuloPacote(s.item) : unidadePeso(s.item))
+              : (s.item.unidade || ''))}</div>
           <button class="cs-del" onclick="removerItem('${aba}','${s.item.id}')" title="Remover">✕</button>
         </div>`;
     });
@@ -1215,6 +1293,7 @@ function atualizarCarrinho() {
 }
 
 const tabTitles = {
+  inventario:  ['Inventário', 'Contagem do mês, item por item'],
   inicio:     ['Início', 'O que você quer fazer?'],
   compra:     ['Solicitar Compra', 'Pedido para compra externa (aprovação do Gerente)'],
   req:        ['Requisição da Comissaria', 'Pedido de itens do estoque interno — sem aprovação'],
@@ -1233,6 +1312,13 @@ function toggleSidebar() {
   ov.classList.toggle('open', open);
 }
 
+// Só as cozinhas sem chef contam pelo login de PDV (Emerald Pool e Bela
+// Vista). A tela em si é a mesma do executivo.html — mora no config.js.
+async function abrirTelaInventario() {
+  await montarInventario('#invRoot', {
+    pdvId: state.perfil.pdv_id, pdvNome: state.pdvNome });
+}
+
 function goTab(aba, el) {
   state.abaAtual = aba;
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -1249,6 +1335,7 @@ function goTab(aba, el) {
   if (aba === 'favoritos') carregarFavoritos();
   if (aba === 'historico') setupHistoricoTab();
   if (aba === 'inicio') atualizarCardRascunhos();
+  if (aba === 'inventario') abrirTelaInventario();
   if (window.innerWidth <= 900) {
     document.querySelector('.sidebar')?.classList.remove('open');
     document.getElementById('sbOverlay')?.classList.remove('open');
@@ -1553,6 +1640,7 @@ async function confirmarEnvio() {
 function limparCarrinho(aba) {
   state.selecionados[aba] = {};
   state.livres[aba] = [];
+  state.emPeso[aba].clear();
   resetTokenCarrinho(aba);
   const obs = document.getElementById(aba + '-obs');
   if (obs) obs.value = '';
@@ -1637,11 +1725,11 @@ function itensRequisicaoPayload() {
       // histórico. O item_id preserva o vínculo com a ficha de compra.
       item_nome: nomeExibicao(s.item),
       item_categoria: s.item.categoria,
-      item_unidade: s.item.unidade,
+      item_unidade: unidadeComoPedido('req', s.item),
       quantidade_solicitada: s.qty,
       comentario: s.comentario || null,
       item_livre: false,
-      ...snapshotPacote(s.item),
+      ...snapshotPacote(itemComoPedido('req', s.item)),
     })),
     ...livres.map(l => ({
       item_id: null,
@@ -1671,11 +1759,11 @@ function itensSolicitacaoPayload(aba) {
       item_id: s.item.id,
       item_nome: s.item.nome,
       item_categoria: s.item.categoria,
-      item_unidade: s.item.unidade,
+      item_unidade: unidadeComoPedido(aba, s.item),
       quantidade_solicitada: s.qty,
       comentario: s.comentario || null,
       item_livre: false,
-      ...snapshotPacote(s.item),
+      ...snapshotPacote(itemComoPedido(aba, s.item)),
     })),
     ...livres.map(l => ({
       item_id: null,
@@ -1754,6 +1842,7 @@ async function carregarRascunho(id) {
   state.rascunhoIdCompra = id;
   state.selecionados.compra = {};
   state.livres.compra = [];
+  state.emPeso.compra.clear();
   for (const it of itens || []) {
     if (it.item_livre) {
       state.livres.compra.push({ nome: it.item_nome, qtd: parseFloat(it.quantidade_solicitada), unidade: it.item_unidade, comentario: it.comentario || '' });
@@ -1783,6 +1872,7 @@ async function descartarRascunho(id) {
     // Se o rascunho apagado estava sendo editado, zera o carrinho
     state.selecionados.compra = {};
     state.livres.compra = [];
+    state.emPeso.compra.clear();
     document.getElementById('compra-obs').value = '';
     renderItens('compra');
     renderLivres('compra');
@@ -1984,6 +2074,7 @@ function _favParaCarrinho(m) {
   const aba = m.tipo === 'compra' ? 'compra' : 'req';
   state.selecionados[aba] = {};
   state.livres[aba] = [];
+  state.emPeso[aba].clear();
   let ignorados = 0;
   (m.modelo_itens || []).forEach(mi => {
     if (_favItemIndisponivel(mi, m.tipo)) { ignorados++; return; }

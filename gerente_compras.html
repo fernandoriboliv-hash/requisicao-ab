@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608251327">
+<link rel="stylesheet" href="style.css?v=202608281924">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608251327"></script>
+<script src="config.js?v=202608281924"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -218,6 +218,7 @@
     </div>
 
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
+    <div class="nav-item" onclick="goTab('fechamento',this)"><span class="nav-icon">⇥</span> Fechar o Mês</div>
     <div class="nav-item" onclick="goTab('catalogo',this)"><span class="nav-icon">◎</span> Catálogo &amp; Preços</div>
     <div class="nav-item" onclick="goTab('pendentes',this)">
       <span class="nav-icon">⚠</span> Itens Pendentes
@@ -557,6 +558,25 @@
     </div>
   </div>
 
+  <!-- ====================== FECHAMENTO DO MÊS ====================== -->
+  <div class="tab-content" id="tab-fechamento">
+    <div class="main full">
+      <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+        <select class="select" id="fec-tipo" style="max-width:190px" onchange="gerarFechamento()">
+          <option value="requisicao">Requisição do mês</option>
+          <option value="inventario">Inventário do mês</option>
+        </select>
+        <span class="text-muted" style="font-size:12px">PDV</span>
+        <select class="select" id="fec-pdv" style="max-width:220px"></select>
+        <span class="text-muted" style="font-size:12px">Mês</span>
+        <input class="input" type="month" id="fec-mes" style="max-width:160px">
+        <button class="btn btn-gold" onclick="gerarFechamento()">Gerar</button>
+      </div>
+      <div id="fec-kpis" class="stats-grid" style="display:none"></div>
+      <div id="fecContainer"><div class="empty-text">Escolha o PDV e o mês.</div></div>
+    </div>
+  </div>
+
   <!-- ====================== CATÁLOGO ====================== -->
   <div class="tab-content" id="tab-catalogo">
     <div class="main full">
@@ -614,6 +634,7 @@
           <option value="nao">Só os fora da requisição</option>
           <option value="sem_curto">Sem nome de cozinha</option>
           <option value="sem_aprov">Sem aproveitamento</option>
+          <option value="so_req">Só requisição (fora das compras)</option>
         </select>
       </div>
       <div class="aviso aviso-info" id="cat-aviso-revisar" style="display:none"></div>
@@ -728,6 +749,7 @@ const tabTitles = {
   niveis:       ['Consultar Estoque', 'Saldo teórico atual dos itens de câmara'],
   divergencias: ['Divergências de Estoque', 'Diferenças entre contagem física e saldo teórico'],
   relatorios:   ['Relatórios', 'Visibilidade quantitativa por PDV/período/categoria'],
+  fechamento:   ['Fechar o Mês', 'Colunas da planilha REQUISIÇÃO COZINHA, um PDV por vez'],
   catalogo:     ['Catálogo & Preços', 'Itens do catálogo com preço, fornecedor e disponibilidade'],
   pendentes:    ['Itens Pendentes', 'Itens livres aguardando decisão'],
 };
@@ -882,6 +904,7 @@ function goTab(tab, el) {
   if (tab === 'niveis')      carregarNiveisGer();
   if (tab === 'divergencias') carregarDivergencias();
   if (tab === 'reqCreate')   initReqCreate();
+  if (tab === 'fechamento')  initFechamento();
   // Atualiza cart sidebar (aparece só em reqCreate)
   if (typeof atualizarCartBarRC === 'function') atualizarCartBarRC();
   // Auto-abre grupo pai se sub-item ativo
@@ -1720,6 +1743,403 @@ function exportarRelatorio() {
 }
 
 // =====================================================================
+// FECHAMENTO DO MÊS — as duas colunas da planilha do financeiro
+// =====================================================================
+// Sai como bloco de texto para colar, não como arquivo. A planilha dele
+// tem fórmula, formatação e vínculo externo na coluna de preço; gerar um
+// .xlsx novo destruiria os três. Colar uma coluna preserva tudo.
+//
+// O bloco cobre a faixa inteira de linhas, com célula vazia onde não
+// houve movimento — lista curta desalinha a partir da primeira falta.
+
+let fechamentoDados = null;
+
+function initFechamento() {
+  const sel = document.getElementById('fec-pdv');
+  if (sel && !sel.options.length) {
+    (state.pdvs || []).forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id; o.textContent = p.nome;
+      sel.appendChild(o);
+    });
+  }
+  const mes = document.getElementById('fec-mes');
+  if (mes && !mes.value) {
+    // Fecha-se o mês que acabou, não o que está correndo.
+    const d = new Date(); d.setDate(0);
+    mes.value = d.toISOString().slice(0, 7);
+  }
+}
+
+async function gerarFechamento() {
+  const tipo = document.getElementById('fec-tipo').value;
+  const pdvId = document.getElementById('fec-pdv').value;
+  const mes = document.getElementById('fec-mes').value;
+  if (!pdvId || !mes) { showToast('Escolha o PDV e o mês.', 'error'); return; }
+
+  const [ano, m] = mes.split('-').map(Number);
+  const de  = `${mes}-01`;
+  const ate = new Date(ano, m, 0).toISOString().slice(0, 10);
+
+  const cont = document.getElementById('fecContainer');
+  cont.innerHTML = '<div class="loading-text">Gerando...</div>';
+  document.getElementById('fec-kpis').style.display = 'none';
+
+  const { data, error } = tipo === 'inventario'
+    ? await sb.rpc('exportar_inventario', { p_pdv_id: pdvId, p_competencia: de })
+    : await sb.rpc('exportar_planilha_requisicao', { p_pdv_id: pdvId, p_de: de, p_ate: ate });
+  if (error) {
+    cont.innerHTML = '<div class="empty-text">Não consegui gerar.</div>';
+    showToast('Erro: ' + error.message, 'error');
+    return;
+  }
+  fechamentoDados = data;
+  if (tipo === 'inventario') renderFechamentoInventario(data);
+  else renderFechamento(data);
+}
+
+// =====================================================================
+// Exportação do inventário
+// =====================================================================
+// Só a coluna F sai como bloco colável. A aba Receitas Açougue tem linhas
+// mescladas — colar ali estraga a mescla — então ela sai como lista do que
+// digitar, com os itens que somam em cada produção à vista.
+function renderFechamentoInventario(d) {
+  const cont = document.getElementById('fecContainer');
+  const kpis = document.getElementById('fec-kpis');
+  const nf = n => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+
+  if (!d.existe) {
+    kpis.style.display = 'none';
+    cont.innerHTML = `<div class="empty-text">
+      ${escapeHtml(d.pdv.nome)} ainda não abriu a contagem deste mês.</div>`;
+    return;
+  }
+
+  const c = d.contagem, r = d.receitas;
+  const faltam = c.total_linhas - c.contadas;
+  const aberta = d.status !== 'fechado';
+
+  kpis.style.display = '';
+  kpis.innerHTML = [
+    ['Contados', c.contadas],
+    ['Sem contagem', faltam],
+    ['Marcados sem estoque', c.zerados],
+    ['Situação', d.status === 'fechado' ? 'Fechada' : 'Aberta'],
+  ].map(([t, v]) => `
+    <div class="stat-card">
+      <div class="stat-label">${t}</div>
+      <div class="stat-val">${v}</div>
+    </div>`).join('');
+
+  const html = [];
+
+  html.push(`
+    <div class="form-panel" style="display:block;margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">
+        <span>Planilha1 — coluna CONTAGEM</span>
+        <button class="btn btn-sm btn-gold" onclick="copiarBloco('fec-bloco-inv')">Copiar</button>
+      </div>
+      <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+        Colar em ${c.coluna}${c.primeira_linha}  (até ${c.coluna}${c.ultima_linha})
+        · ${c.contadas} de ${c.total_linhas} linhas
+      </div>
+      <textarea id="fec-bloco-inv" class="input" readonly rows="8" spellcheck="false"
+        style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre;resize:vertical"
+        ></textarea>
+    </div>`);
+
+  html.push(`
+    <div class="form-panel" style="display:block;margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">
+        <span>Receitas Açougue — coluna Qtde (KG)</span>
+      </div>
+      <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+        Digitar na coluna ${r.coluna}
+      </div>
+      ${r.linhas.length ? `
+      <table class="data-table">
+        <thead><tr><th>Célula</th><th>Produção</th><th style="text-align:right">Digitar</th></tr></thead>
+        <tbody>${r.linhas.map(l => `
+          <tr>
+            <td data-label="Célula"><strong>${r.coluna}${l.linha}</strong></td>
+            <td data-label="Produção">${escapeHtml(l.nome)}
+              ${l.itens.length > 1 ? `<div class="pend-item-meta">${
+                l.itens.map(i => `${escapeHtml(i.item)} ${nf(i.qtd)}`).join(' &nbsp;+&nbsp; ')
+              }</div>` : ''}</td>
+            <td data-label="Digitar" style="text-align:right"><strong>${nf(l.qtd)}</strong></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '<div class="empty-text">Nenhuma produção contada neste PDV.</div>'}
+      ${r.sem_item.length ? `
+        <div class="text-muted" style="font-size:12px;margin-top:10px">
+          Sem item no catálogo, então ninguém consegue contar:
+          ${r.sem_item.map(l => `${r.coluna}${l.linha} ${escapeHtml(l.nome)}`).join(' · ')}
+        </div>` : ''}
+    </div>`);
+
+  if (faltam) {
+    // Item sem contagem sai como célula VAZIA, não zero. É o que separa
+    // "ninguém contou" de "contei e não tem".
+    const amostra = c.nao_contados.slice(0, 40);
+    html.push(`
+      <div class="form-panel" style="display:block;border-left:3px solid var(--gold,#B8963E)">
+        <div class="section-title" style="margin-top:0">
+          <span>${faltam} item(ns) sem contagem</span>
+        </div>
+        <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+          Saem como célula vazia na coluna ${c.coluna} — não como zero.
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${amostra.map(l =>
+          `<span class="pend-item-meta" style="border:1px solid var(--border-subtle);padding:4px 8px"
+            >${c.coluna}${l.linha} · ${escapeHtml(l.nome)}</span>`).join('')}</div>
+        ${c.nao_contados.length > amostra.length
+          ? `<div class="text-muted" style="font-size:12px;margin-top:8px">
+               … e mais ${c.nao_contados.length - amostra.length}.</div>` : ''}
+      </div>`);
+  }
+
+  // Fechar é o último passo, depois de copiar e mandar o e-mail: a partir
+  // daí "fechado" quer dizer exatamente "isto foi o que eu enviei".
+  html.push(`
+    <div class="form-panel" style="display:block;margin-top:18px">
+      <div class="section-title" style="margin-top:0">
+        <span>${aberta ? 'Depois de enviar ao financeiro' : 'Contagem fechada'}</span>
+        ${aberta
+          ? `<button class="btn btn-sm btn-gold" onclick="fecharContagem('${d.pdv.id}')">Fechar contagem</button>`
+          : `<button class="btn btn-sm btn-outline" onclick="reabrirContagem('${d.pdv.id}')">Reabrir</button>`}
+      </div>
+      <div class="text-muted" style="font-size:12px">
+        ${aberta
+          ? 'Enquanto está aberta, a cozinha ainda pode corrigir números.'
+          : 'Fechada em ' + (d.fechado_em ? new Date(d.fechado_em).toLocaleString('pt-BR') : '—')
+            + '. A cozinha não consegue mais alterar.'}
+      </div>
+    </div>`);
+
+  cont.innerHTML = html.join('');
+
+  const el = document.getElementById('fec-bloco-inv');
+  if (el) el.value = c.bloco || '';
+  const tem = (el?.value || '').split('\n').length;
+  const esperado = c.ultima_linha - c.primeira_linha + 1;
+  if (tem !== esperado) {
+    showToast(`Bloco com ${tem} linhas, esperava ${esperado}. Não cole.`, 'error');
+  }
+}
+
+function renderFechamento(d) {
+  const r = d.requisicao, c = d.receitas, a = d.avisos;
+  const nf = n => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+
+  const kpis = document.getElementById('fec-kpis');
+  kpis.style.display = '';
+  kpis.innerHTML = [
+    ['Itens com saída', a.itens_movidos],
+    ['Células da coluna ' + r.coluna, r.preenchidas],
+    ['Produções a digitar', c.preenchidas],
+    ['Sem linha na planilha', d.orfaos.length],
+  ].map(([t, v]) => `
+    <div class="stat-card">
+      <div class="stat-label">${t}</div>
+      <div class="stat-val">${v}</div>
+    </div>`).join('');
+
+  const bloco = (id, titulo, dest, obj) => `
+    <div class="form-panel" style="display:block;margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">
+        <span>${titulo}</span>
+        <button class="btn btn-sm btn-gold" onclick="copiarBloco('${id}')">Copiar</button>
+      </div>
+      <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+        ${dest} · ${obj.preenchidas} de ${obj.com_item} linhas pareadas
+      </div>
+      <textarea id="${id}" class="input" readonly rows="8" spellcheck="false"
+        style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre;resize:vertical"
+        ></textarea>
+    </div>`;
+  // O conteúdo entra por .value, nunca dentro da tag: o parser de HTML
+  // descarta a primeira quebra de linha logo depois de <textarea>, e o
+  // bloco quase sempre começa com linha vazia (a primeira linha da
+  // planilha raramente tem movimento). Escrevendo no innerHTML, a coluna
+  // inteira subia uma linha e o mês colava desalinhado.
+
+  const html = [];
+
+  html.push(bloco('fec-bloco-req',
+    'Planilha1 — coluna Retirado',
+    `Colar em ${r.coluna}${r.primeira_linha}  (até ${r.coluna}${r.ultima_linha})`, r));
+
+  // Aba 2 não sai como bloco: as linhas dela são mescladas na planilha do
+  // financeiro e colar em célula mesclada estraga a mescla. O Fernando
+  // digita, então o que a tela precisa mostrar é o total de cada produção
+  // e de quais itens ele veio — a linha "Hamburguer" soma dois.
+  html.push(`
+    <div class="form-panel" style="display:block;margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">
+        <span>Receitas Açougue — coluna Qtde (KG)</span>
+      </div>
+      <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+        Digitar na coluna ${c.coluna} · ${c.preenchidas} de ${c.com_item} produções mapeadas
+      </div>
+      ${c.linhas.length ? `
+      <table class="data-table">
+        <thead><tr><th>Linha</th><th>Produção</th><th style="text-align:right">Total</th></tr></thead>
+        <tbody>${c.linhas.map(l => `
+          <tr>
+            <td data-label="Linha"><strong>${c.coluna}${l.linha}</strong></td>
+            <td data-label="Produção">
+              ${escapeHtml(l.nome)}
+              ${l.itens.length > 1 ? `<div class="pend-item-meta">${
+                l.itens.map(i => `${escapeHtml(i.item)} ${nf(i.qtd)}`).join(' &nbsp;+&nbsp; ')
+              }</div>` : ''}
+            </td>
+            <td data-label="Total" style="text-align:right"><strong>${nf(l.qtd)}</strong></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '<div class="empty-text">Nenhuma produção com saída no período.</div>'}
+    </div>`);
+
+  // Linha da aba 1 que sempre sai vazia porque o item dela entra pela aba 2.
+  const vazias = r.vazias_por_receita || [];
+  if (vazias.length) {
+    html.push(`
+      <div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
+        <div class="section-title" style="margin-top:0"><span>Saem vazias na coluna ${r.coluna}</span></div>
+        <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+          O consumo delas entra pela aba Receitas Açougue.
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${vazias.map(l =>
+          `<span class="pend-item-meta" style="border:1px solid var(--border-subtle);padding:4px 8px"
+            >${r.coluna}${l.linha} · ${escapeHtml(l.nome)}</span>`).join('')}</div>
+      </div>`);
+  }
+
+  // Avisos: só aparecem quando têm conteúdo real desta geração.
+  if (c.sem_item.length) {
+    html.push(`
+      <div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
+        <div class="section-title" style="margin-top:0"><span>Produções sem item no catálogo</span></div>
+        <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+          Estas linhas saem vazias na coluna ${c.coluna}.
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${c.sem_item.map(l =>
+          `<span class="pend-item-meta" style="border:1px solid var(--border-subtle);padding:4px 8px"
+            >${c.coluna}${l.linha} · ${escapeHtml(l.nome)}</span>`).join('')}</div>
+      </div>`);
+  }
+
+  if (a.linhas_sem_peso) {
+    html.push(`
+      <div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
+        <div class="section-title" style="margin-top:0">
+          <span>${a.linhas_sem_peso} linha(s) de pacote sem peso registrado</span>
+        </div>
+        <div class="text-muted" style="font-size:12px">
+          Entraram como zero. Ver em Requisições Internas → corrigir peso.
+        </div>
+      </div>`);
+  }
+
+  if (d.orfaos.length) {
+    html.push(`
+      <div class="form-panel" style="display:block">
+        <div class="section-title" style="margin-top:0">
+          <span>Não têm linha na planilha (${d.orfaos.length})</span>
+          <button class="btn btn-sm btn-outline" onclick="copiarOrfaos()">Copiar lista</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>Item</th><th style="text-align:right">Saída</th><th>Unid.</th></tr></thead>
+          <tbody>${d.orfaos.map(o => `
+            <tr>
+              <td data-label="Item">${escapeHtml(o.nome || '—')}</td>
+              <td data-label="Saída" style="text-align:right">${nf(o.qtd)}</td>
+              <td data-label="Unid." class="text-muted">${escapeHtml(o.unidade || '')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`);
+  }
+
+  document.getElementById('fecContainer').innerHTML = html.join('');
+
+  const elReq = document.getElementById('fec-bloco-req');
+  if (elReq) elReq.value = r.bloco || '';
+
+  // Se o bloco não tiver exatamente uma linha por linha da planilha, a
+  // colagem sai deslocada e ninguém percebe olhando a tela. Prefiro o
+  // aviso barulhento a um mês inteiro conferido errado.
+  const tem = (elReq?.value || '').split('\n').length;
+  const esperado = r.ultima_linha - r.primeira_linha + 1;
+  if (tem !== esperado) {
+    showToast(`Bloco da coluna ${r.coluna} com ${tem} linhas, esperava ${esperado}. Não cole.`, 'error');
+  }
+}
+
+async function copiarBloco(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  try {
+    await navigator.clipboard.writeText(el.value);
+    showToast('Copiado — cole na planilha.', 'success');
+  } catch {
+    // Ambientes que bloqueiam a área de transferência: seleciona pro usuário
+    el.focus(); el.select();
+    showToast('Texto selecionado — use Ctrl+C.', 'info');
+  }
+}
+
+async function fecharContagem(pdvId) {
+  const d = fechamentoDados;
+  if (!d || !d.existe) return;
+  const faltam = d.contagem.total_linhas - d.contagem.contadas;
+  if (!confirm(faltam
+    ? `${d.pdv.nome}: fechar com ${faltam} item(ns) sem contagem? `
+      + 'A cozinha não consegue mais mexer depois disso.'
+    : `Fechar a contagem de ${d.pdv.nome}?`)) return;
+  await _mudarContagem(pdvId, false);
+}
+
+async function reabrirContagem(pdvId) {
+  if (!confirm('Reabrir a contagem? A cozinha volta a poder alterar — '
+             + 'e o número que você já mandou ao financeiro pode mudar.')) return;
+  await _mudarContagem(pdvId, true);
+}
+
+async function _mudarContagem(pdvId, reabrir) {
+  // O RPC recebe o id da contagem, não o do PDV; releio para pegar o id
+  // atual em vez de guardar um que pode ter mudado de mês entre um clique
+  // e outro.
+  const mes = document.getElementById('fec-mes').value;
+  const { data: inv, error: eB } = await sb.from('inventarios')
+    .select('id').eq('pdv_id', pdvId).eq('competencia', mes + '-01').maybeSingle();
+  if (eB || !inv) { showToast('Não achei a contagem deste mês.', 'error'); return; }
+
+  const { error } = await sb.rpc('fechar_inventario',
+    { p_inventario_id: inv.id, p_reabrir: reabrir });
+  if (error) { showToast('Não consegui: ' + error.message, 'error'); return; }
+  showToast(reabrir ? 'Contagem reaberta.' : 'Contagem fechada.', 'success');
+  gerarFechamento();
+}
+
+async function copiarOrfaos() {
+  const d = fechamentoDados;
+  if (!d || !d.orfaos.length) return;
+  const txt = [
+    `${d.pdv.nome} — ${d.periodo.de} a ${d.periodo.ate}`,
+    'Itens com saída que não têm linha na planilha:',
+    '',
+    ...d.orfaos.map(o => `${o.nome}\t${Number(o.qtd).toLocaleString('pt-BR')}\t${o.unidade || ''}`),
+  ].join('\n');
+  try {
+    await navigator.clipboard.writeText(txt);
+    showToast('Lista copiada.', 'success');
+  } catch {
+    showToast('Não consegui copiar sozinho.', 'error');
+  }
+}
+
+// =====================================================================
 // CATÁLOGO CRUD
 // =====================================================================
 function renderCatalogoTable() {
@@ -1736,6 +2156,11 @@ function renderCatalogoTable() {
   // item que o cozinheiro não pede não precisa de nenhum dos dois.
   if (rf === 'sem_curto') lista = lista.filter(i => ehDeRequisicao(i) && !i.nome_curto);
   if (rf === 'sem_aprov') lista = lista.filter(i => ehDeRequisicao(i) && !i.aproveitamento_pct);
+  // Os que o cozinheiro pede por requisição mas não encontra em Solicitar
+  // Compra. Não é defeito: item transformado e produção própria não têm
+  // fornecedor. Ficava invisível aqui porque a tabela só mostrava a chave
+  // da requisição.
+  if (rf === 'so_req')    lista = lista.filter(i => ehDeRequisicao(i) && !ehCompravel(i));
   if (q) lista = lista.filter(i => itemAtendeBusca(i, q)
     || (i.nome_curto && itemCasaBusca(i.nome_curto, q)));
   state.catalogoLista = lista;
@@ -1770,12 +2195,14 @@ function renderCatalogoTable() {
       const req = ehDeRequisicao(it);
       const clsLinha = it.req_revisar ? 'linha-revisar' : '';
       return `<tr class="${clsLinha}">
-      <td class="td-titulo">${escapeHtml(it.nome_curto || it.nome)}${
+      <td class="td-titulo">${escapeHtml(it.nome)}${
+        !ehCompravel(it) ? ` <span class="badge badge-muted" style="font-size:9px"
+          title="Só requisição: ${it.producao_propria ? 'é produção própria' : 'é transformado na cozinha'}, então não aparece em Solicitar Compra">SÓ REQUISIÇÃO</span>` : ''}${
         it.aproveitamento_pct ? ` <span class="badge badge-muted" style="font-size:9px"
           title="Aproveitamento: sobra ${it.aproveitamento_pct}% do peso comprado">${it.aproveitamento_pct}%</span>` : ''}${
         it.req_revisar ? ' <span class="badge badge-orange" style="font-size:9px">REVISAR</span>' : ''}${
-        it.nome_curto ? `<br><span class="nome-compra">compra: ${escapeHtml(it.nome)}</span>` : ''}${
-        it.nome_inventario ? `<br><span class="nome-compra">inventário: ${escapeHtml(it.nome_inventario)}</span>` : ''}</td>
+        it.nome_curto && it.nome_curto !== it.nome ? `<br><span class="nome-compra">requisição: ${escapeHtml(it.nome_curto)}</span>` : ''}${
+        it.nome_inventario && it.nome_inventario !== it.nome ? `<br><span class="nome-compra">inventário: ${escapeHtml(it.nome_inventario)}</span>` : ''}</td>
       <td class="center" data-label="Na requisição">
         <input type="checkbox" ${req ? 'checked' : ''} onchange="setReqAtivo('${it.id}',this.checked)"
                title="Aparece na lista de requisição do cozinheiro">

@@ -1563,3 +1563,294 @@ function instalarAvisoConexao() {
   window.addEventListener('offline', sync);
   sync();
 }
+
+// =====================================================================
+// INVENTÁRIO — a contagem no celular
+// =====================================================================
+// Substitui imprimir 725 linhas, preencher à mão e redigitar. Mora aqui
+// porque roda em duas telas: o chef conta pelo executivo.html, e nas duas
+// cozinhas sem chef (Emerald Pool e Bela Vista) o cozinheiro conta pelo
+// pdv.html. Duplicar isso em dois arquivos garantiria que um ficasse para
+// trás do outro.
+//
+// A contagem é CEGA: nada de contagem anterior nem saldo teórico na tela.
+// O inventário existe para achar a diferença; mostrar o número esperado
+// ancora quem conta e a diferença some.
+//
+// "Não contei" e "não tenho" são estados diferentes e ficam separados no
+// banco: não contei = sem linha; não tenho = linha com zero. Na planilha
+// do financeiro os dois virariam a mesma célula vazia, e um item esquecido
+// seria lido como item que acabou.
+//
+//   montarInventario('#invRoot', { pdvId, pdvNome, competencia })
+
+const _INV = {
+  raiz: null, pdvId: null, pdvNome: '', competencia: null,
+  inventarioId: null, status: 'aberto',
+  linhas: [],          // linhas da planilha do financeiro
+  producoes: [],       // itens de produção do açougue (aba 2)
+  contagem: new Map(), // chave -> { id, qtd }
+  commodity: null,     // filtro atual
+  busca: '',
+  salvando: new Set(),
+};
+
+const _invChave = (l) => (l.linha_id ? 'L' + l.linha_id : 'I' + l.item_id);
+
+function _invNum(v) {
+  const n = parseFloat(String(v).replace(',', '.'));
+  return isNaN(n) || n < 0 ? null : n;
+}
+
+async function montarInventario(seletor, opts) {
+  const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
+  if (!raiz) return;
+  _INV.raiz = raiz;
+  _INV.pdvId = opts.pdvId;
+  _INV.pdvNome = opts.pdvNome || '';
+  // O inventário é do mês CORRENTE: conta-se no dia 30 o estoque de
+  // agosto, e isso é o inventário de agosto. Não confundir com o
+  // fechamento da requisição, que é do mês que terminou — copiei essa
+  // regra de lá por engano e a primeira contagem de teste caiu em julho.
+  // Quem conta no dia 1º ou 2 troca o mês no seletor do cabeçalho.
+  _INV.competencia = opts.competencia || (new Date().toISOString().slice(0, 7) + '-01');
+
+  raiz.innerHTML = '<div class="loading-text">Abrindo a contagem...</div>';
+
+  const { data: inv, error: eI } = await sb.rpc('abrir_inventario',
+    { p_pdv_id: _INV.pdvId, p_competencia: _INV.competencia });
+  if (eI) {
+    // Quem lê isto está de pé na câmara com o celular na mão. A frase tem
+    // que dizer o que fazer; o texto do Postgres fica embaixo, pequeno,
+    // para quando a pessoa mandar print pra mim.
+    const m = String(eI.message || '');
+    const humano =
+      /schema cache|does not exist/i.test(m) ? 'O inventário ainda não foi liberado neste sistema. Avise o gerente de compras.'
+      : /permiss|denied|policy/i.test(m)     ? 'Seu usuário não conta a câmara desta cozinha.'
+      : !navigator.onLine                     ? 'Sem internet. A contagem abre assim que a conexão voltar.'
+      : 'Não consegui abrir a contagem deste mês.';
+    raiz.innerHTML =
+      '<div class="empty-text">' + escapeHtml(humano) + '</div>'
+      + '<div class="text-muted" style="font-size:11px;text-align:center;margin-top:6px">'
+      + escapeHtml(m) + '</div>';
+    return;
+  }
+  _INV.inventarioId = inv.id;
+  _INV.status = inv.status;
+
+  // Linhas da planilha ativa, na ordem dela — é a ordem da prateleira que
+  // a equipe já usa no papel.
+  let linhas = [];
+  for (let i = 0; i < 4000; i += 1000) {
+    const { data } = await sb.from('planilha_modelo_linhas')
+      .select('id, linha, nome, commodity, uom')
+      .eq('modelo_id', inv.modelo_id).order('linha').range(i, i + 999);
+    if (!data || !data.length) break;
+    linhas = linhas.concat(data);
+  }
+  _INV.linhas = linhas.map(l => ({ ...l, linha_id: l.id, item_id: null }));
+
+  _INV.producoes = await _invCarregarProducoes();
+
+  const { data: cont } = await sb.from('inventario_contagens')
+    .select('id, linha_id, item_id, quantidade').eq('inventario_id', inv.id);
+  _INV.contagem = new Map((cont || []).map(c =>
+    [_invChave(c), { id: c.id, qtd: parseFloat(c.quantidade) }]));
+
+  _INV.commodity = null;
+  _INV.busca = '';
+  _invRender();
+}
+
+// As produções do açougue não têm linha entre os 725 itens da planilha —
+// o lugar delas é a aba 2, por receita. Aqui elas aparecem como itens
+// nossos, e a exportação soma os que caem na mesma receita.
+async function _invCarregarProducoes() {
+  const { data: mod } = await sb.from('planilha_modelos')
+    .select('id').eq('tipo', 'receitas').eq('ativo', true).maybeSingle();
+  if (!mod) return [];
+  const { data: lin } = await sb.from('planilha_modelo_linhas')
+    .select('id, linha, nome').eq('modelo_id', mod.id).order('linha');
+  const { data: lig } = await sb.from('planilha_receita_itens')
+    .select('linha_id, item_id, itens(id, nome, unidade)');
+  const porLinha = {};
+  (lig || []).forEach(x => { (porLinha[x.linha_id] = porLinha[x.linha_id] || []).push(x); });
+
+  const out = [];
+  (lin || []).forEach(l => (porLinha[l.id] || []).forEach(x => {
+    if (!x.itens) return;
+    out.push({
+      linha_id: null, item_id: x.itens.id,
+      nome: x.itens.nome, uom: x.itens.unidade,
+      commodity: 'PRODUÇÃO DO AÇOUGUE', receita: l.nome,
+    });
+  }));
+  return out;
+}
+
+function _invTodos() { return _INV.linhas.concat(_INV.producoes); }
+
+function _invFiltrados() {
+  const q = normalizarBusca(_INV.busca || '');
+  return _invTodos().filter(l => {
+    if (_INV.commodity && String(l.commodity || '').trim() !== _INV.commodity) return false;
+    if (!q) return true;
+    return itemCasaBusca(l.nome, q);
+  });
+}
+
+function _invRender() {
+  const contados = _INV.contagem.size;
+  const total = _invTodos().length;
+  const fechado = _INV.status === 'fechado';
+
+  const commodities = [...new Set(_invTodos()
+    .map(l => String(l.commodity || '').trim()).filter(Boolean))];
+  const contadosDe = (c) => _invTodos()
+    .filter(l => String(l.commodity || '').trim() === c && _INV.contagem.has(_invChave(l))).length;
+  const totalDe = (c) => _invTodos()
+    .filter(l => String(l.commodity || '').trim() === c).length;
+
+  const lista = _invFiltrados();
+
+  _INV.raiz.innerHTML = ''
+    + '<div class="inv-topo">'
+    +   '<div class="inv-titulo">'
+    +     '<div><div class="inv-pdv">' + escapeHtml(_INV.pdvNome) + '</div>'
+    +     '<div class="inv-mes"><input type="month" class="inv-mes-sel" value="'
+    +       _INV.competencia.slice(0, 7) + '" onchange="_invTrocarMes(this.value)">'
+    +       (fechado ? ' <span>contagem fechada</span>' : '') + '</div></div>'
+    +     '<div class="inv-progresso"><strong>' + contados + '</strong><span>/ ' + total + '</span></div>'
+    +   '</div>'
+    +   '<input class="input inv-busca" id="inv-busca" placeholder="Buscar item pelo nome"'
+    +     ' value="' + escapeHtml(_INV.busca) + '" oninput="_invBuscar(this.value)"'
+    +     ' autocomplete="off" spellcheck="false">'
+    +   '<div class="inv-chips">'
+    +     '<button class="inv-chip' + (_INV.commodity ? '' : ' on') + '"'
+    +       ' onclick="_invFiltrar(null)">Tudo <em>' + contados + '/' + total + '</em></button>'
+    +     commodities.map(c =>
+          '<button class="inv-chip' + (_INV.commodity === c ? ' on' : '') + '"'
+        + ' onclick="_invFiltrar(\'' + _escEd(c) + '\')">' + escapeHtml(c)
+        + ' <em>' + contadosDe(c) + '/' + totalDe(c) + '</em></button>').join('')
+    +   '</div>'
+    + '</div>'
+    + '<div class="inv-lista" id="inv-lista">'
+    +   (lista.length ? lista.map(l => _invLinha(l, fechado)).join('')
+                      : '<div class="empty-text">Nenhum item com esse nome.</div>')
+    + '</div>'
+    + '<div class="inv-rodape">'
+    +   (fechado
+        ? '<span class="text-muted">Contagem fechada pelo gerente. Não dá mais para alterar.</span>'
+        : '<span class="text-muted">' + (total - contados) + ' item(ns) ainda sem contagem</span>'
+          + '<span class="text-muted" style="font-size:11px">grava sozinho a cada item</span>')
+    + '</div>';
+}
+
+function _invLinha(l, fechado) {
+  const k = _invChave(l);
+  const c = _INV.contagem.get(k);
+  const tem = !!c;
+  const zero = tem && c.qtd === 0;
+  return ''
+    + '<div class="inv-item' + (tem ? ' contado' : '') + (zero ? ' zerado' : '') + '" id="inv-' + k + '">'
+    +   '<div class="inv-nome">' + escapeHtml(l.nome)
+    +     (l.receita ? '<span class="inv-receita">' + escapeHtml(l.receita) + '</span>' : '')
+    +   '</div>'
+    +   '<div class="inv-campo">'
+    +     '<input class="input inv-qtd" type="number" inputmode="decimal" step="0.001" min="0"'
+    +       ' value="' + (tem ? c.qtd : '') + '" placeholder="—" ' + (fechado ? 'disabled' : '')
+    +       ' onchange="_invSalvar(\'' + k + '\', this.value)" onclick="this.select()">'
+    +     '<span class="inv-uom">' + escapeHtml(l.uom || '') + '</span>'
+    +     (fechado ? ''
+        : '<button class="inv-zero" onclick="_invSalvar(\'' + k + '\', 0)"'
+          + ' title="Não tenho este item">0</button>'
+          + '<button class="inv-apagar" onclick="_invApagar(\'' + k + '\')"'
+          + ' title="Voltar para não contado"' + (tem ? '' : ' disabled') + '>×</button>')
+    +   '</div>'
+    + '</div>';
+}
+
+function _invBuscar(v) {
+  _INV.busca = v;
+  const lista = _invFiltrados();
+  document.getElementById('inv-lista').innerHTML =
+    lista.length ? lista.map(l => _invLinha(l, _INV.status === 'fechado')).join('')
+                 : '<div class="empty-text">Nenhum item com esse nome.</div>';
+}
+
+function _invFiltrar(c) { _INV.commodity = c; _invRender(); }
+
+// Trocar o mês reabre a contagem daquele mês — cada uma é um registro
+// separado, então nada do que já foi contado se mistura.
+async function _invTrocarMes(ym) {
+  if (!ym) return;
+  await montarInventario(_INV.raiz, {
+    pdvId: _INV.pdvId, pdvNome: _INV.pdvNome, competencia: ym + '-01' });
+}
+
+// Grava item a item. O celular na câmara fria perde conexão o tempo todo;
+// um "salvar tudo" no fim perderia a contagem inteira.
+async function _invSalvar(chave, valor) {
+  if (_INV.status === 'fechado') return;
+  const qtd = _invNum(valor);
+  if (qtd === null) { showToast('Quantidade inválida.', 'error'); return; }
+  if (_INV.salvando.has(chave)) return;
+  _INV.salvando.add(chave);
+
+  const alvo = _invTodos().find(l => _invChave(l) === chave);
+  const atual = _INV.contagem.get(chave);
+  const eu = (window.state && window.state.perfil && window.state.perfil.id) || null;
+
+  try {
+    if (atual) {
+      const { data, error } = await sb.from('inventario_contagens')
+        .update({ quantidade: qtd, contado_por: eu, contado_em: new Date().toISOString() })
+        .eq('id', atual.id).select('id').maybeSingle();
+      if (error || !data) throw error || new Error('sem permissão para gravar');
+      _INV.contagem.set(chave, { id: atual.id, qtd });
+    } else {
+      const { data, error } = await sb.from('inventario_contagens').insert({
+        inventario_id: _INV.inventarioId,
+        linha_id: (alvo && alvo.linha_id) || null,
+        item_id: (alvo && alvo.item_id) || null,
+        quantidade: qtd, contado_por: eu,
+      }).select('id').single();
+      if (error) throw error;
+      _INV.contagem.set(chave, { id: data.id, qtd });
+    }
+    _invAtualizarLinha(chave);
+  } catch (e) {
+    showToast('Não gravou: ' + (e.message || e), 'error');
+  } finally {
+    _INV.salvando.delete(chave);
+  }
+}
+
+async function _invApagar(chave) {
+  const atual = _INV.contagem.get(chave);
+  if (!atual) return;
+  const { error } = await sb.from('inventario_contagens').delete().eq('id', atual.id);
+  if (error) { showToast('Não apagou: ' + error.message, 'error'); return; }
+  _INV.contagem.delete(chave);
+  _invAtualizarLinha(chave);
+}
+
+// Redesenha só a linha e o contador. Redesenhar as 725 a cada número
+// digitado trava o celular e fecha o teclado no meio da contagem.
+function _invAtualizarLinha(chave) {
+  const alvo = _invTodos().find(l => _invChave(l) === chave);
+  const el = document.getElementById('inv-' + chave);
+  if (alvo && el) el.outerHTML = _invLinha(alvo, _INV.status === 'fechado');
+  const prog = _INV.raiz.querySelector('.inv-progresso');
+  if (prog) prog.innerHTML = '<strong>' + _INV.contagem.size + '</strong><span>/ ' + _invTodos().length + '</span>';
+  const falta = _INV.raiz.querySelector('.inv-rodape .text-muted');
+  if (falta && _INV.status !== 'fechado') {
+    falta.textContent = (_invTodos().length - _INV.contagem.size) + ' item(ns) ainda sem contagem';
+  }
+}
+
+// Não existe "fechar" aqui de propósito. Decisão do Fernando em 2026-08-25:
+// a contagem fica aberta até ele exportar e mandar o e-mail para o
+// financeiro — quem fecha é o gerente, na tela Fechar o Mês. Se o chef
+// fechasse, uma correção de última hora exigiria pedir reabertura, e o
+// número que foi para o financeiro poderia não ser o número contado.

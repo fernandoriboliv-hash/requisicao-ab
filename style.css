@@ -558,6 +558,26 @@ main, .main {
   padding: 1px 6px;
   white-space: nowrap;
 }
+/* O mesmo selo, agora clicável: troca a unidade do pedido desta linha.
+   Precisa parecer botão — quem não souber que dá pra tocar continua
+   pedindo em pacote sem saber que tinha escolha. */
+.pct-troca {
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.4;
+  transition: background .12s, border-color .12s;
+}
+.pct-troca:hover { background: rgba(37,99,168,0.22); border-color: var(--blue); }
+.pct-troca:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+/* Trocado para peso: sai do azul do pacote e vai pro dourado, para a linha
+   não se confundir com as que continuam em pacote. */
+.pct-troca.em-peso {
+  color: var(--gold);
+  background: rgba(184,150,62,0.12);
+  border-color: rgba(184,150,62,0.5);
+}
+.pct-troca.em-peso:hover { background: rgba(184,150,62,0.22); border-color: var(--gold); }
+@media (prefers-reduced-motion: reduce) { .pct-troca { transition: none; } }
 /* Estimativa de peso — deliberadamente discreta: é aproximação, não fato */
 .est-peso {
   font-size: 11px;
@@ -1382,3 +1402,82 @@ body.has-cart .main-with-sidebar { padding-right: 340px; }
 .cs-peso { display: flex; align-items: center; gap: 4px; }
 .cs-peso .qty-input { width: 62px; text-align: right; }
 .cs-peso span { font-size: 11px; color: var(--muted); }
+
+/* =====================================================================
+   INVENTÁRIO — contagem no celular
+   =====================================================================
+   Desenhada para o polegar em pé na câmara fria, não para o mouse: campo
+   grande, alvo de toque generoso e o nome nunca truncado — dois itens da
+   planilha do financeiro chegam a diferir só nas últimas palavras. */
+.inv-topo {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--dark); padding: 12px 0 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.inv-titulo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.inv-pdv { font-size: 17px; font-weight: 600; color: var(--text); }
+.inv-mes { font-size: 12px; color: var(--muted); text-transform: capitalize; }
+.inv-progresso { text-align: right; white-space: nowrap; }
+.inv-progresso strong { font-size: 26px; font-weight: 300; color: var(--gold); }
+.inv-progresso span { font-size: 13px; color: var(--muted); margin-left: 3px; }
+.inv-busca { margin-top: 10px; font-size: 16px; }  /* 16px: abaixo disso o iOS dá zoom */
+
+.inv-chips { display: flex; gap: 6px; overflow-x: auto; padding: 10px 0 2px; scrollbar-width: none; }
+.inv-chips::-webkit-scrollbar { display: none; }
+.inv-chip {
+  flex: 0 0 auto; cursor: pointer; white-space: nowrap;
+  background: var(--panel); color: var(--muted);
+  border: 1px solid var(--border-subtle); padding: 7px 12px;
+  font-size: 12px; font-family: inherit; letter-spacing: .3px;
+}
+.inv-chip em { font-style: normal; color: var(--muted2); margin-left: 5px; font-size: 11px; }
+.inv-chip.on { background: rgba(184,150,62,0.14); border-color: var(--gold); color: var(--gold); }
+.inv-chip.on em { color: var(--gold-light); }
+
+.inv-lista { display: flex; flex-direction: column; }
+.inv-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 4px; border-bottom: 1px solid var(--border-subtle);
+}
+/* Contado e "não tenho" precisam se distinguir de longe: um item zerado é
+   informação, um item em branco é trabalho que falta. */
+.inv-item.contado { background: rgba(76,175,125,0.06); }
+.inv-item.zerado  { background: rgba(122,128,148,0.08); }
+.inv-nome { flex: 1; font-size: 14px; line-height: 1.35; color: var(--text); }
+.inv-receita {
+  display: block; font-size: 11px; color: var(--gold);
+  text-transform: uppercase; letter-spacing: .5px; margin-top: 2px;
+}
+.inv-campo { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.inv-qtd {
+  width: 88px; text-align: right; font-size: 16px; padding: 9px 8px;
+  font-variant-numeric: tabular-nums;
+}
+.inv-uom { font-size: 11px; color: var(--muted); width: 30px; }
+.inv-zero, .inv-apagar {
+  width: 34px; height: 38px; cursor: pointer; font-family: inherit;
+  background: var(--panel); border: 1px solid var(--border-subtle);
+  color: var(--muted); font-size: 14px;
+}
+.inv-zero:hover   { border-color: var(--muted); color: var(--text); }
+.inv-apagar:hover:not(:disabled) { border-color: var(--error); color: var(--error); }
+.inv-apagar:disabled { opacity: .3; cursor: default; }
+
+.inv-rodape {
+  position: sticky; bottom: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--dark); border-top: 1px solid var(--border-subtle);
+  padding: 12px 0; margin-top: 8px;
+}
+
+@media (max-width: 560px) {
+  .inv-item { flex-wrap: wrap; }
+  .inv-nome { flex: 1 1 100%; }
+  .inv-campo { flex: 1 1 100%; justify-content: flex-end; }
+  .inv-qtd { width: 110px; }
+}
+.inv-mes-sel {
+  background: transparent; border: none; color: var(--muted);
+  font-family: inherit; font-size: 12px; padding: 0; cursor: pointer;
+}
+.inv-mes-sel:hover, .inv-mes-sel:focus { color: var(--gold); outline: none; }
