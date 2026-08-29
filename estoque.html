@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608282100">
+<link rel="stylesheet" href="style.css?v=202608291206">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608282100"></script>
+<script src="config.js?v=202608291206"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -780,6 +780,7 @@
           <span class="nav-icon">△</span> Divergências
           <span class="nav-badge" id="badgeDivergencias"></span>
         </div>
+        <div class="nav-item" onclick="goTab('inventario',this)"><span class="nav-icon">▦</span> Inventário do Mês</div>
       </div>
     </div>
 
@@ -1207,6 +1208,13 @@
 
   </div>
 
+  <!-- ========================================================== -->
+  <!-- ABA INVENTÁRIO — a Comissaria conta a câmara dela          -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-inventario">
+    <div id="invRoot"></div>
+  </div>
+
   </div>
 </div>
 
@@ -1393,6 +1401,7 @@ const tabTitles = {
   niveis:       ['Níveis do Estoque', ''],
   divergencias: ['Divergências de Estoque', ''],
   relatorios:   ['Relatórios', ''],
+  inventario:   ['Inventário do Mês', 'Contagem da câmara da Comissaria'],
 };
 
 function toggleNavGroup(headEl) {
@@ -1434,6 +1443,7 @@ function goTab(aba, el) {
   if (aba === 'checklist') carregarChecklist();
   if (aba === 'niveis') carregarNiveis();
   if (aba === 'divergencias') carregarDivergencias();
+  if (aba === 'inventario') abrirTelaInventario();
   openParentGroup(el);
   document.getElementById('chkSaveBar').classList.toggle('visible',
     aba === 'checklist' && Object.keys(state.chk.dirty).length > 0);
@@ -1446,6 +1456,19 @@ const switchAba = (aba) => {
     .find(n => (n.getAttribute('onclick') || '').includes(`goTab('${aba}'`));
   goTab(aba, nav);
 };
+
+// A tela é a mesma das cozinhas — mora no config.js. Aqui só dizemos QUAL
+// câmara: a Comissaria não vem do pdv_id do login (ele é nulo de propósito,
+// e serve pra outra coisa nesta tela), vem do PDV de tipo 'comissaria'.
+async function abrirTelaInventario() {
+  if (!state.pdvComissariaId) {
+    document.getElementById('invRoot').innerHTML =
+      '<div class="empty-text">PDV "Comissaria" não encontrado no banco.</div>';
+    return;
+  }
+  await montarInventario('#invRoot',
+    { pdvId: state.pdvComissariaId, pdvNome: 'Comissaria' });
+}
 
 // =====================================================================
 // FILA
