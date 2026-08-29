@@ -1454,12 +1454,11 @@ body.has-cart .main-with-sidebar { padding-right: 340px; }
   font-variant-numeric: tabular-nums;
 }
 .inv-uom { font-size: 11px; color: var(--muted); width: 30px; }
-.inv-zero, .inv-apagar {
+.inv-apagar {
   width: 34px; height: 38px; cursor: pointer; font-family: inherit;
   background: var(--panel); border: 1px solid var(--border-subtle);
   color: var(--muted); font-size: 14px;
 }
-.inv-zero:hover   { border-color: var(--muted); color: var(--text); }
 .inv-apagar:hover:not(:disabled) { border-color: var(--error); color: var(--error); }
 .inv-apagar:disabled { opacity: .3; cursor: default; }
 

@@ -1568,19 +1568,20 @@ function instalarAvisoConexao() {
 // INVENTÁRIO — a contagem no celular
 // =====================================================================
 // Substitui imprimir 725 linhas, preencher à mão e redigitar. Mora aqui
-// porque roda em duas telas: o chef conta pelo executivo.html, e nas duas
-// cozinhas sem chef (Emerald Pool e Bela Vista) o cozinheiro conta pelo
-// pdv.html. Duplicar isso em dois arquivos garantiria que um ficasse para
-// trás do outro.
+// porque roda em duas telas: o chef conta pelo executivo.html e o
+// cozinheiro pelo pdv.html — desde a migration 53 as duas coisas valem em
+// todas as cozinhas. Duplicar isso em dois arquivos garantiria que um
+// ficasse para trás do outro.
 //
 // A contagem é CEGA: nada de contagem anterior nem saldo teórico na tela.
 // O inventário existe para achar a diferença; mostrar o número esperado
 // ancora quem conta e a diferença some.
 //
-// "Não contei" e "não tenho" são estados diferentes e ficam separados no
-// banco: não contei = sem linha; não tenho = linha com zero. Na planilha
-// do financeiro os dois virariam a mesma célula vazia, e um item esquecido
-// seria lido como item que acabou.
+// Decisão do Fernando em 2026-08-25: item que ninguém contou é item que a
+// cozinha não tem. Por isso não existe botão de "zero" — deixar em branco
+// já diz isso, e pedir o gesto extra em 700 itens tornaria a contagem
+// impraticável. O banco continua sabendo distinguir (contagem existe ou
+// não existe), o que preserva a informação se um dia a regra mudar.
 //
 //   montarInventario('#invRoot', { pdvId, pdvNome, competencia })
 
@@ -1794,10 +1795,8 @@ function _invLinha(l, fechado) {
     +       ' onchange="_invSalvar(\'' + k + '\', this.value)" onclick="this.select()">'
     +     '<span class="inv-uom">' + escapeHtml(l.uom || '') + '</span>'
     +     (fechado ? ''
-        : '<button class="inv-zero" onclick="_invSalvar(\'' + k + '\', 0)"'
-          + ' title="Não tenho este item">0</button>'
-          + '<button class="inv-apagar" onclick="_invApagar(\'' + k + '\')"'
-          + ' title="Voltar para não contado"' + (tem ? '' : ' disabled') + '>×</button>')
+        : '<button class="inv-apagar" onclick="_invApagar(\'' + k + '\')"'
+          + ' title="Apagar o que foi digitado"' + (tem ? '' : ' disabled') + '>×</button>')
     +   '</div>'
     + '</div>';
 }
@@ -1816,11 +1815,10 @@ function _invFiltrar(c) { _INV.commodity = c; _invRender(); }
 // um item esquecido, é só clicar de novo e continuar contando. Quem tranca
 // é o gerente, ao fechar para mandar ao financeiro.
 async function _invConcluir(concluir) {
-  const falta = _invTodos().length - _INV.contagem.size;
-  if (concluir && falta && !confirm(
-      'Ainda faltam ' + falta + ' item(ns) sem contagem.\n\n'
-    + 'Marcar como concluído mesmo assim? Eles vão para o financeiro '
-    + 'como célula vazia, não como zero.')) return;
+  // Sem aviso sobre o que ficou em branco: item não contado quer dizer que
+  // a cozinha não tem. Alertar sobre 700 "faltando" toda vez seria alarme
+  // sobre a situação normal, e alarme normal ninguém lê.
+  if (concluir && !confirm('Marcar o inventário como concluído?')) return;
 
   const { error } = await sb.rpc('concluir_inventario',
     { p_inventario_id: _INV.inventarioId, p_concluir: !!concluir });

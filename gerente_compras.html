@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608282032">
+<link rel="stylesheet" href="style.css?v=202608282100">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608282032"></script>
+<script src="config.js?v=202608282100"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -1898,7 +1898,7 @@ function renderFechamentoInventario(d) {
           <span>${faltam} item(ns) sem contagem</span>
         </div>
         <div class="text-muted" style="font-size:12px;margin-bottom:8px">
-          Saem como célula vazia na coluna ${c.coluna} — não como zero.
+          Saem em branco na coluna ${c.coluna} — a cozinha não tem em estoque.
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">${amostra.map(l =>
           `<span class="pend-item-meta" style="border:1px solid var(--border-subtle);padding:4px 8px"
