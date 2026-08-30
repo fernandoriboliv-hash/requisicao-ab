@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608291206">
+<link rel="stylesheet" href="style.css?v=202608301724">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608291206"></script>
+<script src="config.js?v=202608301724"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -21,6 +21,20 @@
   .cat-btn.on-laticinios  { background: rgba(37,99,168,0.15);  border-color: var(--c-laticinios); color: var(--c-laticinios); }
   .cat-btn.on-hortifruti  { background: rgba(74,124,89,0.15);  border-color: var(--c-hortifruti); color: var(--c-hortifruti); }
   .cat-btn.on-diversos    { background: rgba(184,150,62,0.15); border-color: var(--c-diversos);   color: var(--c-diversos); }
+
+
+  /* ============== IDENTIDADE DE PROCESSO ==============
+     Compra e requisição são a mesma tela com outro título, e os usuários
+     estavam confundindo as duas. Cada processo ganha uma cor, carregada
+     no título e nos pontos de ação. Mesmas cores do pdv.html: quem usa os
+     dois perfis aprende uma convenção só.
+     Turquesa e não azul porque --blue já é a cor da categoria Laticínios. */
+  body { --proc: var(--gold); --proc-hover: var(--gold-light); --proc-texto: #14100A; }
+  body[data-processo="req"] {
+    --proc: #3FA7A0; --proc-hover: #5FC4BD; --proc-texto: #06201E;
+  }
+  body[data-processo] .top-bar   { border-bottom: 2px solid var(--proc); }
+  body[data-processo] .top-title { color: var(--proc); }
 
   .item-row {
     display: grid;
@@ -526,6 +540,11 @@ async function abrirTelaInventario(pdvId) {
 }
 
 function goTab(aba, el) {
+  // Aqui as duas abas sao consulta, nao criacao — entao entra so a cor,
+  // que e o que separa uma lista da outra ao bater o olho.
+  if (aba === 'compras') document.body.dataset.processo = 'compra';
+  else if (aba === 'reqs') document.body.dataset.processo = 'req';
+  else delete document.body.dataset.processo;
   state.abaAtual = aba;
   document.querySelectorAll('.tab-content').forEach(c => {
     if (['tab-criar','tab-compras','tab-reqs','tab-niveis','tab-divergencias','tab-rel','tab-inventario'].includes(c.id)) c.classList.remove('active');
@@ -1067,7 +1086,7 @@ async function gerarRel() {
 
   if (fonte === 'ambos' || fonte === 'req') {
     let q = sb.from('requisicoes')
-      .select('id, data_competencia, status, pdv_id, requisicao_itens(item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, itens(fornecedor_principal))')
+      .select('id, data_competencia, status, pdv_id, requisicao_itens(item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, pacotes_entregues, pedido_por, peso_medio_pacote, itens(fornecedor_principal))')
       .eq('status', 'entregue')
       .gte('data_competencia', de)
       .lte('data_competencia', ate);
@@ -1076,9 +1095,11 @@ async function gerarRel() {
     if (error) { showToast('Erro (requisições): ' + error.message, 'error'); cont.innerHTML = ''; return; }
     (data || []).forEach(r => (r.requisicao_itens || []).forEach(it => {
       if (cat && it.item_categoria !== cat) return;
-      const q2 = it.quantidade_entregue != null ? it.quantidade_entregue : it.quantidade_solicitada;
-      rows.push({ fonte:'req', itemId:it.item_id, nome:it.item_nome, cat:it.item_categoria, unid:it.item_unidade,
-                  qty: parseFloat(q2) || 0,
+      // Ver o comentário em qtdInventario(): pacote entra em peso, e falta
+      // de peso entra como zero com aviso — nunca como contagem de pacotes.
+      const inv = qtdInventario(it);
+      rows.push({ fonte:'req', itemId:it.item_id, nome:it.item_nome, cat:it.item_categoria, unid:inv.unidade,
+                  qty: inv.qtd, semPeso: inv.semPeso,
                   forn: it.itens?.fornecedor_principal || '—' });
     }));
   }
@@ -1088,10 +1109,11 @@ async function gerarRel() {
   rows.forEach(r => {
     const k = `${r.nome}||${r.cat}||${r.unid || ''}`;
     if (!acc[k]) acc[k] = { itemId:r.itemId, nome:r.nome, cat:r.cat, unid:r.unid, forn:r.forn,
-                            qtyCompra:0, qtyReq:0, qtyTotal:0 };
+                            qtyCompra:0, qtyReq:0, qtyTotal:0, semPeso:0 };
     if (r.fonte === 'compra') acc[k].qtyCompra += r.qty;
     else acc[k].qtyReq += r.qty;
     acc[k].qtyTotal += r.qty;
+    if (r.semPeso) acc[k].semPeso++;
   });
   const itens = Object.values(acc).map(x => {
     const preco = state.precos[x.itemId] || 0;
@@ -1160,7 +1182,8 @@ function renderRelTabela(itens, fonte) {
           <td class="center text-muted" data-label="Unidade">${escapeHtml(x.unid || '')}</td>
           ${showC ? `<td class="num" data-label="Comprada">${x.qtyCompra > 0 ? fmtQty(x.qtyCompra) : '—'}</td>` : ''}
           ${showR ? `<td class="num" data-label="Requisitada">${x.qtyReq > 0 ? fmtQty(x.qtyReq) : '—'}</td>` : ''}
-          <td class="num" style="font-weight:500" data-label="Total">${fmtQty(x.qtyTotal)}</td>
+          <td class="num" style="font-weight:500" data-label="Total">${fmtQty(x.qtyTotal)}${
+            x.semPeso ? `<br><span class="text-error" style="font-size:11px">${x.semPeso} entrega(s) sem peso</span>` : ''}</td>
           <td class="num text-muted" data-label="Preço un.">${x.preco > 0 ? fmtBRL(x.preco) : '—'}</td>
           <td class="num" style="font-weight:500" data-label="Valor total">${x.preco > 0 ? fmtBRL(x.valorTotal) : '—'}</td>
         </tr>`).join('')}</tbody>
@@ -1177,13 +1200,15 @@ function exportarRel() {
   const header = ['Categoria','Item','Fornecedor','Unidade'];
   if (showC) header.push('Qtd Comprada');
   if (showR) header.push('Qtd Requisitada');
-  header.push('Qtd Total', 'Preço unit.', 'Valor total');
+  // Entregas sem peso vao no CSV: sem isso quem recebe soma o total como se
+  // estivesse completo, e ele nao esta.
+  header.push('Qtd Total', 'Entregas sem peso', 'Preço unit.', 'Valor total');
   const linhas = [header];
   relCache.itens.forEach(x => {
     const row = [CAT_LABEL_REL[x.cat] || x.cat, x.nome, x.forn, x.unid || ''];
     if (showC) row.push(x.qtyCompra || 0);
     if (showR) row.push(x.qtyReq || 0);
-    row.push(x.qtyTotal, x.preco || 0, x.valorTotal || 0);
+    row.push(x.qtyTotal, x.semPeso || 0, x.preco || 0, x.valorTotal || 0);
     linhas.push(row);
   });
   const csv = linhas.map(r => r.map(c => {

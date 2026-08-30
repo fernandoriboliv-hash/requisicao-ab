@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608291206">
+<link rel="stylesheet" href="style.css?v=202608301724">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608291206"></script>
+<script src="config.js?v=202608301724"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -233,6 +233,30 @@
   .cat-btn.on-laticinios  { background: rgba(37,99,168,0.15);  border-color: var(--c-laticinios); color: var(--c-laticinios); }
   .cat-btn.on-hortifruti  { background: rgba(74,124,89,0.15);  border-color: var(--c-hortifruti); color: var(--c-hortifruti); }
   .cat-btn.on-diversos    { background: rgba(184,150,62,0.15); border-color: var(--c-diversos);   color: var(--c-diversos); }
+
+
+  /* ============== IDENTIDADE DE PROCESSO ==============
+     Compra e requisição são a mesma tela com outro título, e os usuários
+     estavam confundindo as duas. Cada processo ganha uma cor, carregada
+     no título e nos pontos de ação. Mesmas cores do pdv.html: quem usa os
+     dois perfis aprende uma convenção só.
+     Turquesa e não azul porque --blue já é a cor da categoria Laticínios. */
+  body { --proc: var(--gold); --proc-hover: var(--gold-light); --proc-texto: #14100A; }
+  body[data-processo="req"] {
+    --proc: #3FA7A0; --proc-hover: #5FC4BD; --proc-texto: #06201E;
+  }
+  body[data-processo] .top-bar   { border-bottom: 2px solid var(--proc); }
+  body[data-processo] .top-title { color: var(--proc); }
+
+  body[data-processo] #cartSendBtn,
+  body[data-processo] #btnConfirmarEnvioCompraComis {
+    background: var(--proc); color: var(--proc-texto);
+  }
+  body[data-processo] #cartSendBtn:hover,
+  body[data-processo] #btnConfirmarEnvioCompraComis:hover { background: var(--proc-hover); }
+  body[data-processo] #cartSendBtn:disabled {
+    background: var(--muted2); color: var(--muted);
+  }
 
   .item-row {
     display: grid; grid-template-columns: 22px 1fr auto auto;
@@ -1424,6 +1448,12 @@ function toggleSidebar() {
 
 function goTab(aba, el) {
   state.abaAtual = aba;
+  // Cor do processo. 'manual' é a requisição que a Comissaria cria em nome
+  // de um PDV; 'compra' é a solicitação dela ao fornecedor. As outras abas
+  // não são processo e voltam ao dourado.
+  if (aba === 'compra') document.body.dataset.processo = 'compra';
+  else if (aba === 'manual') document.body.dataset.processo = 'req';
+  else delete document.body.dataset.processo;
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('tab-' + aba).classList.add('active');
@@ -2158,7 +2188,7 @@ function atualizarCartSidebarComis() {
   } else if (aba === 'compra') {
     sels = Object.values(state.compra.selecionados);
     remover = (id) => toggleCompra(id);
-    botao = 'Revisar e Enviar';
+    botao = 'Confirmar e Enviar';
     actionFn = 'abrirRevisaoCompraComis';
   } else {
     document.body.classList.remove('has-cart');

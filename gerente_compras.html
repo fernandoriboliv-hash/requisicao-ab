@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608291206">
+<link rel="stylesheet" href="style.css?v=202608301724">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608291206"></script>
+<script src="config.js?v=202608301724"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -114,6 +114,24 @@
     border: 1px solid transparent; transition: border-color 0.15s;
   }
   .add-item-row:hover { border-color: var(--border-subtle); }
+
+  /* A lista do modal "Vincular a um item do catálogo" usa a marcação
+     .item-row das outras telas, mas cada página define essa regra por
+     conta própria e ESTA nunca definiu. Sem ela a linha caía em fluxo de
+     bloco: o nome ocupava a largura toda e o botão descia para a linha
+     seguinte, encostado no nome do PRÓXIMO item. Quem está vinculando lê
+     o botão como se fosse do item de baixo e vincula o item errado.
+     Duas colunas e não quatro: aqui não há caixa de seleção nem coluna de
+     unidade — a unidade vem dentro de .item-actions-cell. */
+  #vp-resultados .item-row {
+    display: grid; grid-template-columns: 1fr auto;
+    align-items: center; gap: 12px;
+    background: var(--surface); padding: 10px 14px; margin-bottom: 2px;
+    border: 1px solid transparent; transition: border-color 0.15s;
+  }
+  #vp-resultados .item-row:hover { border-color: var(--border-subtle); }
+  #vp-resultados .item-row > * { min-width: 0; }
+  #vp-resultados .item-name { font-size: 14px; }
   /* Comentário ocupa a linha toda, abaixo dos controles — só aparece
      depois que o item entra na lista, senão vira ruído em 700 linhas */
   /* Nome de compra abaixo do nome curto: o gerente precisa ver os dois

@@ -1515,12 +1515,19 @@ async function verRequisicaoInterna(sb, id) {
              pct && est ? `<br><span class="est-peso">${est}</span>` : ''}</td>
            ${entregue ? `
              <td class="num" data-label="Entregue">${pct
-               ? (i.pacotes_entregues != null
-                   ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${_qtd(i.pacotes_entregues)} ${rot}</span>${
-                       i.quantidade_entregue != null
-                         ? `<br><span class="est-peso">${_qtd(i.quantidade_entregue)} ${uPeso} pesado</span>`
-                         : '<br><span class="text-error" style="font-size:11px">não pesado</span>'}`
-                   : '—')
+               // O PESO é a resposta da Comissaria; o pacote é o controle de
+               // separação. Estava invertido: o pacote vinha grande e o peso
+               // em letra pequena, dando a entender que ela tinha respondido
+               // em pacotes — o que ela nunca pode fazer.
+               ? (i.quantidade_entregue != null
+                   ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${_qtd(i.quantidade_entregue)} ${uPeso}</span>${
+                       i.pacotes_entregues != null
+                         ? `<br><span class="est-peso">${_qtd(i.pacotes_entregues)} ${rot} separados</span>`
+                         : ''}`
+                   : `<span class="text-error">não pesado</span>${
+                       i.pacotes_entregues != null
+                         ? `<br><span class="est-peso">${_qtd(i.pacotes_entregues)} ${rot} separados</span>`
+                         : ''}`)
                : (i.quantidade_entregue != null
                    ? `<span class="${falta > 0.0001 ? 'text-error' : ''}">${_qtd(i.quantidade_entregue)} ${un}</span>`
                    : '—')}${

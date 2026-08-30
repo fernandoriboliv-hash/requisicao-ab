@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608291206">
+<link rel="stylesheet" href="style.css?v=202608301724">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608291206"></script>
+<script src="config.js?v=202608301724"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -32,6 +32,38 @@
   .search-wrap { position: relative; margin-bottom: 14px; }
   .search-wrap .icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted2); }
   .search-input { padding-left: 42px; }
+
+  /* ============== IDENTIDADE DE PROCESSO ==============
+     Compra e Requisição eram a mesma tela com outro título. Pior no
+     celular: a sidebar vira menu escondido e o `.top-sub` está com
+     display:none, então sobrava só o título para dizer em qual dos dois
+     processos a pessoa estava — depois de montar a lista inteira.
+     Cada processo passa a ter uma cor, carregada nos pontos que se olha
+     enquanto pede: título, faixa do carrinho, cabeçalho da lista e o
+     botão que envia. Cor porque não depende de ler.
+     O atributo só existe nas duas abas de processo; nas outras ele sai e
+     a tela volta ao dourado padrão. */
+  body { --proc: var(--gold); --proc-hover: var(--gold-light); --proc-texto: #14100A; }
+  body[data-processo="req"] {
+    --proc: #3FA7A0; --proc-hover: #5FC4BD; --proc-texto: #06201E;
+  }
+
+  body[data-processo] .top-bar      { border-bottom: 2px solid var(--proc); }
+  body[data-processo] .top-title    { color: var(--proc); }
+  body[data-processo] .cart-strip   { background: var(--proc); color: var(--proc-texto); }
+  body[data-processo] .cart-fab     { background: var(--proc); color: var(--proc-texto); }
+  body[data-processo] .cart-sidebar-head .title { color: var(--proc); }
+  body[data-processo] #btn-enviar,
+  body[data-processo] #btn-confirmar {
+    background: var(--proc); color: var(--proc-texto);
+  }
+  body[data-processo] #btn-enviar:hover,
+  body[data-processo] #btn-confirmar:hover { background: var(--proc-hover); }
+  /* O disabled tem que continuar lendo como desligado, senão a cor do
+     processo faz o botão parecer clicável antes de ter item na lista. */
+  body[data-processo] #btn-enviar:disabled {
+    background: var(--muted2); color: var(--muted);
+  }
 
   .item-row {
     display: grid;
@@ -79,7 +111,19 @@
     font-weight: 500;
     white-space: nowrap;
   }
-  .item-unit { font-size: 12px; color: var(--muted); width: 50px; text-align: center; }
+  /* O botao de trocar PCT<->KG morava ao lado do NOME, longe da unidade
+     que ele troca: o selo aparecia colado no nome do item e ninguem
+     associava um ao outro. Agora ele mora na coluna da unidade, logo
+     abaixo do rotulo que ele altera.
+     Empilhado e nao lado a lado porque a coluna e estreita — crescer a
+     largura empurraria os controles de quantidade para fora em telas
+     pequenas, que foi o defeito que ja tinha derrubado a barra do
+     carrinho para fora da tela em agosto. */
+  .item-unit {
+    font-size: 12px; color: var(--muted); text-align: center;
+    min-width: 50px;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+  }
 
   /* Cabeçalho de sub-grupo (fornecedor ou sub-categoria) dentro da lista */
   .subgroup-head {
@@ -970,8 +1014,8 @@ function renderItemRow(item, aba) {
   return `
     <div class="item-row ${sel ? 'selected' : ''}" id="row-${aba}-${item.id}">
       <div class="item-check alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${sel ? '✓' : ''}</div>
-      <div class="item-name alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${escapeHtml(aba === 'req' ? nomeExibicao(item) : item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}${troca}</div>
-      <div class="item-unit">${escapeHtml(pacote ? rotuloPacote(item) : (ehPacote(item) ? unidadePeso(item) : item.unidade))}</div>
+      <div class="item-name alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${escapeHtml(aba === 'req' ? nomeExibicao(item) : item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
+      <div class="item-unit">${escapeHtml(pacote ? rotuloPacote(item) : (ehPacote(item) ? unidadePeso(item) : item.unidade))}${troca}</div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
           <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',-1)">−</button>
@@ -1321,6 +1365,10 @@ async function abrirTelaInventario() {
 
 function goTab(aba, el) {
   state.abaAtual = aba;
+  // Cor do processo. Só compra e req têm uma; nas outras abas o atributo
+  // sai e a tela volta ao dourado.
+  if (aba === 'compra' || aba === 'req') document.body.dataset.processo = aba;
+  else delete document.body.dataset.processo;
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('tab-' + aba).classList.add('active');
@@ -1587,6 +1635,10 @@ function abrirRevisao() {
   </div>`;
 
   document.getElementById('revisaoTitle').textContent = aba === 'compra' ? 'Revisar Solicitação de Compra' : 'Revisar Requisição';
+  // Ponto sem volta: o botão diz para ONDE vai, não só que envia. É a
+  // última chance de perceber que montou a lista na tela errada.
+  document.getElementById('btn-confirmar').textContent =
+    aba === 'compra' ? 'Confirmar e Enviar' : 'Enviar para Comissaria';
   document.getElementById('revisaoBody').innerHTML = html;
   abrirModal('revisaoModal');
 }
@@ -2479,16 +2531,19 @@ async function gerarRelatorio() {
 
   if (fonte === 'ambos' || fonte === 'req') {
     const { data, error } = await sb.from('requisicoes')
-      .select('id, data_competencia, status, requisicao_itens(item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, itens(fornecedor_principal))')
+      .select('id, data_competencia, status, requisicao_itens(item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, pacotes_entregues, pedido_por, peso_medio_pacote, itens(fornecedor_principal))')
       .eq('status', 'entregue')
       .gte('data_competencia', de)
       .lte('data_competencia', ate);
     if (error) { showToast('Erro (requisições): ' + error.message, 'error'); tabela.innerHTML = ''; return; }
     (data || []).forEach(r => (r.requisicao_itens || []).forEach(it => {
       if (cat && it.item_categoria !== cat) return;
-      const q = it.quantidade_entregue != null ? it.quantidade_entregue : it.quantidade_solicitada;
-      rows.push({ fonte:'req', nome:it.item_nome, cat:it.item_categoria, unid:it.item_unidade,
-                  qty: parseFloat(q) || 0,
+      // Item de pacote entra em PESO, nunca em contagem de pacotes, e sem
+      // peso entra como ZERO com aviso. Antes caía em quantidade_solicitada,
+      // que é pacote, e somava pacote com quilo na mesma coluna.
+      const inv = qtdInventario(it);
+      rows.push({ fonte:'req', nome:it.item_nome, cat:it.item_categoria, unid:inv.unidade,
+                  qty: inv.qtd, semPeso: inv.semPeso,
                   forn: it.itens?.fornecedor_principal || '—' });
     }));
   }
@@ -2497,10 +2552,11 @@ async function gerarRelatorio() {
   const acc = {};
   rows.forEach(r => {
     const k = `${r.nome}||${r.cat}||${r.unid || ''}`;
-    if (!acc[k]) acc[k] = { nome:r.nome, cat:r.cat, unid:r.unid, forn:r.forn, qtyCompra:0, qtyReq:0, qtyTotal:0 };
+    if (!acc[k]) acc[k] = { nome:r.nome, cat:r.cat, unid:r.unid, forn:r.forn, qtyCompra:0, qtyReq:0, qtyTotal:0, semPeso:0 };
     if (r.fonte === 'compra') acc[k].qtyCompra += r.qty;
     else acc[k].qtyReq += r.qty;
     acc[k].qtyTotal += r.qty;
+    if (r.semPeso) acc[k].semPeso++;
   });
   const itens = Object.values(acc).sort((a,b) => b.qtyTotal - a.qtyTotal);
 
@@ -2557,7 +2613,8 @@ function renderRelatorioTabela(itens, fonte) {
           <td class="center text-muted" data-label="Unidade">${escapeHtml(x.unid || '')}</td>
           ${showC ? `<td class="num" data-label="Comprada">${x.qtyCompra > 0 ? fmtQty(x.qtyCompra) : '—'}</td>` : ''}
           ${showR ? `<td class="num" data-label="Requisitada">${x.qtyReq > 0 ? fmtQty(x.qtyReq) : '—'}</td>` : ''}
-          <td class="num" style="font-weight:500" data-label="Total">${fmtQty(x.qtyTotal)}</td>
+          <td class="num" style="font-weight:500" data-label="Total">${fmtQty(x.qtyTotal)}${
+            x.semPeso ? `<br><span class="text-error" style="font-size:11px">${x.semPeso} entrega(s) sem peso</span>` : ''}</td>
         </tr>`).join('')}</tbody>
       </table>
     `;
@@ -2569,16 +2626,20 @@ function exportarRelatorio() {
   const { fonte } = relCache;
   const showC = fonte === 'ambos' || fonte === 'compra';
   const showR = fonte === 'ambos' || fonte === 'req';
+  // A coluna de linhas sem peso vai junto: quem recebe o CSV precisa saber
+  // que o total daquele item está incompleto, senão soma como se fosse tudo.
   const header = ['Categoria','Item','Fornecedor','Unidade'];
   if (showC) header.push('Qtd Comprada');
   if (showR) header.push('Qtd Requisitada');
   header.push('Qtd Total');
+  header.push('Entregas sem peso');
   const linhas = [header];
   relCache.itens.forEach(x => {
     const row = [CAT_LABEL[x.cat] || x.cat, x.nome, x.forn, x.unid || ''];
     if (showC) row.push(x.qtyCompra || 0);
     if (showR) row.push(x.qtyReq || 0);
     row.push(x.qtyTotal);
+    row.push(x.semPeso || 0);
     linhas.push(row);
   });
   const csv = linhas.map(r => r.map(c => {
