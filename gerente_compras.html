@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608311835">
+<link rel="stylesheet" href="style.css?v=202608311859">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608311835"></script>
+<script src="config.js?v=202608311859"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -1832,7 +1832,7 @@ function initFechamento() {
     // Mês corrente. O fechamento acontece nos últimos dias do mês, sobre o
     // mês que está terminando — abrir em julho no dia 28 de agosto obrigava
     // a corrigir toda vez, e quem esquecesse exportaria o mês errado.
-    mes.value = new Date().toISOString().slice(0, 7);
+    mes.value = mesCorrente();
   }
 }
 
@@ -2331,7 +2331,12 @@ async function _mudarContagem(pdvId, reabrir) {
   const mes = document.getElementById('fec-mes').value;
   const { data: inv, error: eB } = await sb.from('inventarios')
     .select('id').eq('pdv_id', pdvId).eq('competencia', mes + '-01').maybeSingle();
-  if (eB || !inv) { showToast('Não achei a contagem deste mês.', 'error'); return; }
+  if (eB || !inv) {
+    // Diz o que procurou: sem isso, um mês errado no campo vira mistério.
+    const nome = (state.pdvs || []).find(p => p.id === pdvId)?.nome || 'esta cozinha';
+    showToast(`Não achei contagem de ${nome} em ${mes}. Confira o mês no topo.`, 'error');
+    return;
+  }
 
   const { error } = await sb.rpc('fechar_inventario',
     { p_inventario_id: inv.id, p_reabrir: reabrir });

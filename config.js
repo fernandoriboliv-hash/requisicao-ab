@@ -930,6 +930,17 @@ function unidadePeso(x) {
 //
 // Devolve { qtd, unidade, semPeso }.
 
+// Mes corrente pelo relogio LOCAL, nao pelo UTC.
+// toISOString() converte para UTC antes de formatar: as 21h de 31/08 em
+// Brasilia ja e 01/09 em Londres, e a tela abriria setembro. Como a
+// contagem do mes acontece justamente na virada, o erro so apareceria na
+// pior noite possivel.
+function mesCorrente() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString().slice(0, 7);
+}
+
 function qtdInventario(it) {
   const pacote = it?.pedido_por === 'pacote' || it?.pede_por === 'pacote';
   const entregue = it?.quantidade_entregue;
@@ -1628,7 +1639,7 @@ async function montarInventario(seletor, opts) {
   // fechamento da requisição, que é do mês que terminou — copiei essa
   // regra de lá por engano e a primeira contagem de teste caiu em julho.
   // Quem conta no dia 1º ou 2 troca o mês no seletor do cabeçalho.
-  _INV.competencia = opts.competencia || (new Date().toISOString().slice(0, 7) + '-01');
+  _INV.competencia = opts.competencia || (mesCorrente() + '-01');
 
   raiz.innerHTML = '<div class="loading-text">Abrindo a contagem...</div>';
 
