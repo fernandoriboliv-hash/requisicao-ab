@@ -141,8 +141,10 @@ body:has(.sidebar) .cart-bar { left: 220px; }
 .top-bar { display: flex; align-items: center; padding: 0 20px 0 0; }
 .top-bar .sidebar-toggle { margin: 20px 0 0 20px; align-self: flex-start; }
 .top-title {
-  font-size: 26px;
-  font-weight: 300;
+  font-size: 28px;
+  /* 300 sumia: serifa fina, tela escura, e a cozinha lendo de longe e de
+     pe. 500 mantem a serifa do desenho e volta a ter presenca. */
+  font-weight: 500;
   letter-spacing: 0.5px;
   font-family: 'Cormorant Garamond', serif;
   color: var(--text);
@@ -1089,7 +1091,10 @@ main, .main {
   .top-bar > .top-bar-hero,
   .top-bar > div:first-child:not(.sidebar-toggle) { margin: 12px !important; padding: 14px 18px !important; }
   .top-bar .sidebar-toggle { margin: 12px 0 0 12px !important; }
-  .top-title { font-size: 20px !important; }
+  /* O titulo diz em qual dos dois processos a pessoa esta. No celular a
+     sidebar vira menu escondido, entao ele fica sendo a unica pista na
+     tela — encolher demais era justamente onde doia mais. */
+  .top-title { font-size: 24px !important; }
   .main.full { padding: 8px 12px 90px !important; }
   .form-row.col2, .form-row.col3, .form-row.col4 { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1251,7 +1256,7 @@ body.has-cart .main-with-sidebar { padding-right: 340px; }
 /* ============================== CELULAR (≤480px iPhone/Samsung) ============================== */
 @media (max-width: 480px) {
   /* Cabeçalho compacto */
-  .top-title { font-size: 17px !important; letter-spacing: 0.3px !important; }
+  .top-title { font-size: 21px !important; letter-spacing: 0.3px !important; }
   .top-sub { display: none !important; }
   .top-bar > .top-bar-hero,
   .top-bar > div:first-child:not(.sidebar-toggle) {

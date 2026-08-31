@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608301724">
+<link rel="stylesheet" href="style.css?v=202608311415">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608301724"></script>
+<script src="config.js?v=202608311415"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -245,7 +245,14 @@
   body[data-processo="req"] {
     --proc: #3FA7A0; --proc-hover: #5FC4BD; --proc-texto: #06201E;
   }
-  body[data-processo] .top-bar   { border-bottom: 2px solid var(--proc); }
+  /* A cor do processo recolore a barra lateral que o cartao do topo JA tem.
+     Antes eu punha border-bottom no .top-bar, que e o container de largura
+     TOTAL — como a caixa visivel (.top-bar-hero) tem margem lateral, a
+     linha nascia solta embaixo do cartao, desalinhada dele. */
+  body[data-processo] .top-bar > .top-bar-hero,
+  body[data-processo] .top-bar > div:first-child:not(.sidebar-toggle) {
+    border-left-color: var(--proc);
+  }
   body[data-processo] .top-title { color: var(--proc); }
 
   body[data-processo] #cartSendBtn,
