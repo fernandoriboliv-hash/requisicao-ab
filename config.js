@@ -1871,7 +1871,17 @@ async function _invSalvar(chave, valor) {
         item_id: (alvo && alvo.item_id) || null,
         quantidade: qtd, contado_por: eu,
       }).select('id').single();
-      if (error) throw error;
+      if (error) {
+        // 23505 = o índice único recusou: a linha JÁ tem contagem no
+        // servidor e este aparelho não sabia. Acontece de verdade — a
+        // cozinha conta em dois celulares com o mesmo login, e quem abriu
+        // a tela primeiro ficou com o mapa velho.
+        if (error.code === '23505' && await _invReaproveitar(alvo, chave, qtd, eu)) {
+          _invAtualizarLinha(chave);
+          return;
+        }
+        throw error;
+      }
       _INV.contagem.set(chave, { id: data.id, qtd });
     }
     _invAtualizarLinha(chave);
@@ -1880,6 +1890,38 @@ async function _invSalvar(chave, valor) {
   } finally {
     _INV.salvando.delete(chave);
   }
+}
+
+// Acha a contagem que já existe para esta linha/item e grava por cima.
+// Devolve true se conseguiu.
+//
+// Sobrescrever é o certo aqui: quem está digitando agora está com o
+// produto na mão. Mas não pode ser calado — se duas pessoas contaram a
+// mesma prateleira, as duas precisam saber, senão uma delas conta o dobro
+// achando que a outra não passou por ali.
+async function _invReaproveitar(alvo, chave, qtd, eu) {
+  if (!alvo) return false;
+  let q = sb.from('inventario_contagens')
+    .select('id, quantidade')
+    .eq('inventario_id', _INV.inventarioId);
+  q = alvo.linha_id ? q.eq('linha_id', alvo.linha_id) : q.eq('item_id', alvo.item_id);
+
+  const { data: achou, error } = await q.maybeSingle();
+  if (error || !achou) return false;
+
+  const { data, error: e2 } = await sb.from('inventario_contagens')
+    .update({ quantidade: qtd, contado_por: eu, contado_em: new Date().toISOString() })
+    .eq('id', achou.id).select('id').maybeSingle();
+  if (e2 || !data) return false;
+
+  _INV.contagem.set(chave, { id: achou.id, qtd });
+  const fmt = n => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+  const antes = parseFloat(achou.quantidade);
+  showToast(antes === qtd
+    ? 'Este item já tinha sido contado com o mesmo valor.'
+    : 'Este item já tinha contagem de ' + fmt(antes) + '. Atualizei para ' + fmt(qtd) + '.',
+    'info');
+  return true;
 }
 
 async function _invApagar(chave) {
