@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608311828">
+<link rel="stylesheet" href="style.css?v=202608311835">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608311828"></script>
+<script src="config.js?v=202608311835"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -2037,7 +2037,9 @@ function renderFechamentoInventario(d) {
               <td data-label="Cozinha">${escapeHtml(k.nome)}</td>
               <td class="num" data-label="Contados">${k.contados}</td>
               <td data-label="Situação" style="color:${cor(k)}">${rot(k)}</td>
-              <td style="text-align:right">${!k.existe ? ''
+              <td style="text-align:right">${!k.existe
+                ? `<button class="btn btn-sm btn-outline" onclick="marcarSemContagem('${k.pdv_id}')"
+                     title="A câmara desta cozinha não tem o que contar neste mês">Sem contagem</button>`
                 : k.status === 'fechado'
                   ? `<button class="btn btn-sm btn-outline" onclick="reabrirContagem('${k.pdv_id}')">Reabrir</button>`
                   : `<button class="btn btn-sm btn-gold" onclick="fecharContagem('${k.pdv_id}')">Fechar</button>`}</td>
@@ -2270,6 +2272,39 @@ async function renderPainelInventario(competencia) {
 function verContagemDe(pdvId) {
   document.getElementById('fec-pdv').value = pdvId;
   gerarFechamento();
+}
+
+// "Esta cozinha não tem o que contar este mês." Abre e fecha com zero.
+//
+// Não é o mesmo que deixar como está: cozinha que nunca abriu o
+// inventário é indistinguível de cozinha que ainda vai contar, e o grupo
+// do centro de custo só fecha quando todas fecharam — uma "não começou"
+// trava o fechamento para sempre. Isto registra a afirmação, com autor e
+// data, em vez de deixar um silêncio que ninguém sabe ler.
+async function marcarSemContagem(pdvId) {
+  const nome = (state.pdvs || []).find(p => p.id === pdvId)?.nome || 'esta cozinha';
+  const mes = document.getElementById('fec-mes').value;
+  if (!mes) return;
+  if (!confirm(`Registrar que ${nome} não tem nada a contar em ${mes}?\n\n`
+    + 'A contagem entra como zero e já fica fechada. Dá para reabrir depois.')) return;
+
+  const { data: inv, error } = await sb.rpc('abrir_inventario',
+    { p_pdv_id: pdvId, p_competencia: mes + '-01' });
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+  // Trava de segurança: se apareceu contagem entre a tela e o clique, não
+  // fecho por aqui — fechar com itens contados esconderia trabalho real.
+  if (inv.contados > 0) {
+    showToast(`${nome} já tem ${inv.contados} item(ns) contados. Feche pelo botão normal.`, 'error');
+    await gerarFechamento();
+    return;
+  }
+
+  const { error: e2 } = await sb.rpc('fechar_inventario',
+    { p_inventario_id: inv.id, p_reabrir: false });
+  if (e2) { showToast('Erro ao fechar: ' + e2.message, 'error'); return; }
+  showToast(`${nome}: registrado sem contagem.`, 'success');
+  await gerarFechamento();
 }
 
 async function fecharContagem(pdvId) {
