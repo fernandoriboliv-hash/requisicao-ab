@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608311702">
+<link rel="stylesheet" href="style.css?v=202608311828">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608311702"></script>
+<script src="config.js?v=202608311828"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -580,7 +580,7 @@
   <div class="tab-content" id="tab-fechamento">
     <div class="main full">
       <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-        <select class="select" id="fec-tipo" style="max-width:190px" onchange="gerarFechamento()">
+        <select class="select" id="fec-tipo" style="max-width:190px" onchange="montarSeletorPdv();gerarFechamento()">
           <option value="requisicao">Requisição do mês</option>
           <option value="inventario">Inventário do mês</option>
         </select>
@@ -1773,15 +1773,60 @@ function exportarRelatorio() {
 
 let fechamentoDados = null;
 
-function initFechamento() {
+// Cozinhas que dividem centro de custo e vão ao financeiro numa planilha
+// só. Por nome e não por id: se um PDV for recriado, o grupo continua
+// valendo, e quem lê aqui entende sem consultar o banco.
+// O dia em que cada cozinha tiver centro próprio, apaga-se a linha.
+// ATENÇÃO: os grupos NÃO são os mesmos nos dois documentos. A Cozinha
+// Central conta a câmara dela separada, mas o que ela requisita é
+// debitado do centro do Le Jardin. Um PDV não tem "um" centro de custo —
+// tem um por tipo de documento, e é por isso que isto mora aqui e não no
+// cadastro: pdv_pai_id não saberia representar os dois ao mesmo tempo.
+const GRUPOS = {
+  inventario: [
+    { nome: 'Confeitaria e Padaria', cozinhas: ['Confeitaria', 'Padaria'] },
+    { nome: 'Le Jardin',             cozinhas: ['Le Jardin', 'Rosamadeira', 'Cozinha Kosher'] },
+  ],
+  requisicao: [
+    { nome: 'Confeitaria e Padaria', cozinhas: ['Confeitaria', 'Padaria'] },
+    { nome: 'Le Jardin',             cozinhas: ['Le Jardin', 'Rosamadeira', 'Cozinha Kosher', 'Cozinha Central'] },
+  ],
+};
+
+const gruposDe = tipo => GRUPOS[tipo] || [];
+
+function idsDoGrupo(g) {
+  return g.cozinhas
+    .map(n => (state.pdvs || []).find(p => p.nome === n))
+    .filter(Boolean).map(p => p.id);
+}
+
+// O seletor é remontado a cada troca de tipo: os grupos só existem no
+// inventário. Na requisição cada PDV tem a sua planilha.
+function montarSeletorPdv() {
   const sel = document.getElementById('fec-pdv');
-  if (sel && !sel.options.length) {
-    (state.pdvs || []).forEach(p => {
-      const o = document.createElement('option');
-      o.value = p.id; o.textContent = p.nome;
-      sel.appendChild(o);
-    });
-  }
+  if (!sel) return;
+  const antes = sel.value;
+  const tipo = document.getElementById('fec-tipo').value;
+  sel.innerHTML = '';
+
+  gruposDe(tipo).forEach((g, i) => {
+    if (idsDoGrupo(g).length < 2) return;
+    const o = document.createElement('option');
+    o.value = 'grupo:' + i;
+    o.textContent = g.nome + ' (' + g.cozinhas.length + ' cozinhas)';
+    sel.appendChild(o);
+  });
+  (state.pdvs || []).forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id; o.textContent = p.nome;
+    sel.appendChild(o);
+  });
+  if (antes && [...sel.options].some(o => o.value === antes)) sel.value = antes;
+}
+
+function initFechamento() {
+  montarSeletorPdv();
   const mes = document.getElementById('fec-mes');
   if (mes && !mes.value) {
     // Mês corrente. O fechamento acontece nos últimos dias do mês, sobre o
@@ -1808,18 +1853,25 @@ async function gerarFechamento() {
   if (tipo === 'inventario') await renderPainelInventario(de);
   else document.getElementById('fec-painel').innerHTML = '';
 
+  // "grupo:N" = centro de custo com mais de uma cozinha. O servidor soma;
+  // somar aqui exigiria a lista de linhas, que a exportação não devolve —
+  // e o bloco colável tem que ser montado num lugar só.
+  const grupo = pdvId.startsWith('grupo:') ? gruposDe(tipo)[+pdvId.slice(6)] : null;
+  const ids = grupo ? idsDoGrupo(grupo) : [pdvId];
+
   const { data, error } = tipo === 'inventario'
-    ? await sb.rpc('exportar_inventario', { p_pdv_id: pdvId, p_competencia: de })
-    : await sb.rpc('exportar_planilha_requisicao', { p_pdv_id: pdvId, p_de: de, p_ate: ate });
+    ? await sb.rpc('exportar_inventario_grupo', { p_pdv_ids: ids, p_competencia: de })
+    : await sb.rpc('exportar_planilha_requisicao_grupo', { p_pdv_ids: ids, p_de: de, p_ate: ate });
   if (error) {
     cont.innerHTML = '<div class="empty-text">Não consegui gerar.</div>';
     showToast('Erro: ' + error.message, 'error');
     return;
   }
   fechamentoDados = data;
+  if (grupo && data && data.pdv) data.pdv.nome = grupo.nome;
   if (tipo === 'inventario') {
-    const { data: lv } = await sb.rpc('inventario_livres_do_mes',
-      { p_pdv_id: pdvId, p_competencia: de });
+    const { data: lv } = await sb.rpc('inventario_livres_do_grupo',
+      { p_pdv_ids: ids, p_competencia: de });
     data._livres = lv || [];
     renderFechamentoInventario(data);
   }
@@ -1942,12 +1994,13 @@ function renderFechamentoInventario(d) {
           Vão no corpo do e-mail, não na coluna ${c.coluna}.
         </div>
         <table class="data-table">
-          <thead><tr><th>Item</th><th style="text-align:right">Quantidade</th><th>Unid.</th></tr></thead>
+          <thead><tr><th>Item</th><th style="text-align:right">Quantidade</th><th>Unid.</th><th>Cozinha</th></tr></thead>
           <tbody>${livres.map(l => `
             <tr>
               <td data-label="Item">${escapeHtml(l.nome)}</td>
               <td data-label="Quantidade" style="text-align:right">${nf(l.quantidade)}</td>
               <td data-label="Unid." class="text-muted">${escapeHtml(l.unidade)}</td>
+              <td data-label="Cozinha" class="text-muted">${escapeHtml(l.pdv || '')}</td>
             </tr>`).join('')}
           </tbody>
         </table>
@@ -1956,21 +2009,58 @@ function renderFechamentoInventario(d) {
 
   // Fechar é o último passo, depois de copiar e mandar o e-mail: a partir
   // daí "fechado" quer dizer exatamente "isto foi o que eu enviei".
-  html.push(`
-    <div class="form-panel" style="display:block;margin-top:18px">
-      <div class="section-title" style="margin-top:0">
-        <span>${aberta ? 'Depois de enviar ao financeiro' : 'Contagem fechada'}</span>
-        ${aberta
-          ? `<button class="btn btn-sm btn-gold" onclick="fecharContagem('${d.pdv.id}')">Fechar contagem</button>`
-          : `<button class="btn btn-sm btn-outline" onclick="reabrirContagem('${d.pdv.id}')">Reabrir</button>`}
-      </div>
-      <div class="text-muted" style="font-size:12px">
-        ${aberta
-          ? 'Enquanto está aberta, a cozinha ainda pode corrigir números.'
-          : 'Fechada em ' + (d.fechado_em ? new Date(d.fechado_em).toLocaleString('pt-BR') : '—')
-            + '. A cozinha não consegue mais alterar.'}
-      </div>
-    </div>`);
+  //
+  // No grupo o fechamento continua sendo POR COZINHA — cada equipe termina
+  // no seu tempo. O que muda é que ele passa a ver as três de uma vez, com
+  // o aviso de que o número ainda pode mudar enquanto alguma estiver aberta.
+  const cozinhas = d.cozinhas || [];
+  if (cozinhas.length > 1) {
+    const rot = k => !k.existe ? 'não começou'
+               : k.status === 'fechado' ? 'fechada'
+               : k.concluido ? 'concluída' : 'contando';
+    const cor = k => !k.existe ? 'var(--muted2)'
+               : k.status === 'fechado' ? 'var(--muted)'
+               : k.concluido ? 'var(--green)' : 'var(--gold)';
+    const abertas = cozinhas.filter(k => k.status !== 'fechado');
+    html.push(`
+      <div class="form-panel" style="display:block;margin-top:18px">
+        <div class="section-title" style="margin-top:0">
+          <span>Cozinhas deste centro de custo</span>
+        </div>
+        ${abertas.length ? `<div class="aviso aviso-warn" style="margin-bottom:10px">
+          O número acima ainda pode mudar: ${abertas.length} cozinha(s) sem fechar.
+        </div>` : ''}
+        <table class="data-table">
+          <thead><tr><th>Cozinha</th><th class="num">Contados</th><th>Situação</th><th></th></tr></thead>
+          <tbody>${cozinhas.map(k => `
+            <tr>
+              <td data-label="Cozinha">${escapeHtml(k.nome)}</td>
+              <td class="num" data-label="Contados">${k.contados}</td>
+              <td data-label="Situação" style="color:${cor(k)}">${rot(k)}</td>
+              <td style="text-align:right">${!k.existe ? ''
+                : k.status === 'fechado'
+                  ? `<button class="btn btn-sm btn-outline" onclick="reabrirContagem('${k.pdv_id}')">Reabrir</button>`
+                  : `<button class="btn btn-sm btn-gold" onclick="fecharContagem('${k.pdv_id}')">Fechar</button>`}</td>
+            </tr>`).join('')}</tbody>
+        </table>
+      </div>`);
+  } else {
+    html.push(`
+      <div class="form-panel" style="display:block;margin-top:18px">
+        <div class="section-title" style="margin-top:0">
+          <span>${aberta ? 'Depois de enviar ao financeiro' : 'Contagem fechada'}</span>
+          ${aberta
+            ? `<button class="btn btn-sm btn-gold" onclick="fecharContagem('${d.pdv.id}')">Fechar contagem</button>`
+            : `<button class="btn btn-sm btn-outline" onclick="reabrirContagem('${d.pdv.id}')">Reabrir</button>`}
+        </div>
+        <div class="text-muted" style="font-size:12px">
+          ${aberta
+            ? 'Enquanto está aberta, a cozinha ainda pode corrigir números.'
+            : 'Fechada em ' + (d.fechado_em ? new Date(d.fechado_em).toLocaleString('pt-BR') : '—')
+              + '. A cozinha não consegue mais alterar.'}
+        </div>
+      </div>`);
+  }
 
   cont.innerHTML = html.join('');
 
@@ -2104,12 +2194,13 @@ function renderFechamento(d) {
           <button class="btn btn-sm btn-outline" onclick="copiarOrfaos()">Copiar lista</button>
         </div>
         <table class="data-table">
-          <thead><tr><th>Item</th><th style="text-align:right">Saída</th><th>Unid.</th></tr></thead>
+          <thead><tr><th>Item</th><th style="text-align:right">Saída</th><th>Unid.</th><th>Cozinha</th></tr></thead>
           <tbody>${d.orfaos.map(o => `
             <tr>
               <td data-label="Item">${escapeHtml(o.nome || '—')}</td>
               <td data-label="Saída" style="text-align:right">${nf(o.qtd)}</td>
               <td data-label="Unid." class="text-muted">${escapeHtml(o.unidade || '')}</td>
+              <td data-label="Cozinha" class="text-muted">${escapeHtml((o.pdvs || []).join(', '))}</td>
             </tr>`).join('')}
           </tbody>
         </table>
@@ -2224,7 +2315,9 @@ async function copiarLivres() {
   const txt = [
     'Itens contados que não constam na planilha — ' + d.pdv.nome,
     '',
-    ...l.map(x => [x.nome, String(x.quantidade).replace('.', ','), x.unidade].join('\t')),
+    // A cozinha vai junto: ele cola isto no corpo do e-mail, e "3 kg de
+    // tapioca" sem dono não deixa ninguém conferir.
+    ...l.map(x => [x.nome, String(x.quantidade).replace('.', ','), x.unidade, x.pdv || ''].join('\t')),
   ].join('\n');
   try {
     await navigator.clipboard.writeText(txt);
@@ -2241,7 +2334,9 @@ async function copiarOrfaos() {
     `${d.pdv.nome} — ${d.periodo.de} a ${d.periodo.ate}`,
     'Itens com saída que não têm linha na planilha:',
     '',
-    ...d.orfaos.map(o => `${o.nome}\t${Number(o.qtd).toLocaleString('pt-BR')}\t${o.unidade || ''}`),
+    // A cozinha vai junto: no grupo, ele precisa saber a quem perguntar.
+    ...d.orfaos.map(o => [o.nome, Number(o.qtd).toLocaleString('pt-BR'),
+                          o.unidade || '', (o.pdvs || []).join(', ')].join('\t')),
   ].join('\n');
   try {
     await navigator.clipboard.writeText(txt);
