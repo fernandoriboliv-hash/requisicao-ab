@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608311859">
+<link rel="stylesheet" href="style.css?v=202609091939">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608311859"></script>
+<script src="config.js?v=202609091939"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -21,27 +21,12 @@
   .cat-btn.on-laticinios  { background: rgba(37,99,168,0.15);  border-color: var(--c-laticinios); color: var(--c-laticinios); }
   .cat-btn.on-hortifruti  { background: rgba(74,124,89,0.15);  border-color: var(--c-hortifruti); color: var(--c-hortifruti); }
   .cat-btn.on-diversos    { background: rgba(184,150,62,0.15); border-color: var(--c-diversos);   color: var(--c-diversos); }
+  .cat-btn.on-todas       { background: color-mix(in srgb, var(--proc) 15%, transparent); border-color: var(--proc); color: var(--proc); }
 
 
-  /* ============== IDENTIDADE DE PROCESSO ==============
-     Compra e requisição são a mesma tela com outro título, e os usuários
-     estavam confundindo as duas. Cada processo ganha uma cor, carregada
-     no título e nos pontos de ação. Mesmas cores do pdv.html: quem usa os
-     dois perfis aprende uma convenção só.
-     Turquesa e não azul porque --blue já é a cor da categoria Laticínios. */
-  body { --proc: var(--gold); --proc-hover: var(--gold-light); --proc-texto: #14100A; }
-  body[data-processo="req"] {
-    --proc: #3FA7A0; --proc-hover: #5FC4BD; --proc-texto: #06201E;
-  }
-  /* A cor do processo recolore a barra lateral que o cartao do topo JA tem.
-     Antes eu punha border-bottom no .top-bar, que e o container de largura
-     TOTAL — como a caixa visivel (.top-bar-hero) tem margem lateral, a
-     linha nascia solta embaixo do cartao, desalinhada dele. */
-  body[data-processo] .top-bar > .top-bar-hero,
-  body[data-processo] .top-bar > div:first-child:not(.sidebar-toggle) {
-    border-left-color: var(--proc);
-  }
-  body[data-processo] .top-title { color: var(--proc); }
+  /* Identidade de processo (compra dourado × requisição verde-água):
+     as variáveis e as regras comuns moram no style.css, para valer igual
+     em todos os perfis. Aqui embaixo fica só o que é desta tela. */
 
   .item-row {
     display: grid;
@@ -130,6 +115,7 @@
   </div>
   <div class="sidebar-nav">
     <div class="nav-item active" onclick="goTab('criar',this)"><span class="nav-icon">＋</span> Solicitar / Requisitar</div>
+    <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas</div>
     <div class="nav-item" onclick="goTab('inventario',this)"><span class="nav-icon">▦</span> Inventário</div>
 
     <div class="nav-group" id="grp-estoque">
@@ -152,8 +138,8 @@
         <span class="chev">▸</span>
       </div>
       <div class="nav-group-items">
-        <div class="nav-item" onclick="goTab('compras',this)"><span class="nav-icon">$</span> Compras (todos PDVs)</div>
-        <div class="nav-item" onclick="goTab('reqs',this)"><span class="nav-icon">↔</span> Requisições (todos PDVs)</div>
+        <div class="nav-item" data-proc="compra" onclick="goTab('compras',this)"><span class="nav-icon">$</span> Compras (todos PDVs)</div>
+        <div class="nav-item" data-proc="req" onclick="goTab('reqs',this)"><span class="nav-icon">↔</span> Requisições (todos PDVs)</div>
         <div class="nav-item" onclick="goTab('rel',this)"><span class="nav-icon">▣</span> Relatório por PDV</div>
       </div>
     </div>
@@ -189,8 +175,8 @@
     </div>
 
     <div class="tabs" style="margin-top:0">
-      <button class="tab active" id="sub-btn-compra" onclick="switchSub('compra')">Solicitar Compra</button>
-      <button class="tab" id="sub-btn-req" onclick="switchSub('req')">Requisição da Comissaria</button>
+      <button class="tab active" data-proc="compra" id="sub-btn-compra" onclick="switchSub('compra')">Solicitar Compra</button>
+      <button class="tab" data-proc="req" id="sub-btn-req" onclick="switchSub('req')">Requisição da Comissaria</button>
     </div>
 
     <!-- SUB-ABA COMPRA -->
@@ -200,13 +186,15 @@
         <div class="field"><label class="field-label">Data de Entrega Desejada</label><input class="input" type="date" id="compra-data-entrega" onchange="atualizarAvisoCorte()"></div>
         <div class="field"><label class="field-label">Observação</label><input class="input" id="compra-obs" placeholder="Detalhe sobre este pedido..."></div>
       </div>
+      <input class="input mb-3" id="compra-search" placeholder="Buscar em todo o catálogo..."
+             oninput="aoBuscar('compra', this.value)" style="margin-bottom:14px">
       <div class="cat-tabs" id="compra-cat-tabs">
-        <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCat('compra','proteina')">Proteína</button>
+        <button class="cat-btn" data-cat="" onclick="setCat('compra','')">Todas</button>
+        <button class="cat-btn" data-cat="proteina" onclick="setCat('compra','proteina')">Proteína</button>
         <button class="cat-btn" data-cat="laticinios" onclick="setCat('compra','laticinios')">Laticínios</button>
         <button class="cat-btn" data-cat="hortifruti" onclick="setCat('compra','hortifruti')">Hortifruti</button>
         <button class="cat-btn" data-cat="diversos" onclick="setCat('compra','diversos')">Diversos</button>
       </div>
-      <input class="input mb-3" id="compra-search" placeholder="Buscar item..." oninput="renderItens('compra')" style="margin-bottom:14px">
       <div id="compra-items"><div class="loading-text">Carregando catálogo...</div></div>
     </div>
 
@@ -217,13 +205,15 @@
         <div class="field"><label class="field-label">Data de Entrega Desejada</label><input class="input" type="date" id="req-data-entrega"></div>
         <div class="field"><label class="field-label">Observação</label><input class="input" id="req-obs" placeholder="Detalhe..."></div>
       </div>
+      <input class="input mb-3" id="req-search" placeholder="Buscar em todo o catálogo..."
+             oninput="aoBuscar('req', this.value)" style="margin-bottom:14px">
       <div class="cat-tabs" id="req-cat-tabs">
-        <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCat('req','proteina')">Proteína</button>
+        <button class="cat-btn" data-cat="" onclick="setCat('req','')">Todas</button>
+        <button class="cat-btn" data-cat="proteina" onclick="setCat('req','proteina')">Proteína</button>
         <button class="cat-btn" data-cat="laticinios" onclick="setCat('req','laticinios')">Laticínios</button>
         <button class="cat-btn" data-cat="hortifruti" onclick="setCat('req','hortifruti')">Hortifruti</button>
         <button class="cat-btn" data-cat="diversos" onclick="setCat('req','diversos')">Diversos</button>
       </div>
-      <input class="input mb-3" id="req-search" placeholder="Buscar item..." oninput="renderItens('req')" style="margin-bottom:14px">
       <div id="req-items"><div class="loading-text">Carregando catálogo...</div></div>
     </div>
 
@@ -252,6 +242,10 @@
 
   <!-- ========================== ABA COMPRAS GERAL ========================== -->
   <!-- ====================== INVENTÁRIO ====================== -->
+  <div class="tab-content" id="tab-fichas">
+    <div id="ftRoot"></div>
+  </div>
+
   <div class="tab-content" id="tab-inventario">
     <div class="main full">
       <div id="inv-pdv-escolha" style="display:none;margin-bottom:16px">
@@ -526,6 +520,21 @@ function toggleSidebar() {
 // A contagem em si mora no config.js: a mesma tela roda aqui e no pdv.html
 // (Emerald Pool e Bela Vista contam pelo login de cozinheiro, sem chef).
 // O chef executivo do hotel não tem PDV — para ele aparece o seletor.
+// O chef executivo do hotel não tem PDV: escolhe de qual cozinha quer
+// ver as fichas, igual ao inventário. Chef de cozinha cai direto na dele.
+async function abrirTelaFichas() {
+  const pdvId = state.perfil.pdv_id
+    || document.getElementById('inv-pdv')?.value
+    || (state.pdvs || [])[0]?.id;
+  const pdv = (state.pdvs || []).find(p => p.id === pdvId);
+  if (!pdvId) {
+    document.getElementById('ftRoot').innerHTML =
+      '<div class="empty-text">Escolha uma cozinha no Inventário primeiro.</div>';
+    return;
+  }
+  await montarFichas('#ftRoot', { pdvId, pdvNome: pdv?.nome || '' });
+}
+
 async function abrirTelaInventario(pdvId) {
   const meu = pdvId || state.perfil.pdv_id;
   const cx = document.getElementById('inv-pdv-escolha');
@@ -551,6 +560,7 @@ function goTab(aba, el) {
   // que e o que separa uma lista da outra ao bater o olho.
   if (aba === 'compras') document.body.dataset.processo = 'compra';
   else if (aba === 'reqs') document.body.dataset.processo = 'req';
+  else if (aba === 'criar') document.body.dataset.processo = state.subAtual === 'req' ? 'req' : 'compra';
   else delete document.body.dataset.processo;
   state.abaAtual = aba;
   document.querySelectorAll('.tab-content').forEach(c => {
@@ -562,6 +572,7 @@ function goTab(aba, el) {
   const [t, s] = tabTitles[aba] || [aba, ''];
   document.getElementById('topTitle').textContent = t;
   document.getElementById('topSub').textContent = s;
+  if (aba === 'fichas') abrirTelaFichas();
   if (aba === 'inventario') abrirTelaInventario();
   if (aba === 'compras') carregarComprasGeral();
   if (aba === 'reqs')    carregarReqsGeral();
@@ -589,6 +600,9 @@ function switchSub(sub) {
     document.getElementById('sub-' + s).classList.toggle('active', s === sub);
     document.getElementById('sub-btn-' + s).classList.toggle('active', s === sub);
   });
+  // A tela de criar pedido e uma so para os dois processos: e aqui que o
+  // executivo escolhe qual esta fazendo, entao e aqui que a cor troca.
+  document.body.dataset.processo = sub === 'req' ? 'req' : 'compra';
   atualizarExecCartBar();
 }
 
@@ -603,13 +617,20 @@ async function carregarCatalogo() {
   (prazoR.data || []).forEach(c => { state.prazoPorCategoria[c.categoria] = c.prazo_reposicao_horas; });
 }
 
+// Digitar leva a lista para "Todas" — a categoria e filtro, nao porta.
+function aoBuscar(modo, valor) {
+  if (buscaAbriuCatalogo('exec:' + modo, valor)) setCat(modo, '');
+  else renderItens(modo);
+}
+
 function setCat(modo, cat) {
   state.catAtual[modo] = cat;
   document.querySelectorAll(`#${modo}-cat-tabs .cat-btn`).forEach(b => {
-    b.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
-    if (b.dataset.cat === cat) b.classList.add('on-' + cat);
+    b.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos','on-todas');
+    if (b.dataset.cat === cat) b.classList.add('on-' + (cat || 'todas'));
   });
-  document.getElementById(`${modo}-search`).value = '';
+  // A busca fica: clicar numa categoria com termo digitado é como se
+  // estreita o resultado.
   renderItens(modo);
 }
 
@@ -633,7 +654,9 @@ function renderExecItemRow(item, modo) {
   return `<div class="item-row ${sel?'selected':''}" onclick="toggleItem('${modo}','${item.id}')">
     <div class="item-check">${sel?'✓':''}</div>
     <div class="item-name">${escapeHtml(modo === 'req' ? nomeExibicao(item) : item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''} ${alerta}</div>
-    <div class="item-unit">${item.unidade}</div>
+    <div class="item-unit">${item.unidade}
+      <button class="hist-badge" onclick="event.stopPropagation();abrirUltimosPedidos('${modo}','${item.id}')"
+              title="Ver os 3 últimos pedidos deste item">últimos</button></div>
     <div class="item-qty-wrap" onclick="event.stopPropagation()">
       <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',-1)">−</button>
       <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQty('${modo}','${item.id}',this.value)">
@@ -649,17 +672,55 @@ function renderExecItemRow(item, modo) {
 function renderItens(modo) {
   const cat = state.catAtual[modo];
   const q = (document.getElementById(`${modo}-search`).value || '').toLowerCase();
-  // Requisição: só o que a Comissaria tem. Compra: catálogo inteiro.
-  const itens = state.catalogo.filter(i =>
-    i.categoria === cat
-    && (modo !== 'req' || ehDeRequisicao(i))
+  // Requisição: só o que a Comissaria tem. Compra: só o que se compra de
+  // fornecedor — item transformado pela Comissaria nasce depois do processo,
+  // ninguém compra. Mesma regra do PDV e do comprador.
+  // A busca varre o catálogo inteiro do modo; a categoria filtra o que
+  // aparece em cima e o resto vai num bloco separado no fim.
+  const doModo = state.catalogo.filter(i =>
+    (modo !== 'req' || ehDeRequisicao(i))
+    && (modo !== 'compra' || ehCompravel(i))
     && (itemAtendeBusca(i, q) || (modo === 'req' && i.nome_curto && itemCasaBusca(i.nome_curto, q)))
   );
+  const itens = cat ? doModo.filter(i => i.categoria === cat) : doModo;
+  const fora  = (cat && q) ? doModo.filter(i => i.categoria !== cat) : [];
+
+  const blocoFora = () => {
+    if (!fora.length) return '';
+    const porCat = {};
+    fora.forEach(it => { (porCat[it.categoria] = porCat[it.categoria] || []).push(it); });
+    return `
+      <div class="fora-cat-aviso">${itens.length
+        ? 'Também achei em outras categorias:'
+        : 'Nada em ' + escapeHtml(_CAT_ITEM[cat] || cat) + '. Achei em outras categorias:'}</div>
+      ${Object.keys(_CAT_ITEM).filter(c => porCat[c]).map(c => `
+        <div class="subgroup-head">
+          <span>${escapeHtml(_CAT_ITEM[c] || c)}</span>
+          <span class="count">${porCat[c].length} ${porCat[c].length === 1 ? 'item' : 'itens'}</span>
+        </div>
+        ${porCat[c].map(item => renderExecItemRow(item, modo)).join('')}`).join('')}`;
+  };
+
   const cont = document.getElementById(`${modo}-items`);
-  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarExecCartBar(); return; }
+  if (itens.length === 0 && fora.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarExecCartBar(); return;
+  }
+
+  if (!cat) {
+    const porCat = {};
+    itens.forEach(it => { (porCat[it.categoria] = porCat[it.categoria] || []).push(it); });
+    cont.innerHTML = Object.keys(_CAT_ITEM).filter(c => porCat[c]).map(c => `
+      <div class="subgroup-head">
+        <span>${escapeHtml(_CAT_ITEM[c] || c)}</span>
+        <span class="count">${porCat[c].length} ${porCat[c].length === 1 ? 'item' : 'itens'}</span>
+      </div>
+      ${porCat[c].map(item => renderExecItemRow(item, modo)).join('')}`).join('');
+    atualizarExecCartBar();
+    return;
+  }
 
   if (!CATS_COM_SUBGRUPO_EXEC.has(cat)) {
-    cont.innerHTML = itens.map(item => renderExecItemRow(item, modo)).join('');
+    cont.innerHTML = itens.map(item => renderExecItemRow(item, modo)).join('') + blocoFora();
     atualizarExecCartBar();
     return;
   }
@@ -681,7 +742,7 @@ function renderItens(modo) {
       <span class="count">${grupos[g].length} ${grupos[g].length === 1 ? 'item' : 'itens'}</span>
     </div>
     ${grupos[g].map(item => renderExecItemRow(item, modo)).join('')}
-  `).join('');
+  `).join('') + blocoFora();
   atualizarExecCartBar();
 }
 
@@ -756,7 +817,15 @@ function changeQty(modo, itemId, delta) {
 }
 function setQty(modo, itemId, val) {
   const s = state.selecionados[modo][itemId]; if (!s) return;
-  const v = parseFloat(val); s.qty = isNaN(v) || v <= 0 ? 1 : v;
+  const v = parseFloat(String(val).replace(',', '.'));
+  // Zero virava 1 sem avisar. Agora o campo volta ao valor anterior e
+  // quem quer tirar o item usa o proprio toggle da linha.
+  if (isNaN(v) || v <= 0) {
+    showToast('Quantidade tem que ser maior que zero. Para tirar o item, desmarque a linha.', 'error');
+    renderItens(modo);
+    return;
+  }
+  s.qty = v;
   renderItens(modo);
 }
 // Sem re-render de propósito: o valor já está no campo, e redesenhar aqui
@@ -832,6 +901,13 @@ async function enviar(modo) {
   if (!pdvId) { showToast('Selecione o PDV em nome de quem está solicitando.', 'error'); return; }
   const sel = Object.values(state.selecionados[modo]);
   if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
+  // Nenhuma linha vai com quantidade zerada.
+  const zerados = sel.filter(x => !(Number(x.qty) > 0)).map(x => x.item.nome);
+  if (zerados.length) {
+    showToast(`${zerados.length === 1 ? '"' + zerados[0] + '" está' : zerados.length + ' itens estão'} `
+      + 'com quantidade zerada. Corrija ou remova antes de enviar.', 'error', 6000);
+    return;
+  }
   const obs = document.getElementById(`${modo}-obs`).value.trim();
   const dataEntrega = document.getElementById(`${modo}-data-entrega`).value || null;
 

@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608311859">
+<link rel="stylesheet" href="style.css?v=202609091939">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608311859"></script>
+<script src="config.js?v=202609091939"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -233,37 +233,12 @@
   .cat-btn.on-laticinios  { background: rgba(37,99,168,0.15);  border-color: var(--c-laticinios); color: var(--c-laticinios); }
   .cat-btn.on-hortifruti  { background: rgba(74,124,89,0.15);  border-color: var(--c-hortifruti); color: var(--c-hortifruti); }
   .cat-btn.on-diversos    { background: rgba(184,150,62,0.15); border-color: var(--c-diversos);   color: var(--c-diversos); }
+  .cat-btn.on-todas       { background: color-mix(in srgb, var(--proc) 15%, transparent); border-color: var(--proc); color: var(--proc); }
 
 
-  /* ============== IDENTIDADE DE PROCESSO ==============
-     Compra e requisição são a mesma tela com outro título, e os usuários
-     estavam confundindo as duas. Cada processo ganha uma cor, carregada
-     no título e nos pontos de ação. Mesmas cores do pdv.html: quem usa os
-     dois perfis aprende uma convenção só.
-     Turquesa e não azul porque --blue já é a cor da categoria Laticínios. */
-  body { --proc: var(--gold); --proc-hover: var(--gold-light); --proc-texto: #14100A; }
-  body[data-processo="req"] {
-    --proc: #3FA7A0; --proc-hover: #5FC4BD; --proc-texto: #06201E;
-  }
-  /* A cor do processo recolore a barra lateral que o cartao do topo JA tem.
-     Antes eu punha border-bottom no .top-bar, que e o container de largura
-     TOTAL — como a caixa visivel (.top-bar-hero) tem margem lateral, a
-     linha nascia solta embaixo do cartao, desalinhada dele. */
-  body[data-processo] .top-bar > .top-bar-hero,
-  body[data-processo] .top-bar > div:first-child:not(.sidebar-toggle) {
-    border-left-color: var(--proc);
-  }
-  body[data-processo] .top-title { color: var(--proc); }
-
-  body[data-processo] #cartSendBtn,
-  body[data-processo] #btnConfirmarEnvioCompraComis {
-    background: var(--proc); color: var(--proc-texto);
-  }
-  body[data-processo] #cartSendBtn:hover,
-  body[data-processo] #btnConfirmarEnvioCompraComis:hover { background: var(--proc-hover); }
-  body[data-processo] #cartSendBtn:disabled {
-    background: var(--muted2); color: var(--muted);
-  }
+  /* Identidade de processo (compra dourado × requisição verde-água):
+     as variáveis e as regras comuns moram no style.css, para valer igual
+     em todos os perfis. Aqui embaixo fica só o que é desta tela. */
 
   .item-row {
     display: grid; grid-template-columns: 22px 1fr auto auto;
@@ -790,8 +765,8 @@
         <span class="chev">▸</span>
       </div>
       <div class="nav-group-items">
-        <div class="nav-item active" onclick="goTab('fila',this)"><span class="nav-icon">≡</span> Requisições a Separar</div>
-        <div class="nav-item" onclick="goTab('manual',this)"><span class="nav-icon">＋</span> Criar Requisição</div>
+        <div class="nav-item active" data-proc="req" onclick="goTab('fila',this)"><span class="nav-icon">≡</span> Requisições a Separar</div>
+        <div class="nav-item" data-proc="req" onclick="goTab('manual',this)"><span class="nav-icon">＋</span> Criar Requisição</div>
         <div class="nav-item" onclick="goTab('historico',this)"><span class="nav-icon">⏱</span> Histórico</div>
       </div>
     </div>
@@ -815,7 +790,7 @@
       </div>
     </div>
 
-    <div class="nav-item" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
+    <div class="nav-item" data-proc="compra" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
   </div>
   <div class="sidebar-foot">
@@ -900,15 +875,18 @@
       <div class="field"></div>
     </div>
 
+
+    <div style="position:relative;margin-bottom:14px">
+      <input class="input" id="m-search" placeholder="Buscar em todo o catálogo..."
+             oninput="aoBuscarManual(this.value)" style="padding-left:14px">
+    </div>
+
     <div class="cat-tabs" id="m-cat-tabs">
-      <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCatManual('proteina')">Proteína</button>
+      <button class="cat-btn" data-cat="" onclick="setCatManual('')">Todas</button>
+      <button class="cat-btn" data-cat="proteina" onclick="setCatManual('proteina')">Proteína</button>
       <button class="cat-btn" data-cat="laticinios" onclick="setCatManual('laticinios')">Laticínios</button>
       <button class="cat-btn" data-cat="hortifruti" onclick="setCatManual('hortifruti')">Hortifruti</button>
       <button class="cat-btn" data-cat="diversos" onclick="setCatManual('diversos')">Diversos</button>
-    </div>
-
-    <div style="position:relative;margin-bottom:14px">
-      <input class="input" id="m-search" placeholder="Buscar item..." oninput="renderItensManual()" style="padding-left:14px">
     </div>
 
     <div id="m-items"><div class="loading-text">Carregando catálogo...</div></div>
@@ -971,15 +949,18 @@
       </div>
     </div>
 
+
+    <div style="position:relative;margin-bottom:14px">
+      <input class="input" id="c-search" placeholder="Buscar em todo o catálogo..."
+             oninput="aoBuscarCompra(this.value)">
+    </div>
+
     <div class="cat-tabs" id="c-cat-tabs">
-      <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCatCompra('proteina')">Proteína</button>
+      <button class="cat-btn" data-cat="" onclick="setCatCompra('')">Todas</button>
+      <button class="cat-btn" data-cat="proteina" onclick="setCatCompra('proteina')">Proteína</button>
       <button class="cat-btn" data-cat="laticinios" onclick="setCatCompra('laticinios')">Laticínios</button>
       <button class="cat-btn" data-cat="hortifruti" onclick="setCatCompra('hortifruti')">Hortifruti</button>
       <button class="cat-btn" data-cat="diversos" onclick="setCatCompra('diversos')">Diversos</button>
-    </div>
-
-    <div style="position:relative;margin-bottom:14px">
-      <input class="input" id="c-search" placeholder="Buscar item..." oninput="renderItensCompra()">
     </div>
 
     <div id="c-items"><div class="loading-text">Carregando catálogo...</div></div>
@@ -1459,7 +1440,7 @@ function goTab(aba, el) {
   // de um PDV; 'compra' é a solicitação dela ao fornecedor. As outras abas
   // não são processo e voltam ao dourado.
   if (aba === 'compra') document.body.dataset.processo = 'compra';
-  else if (aba === 'manual') document.body.dataset.processo = 'req';
+  else if (aba === 'manual' || aba === 'fila') document.body.dataset.processo = 'req';
   else delete document.body.dataset.processo;
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -2095,15 +2076,31 @@ function renderHistorico() {
 // =====================================================================
 // ABA MANUAL — Comissaria registra saída em nome de outro PDV
 // =====================================================================
+// Digitar leva a lista para "Todas": procurar na categoria errada
+// escondia o item e fazia pedir cadastro de coisa que ja existe.
+function aoBuscarManual(v) {
+  if (buscaAbriuCatalogo('est:manual', v)) setCatManual('');
+  else renderItensManual();
+}
+function aoBuscarCompra(v) {
+  if (buscaAbriuCatalogo('est:compra', v)) setCatCompra('');
+  else renderItensCompra();
+}
+
 function setCatManual(cat) {
   state.manual.cat = cat;
   document.querySelectorAll('#m-cat-tabs .cat-btn').forEach(b => {
-    b.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
-    if (b.dataset.cat === cat) b.classList.add('on-' + cat);
+    b.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos','on-todas');
+    if (b.dataset.cat === cat) b.classList.add('on-' + (cat || 'todas'));
   });
-  document.getElementById('m-search').value = '';
+  // A busca fica: é assim que se estreita o resultado por categoria.
   renderItensManual();
 }
+
+// Os dois blocos de resultado moram no config.js: blocoPorCategoria e
+// blocoForaDaCategoria valem igual em todas as telas.
+const _blocoForaCat = blocoForaDaCategoria;
+const _blocoPorCategoria = blocoPorCategoria;
 
 // Agrupamento por sub-categoria (espelha planilhas atuais da Comissaria)
 const CATS_COM_SUBGRUPO_EST = new Set(['proteina', 'laticinios']);
@@ -2123,7 +2120,9 @@ function renderItemRowManual(item) {
     <div class="item-row ${sel ? 'selected' : ''}" id="mrow-${item.id}">
       <div class="item-check alvo-toggle" onclick="toggleManualItem('${item.id}')">${sel ? '✓' : ''}</div>
       <div class="item-name alvo-toggle" onclick="toggleManualItem('${item.id}')">${escapeHtml(nomeExibicao(item))}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
-      <div class="item-unit">${item.unidade}</div>
+      <div class="item-unit">${item.unidade}
+        <button class="hist-badge" onclick="event.stopPropagation();abrirUltimosPedidos('req','${item.id}',state.manual.pdvId)"
+                title="Ver os 3 últimos pedidos deste item para o PDV escolhido">últimos</button></div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
           <button class="qty-btn" onclick="changeQtyManual('${item.id}',-1)">−</button>
@@ -2140,15 +2139,27 @@ function renderItensManual() {
   const cat = state.manual.cat;
   const q = (document.getElementById('m-search').value || '').toLowerCase();
   // Aba de REQUISIÇÃO em nome de outro PDV — mesma lista do cozinheiro
-  const itens = state.catalogo.filter(i =>
-    i.categoria === cat && ehDeRequisicao(i) &&
+  // A busca varre a lista inteira da requisição; a categoria filtra o que
+  // aparece em cima e o resto vai num bloco separado no fim.
+  const daReq = state.catalogo.filter(i =>
+    ehDeRequisicao(i) &&
     (itemAtendeBusca(i, q) || (i.nome_curto && itemCasaBusca(i.nome_curto, q)))
   );
+  const itens = cat ? daReq.filter(i => i.categoria === cat) : daReq;
+  const fora  = (cat && q) ? daReq.filter(i => i.categoria !== cat) : [];
+  const blocoFora = () => _blocoForaCat(fora, itens.length, cat, renderItemRowManual);
+
   const cont = document.getElementById('m-items');
-  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarManualCartBar(); return; }
+  if (itens.length === 0 && fora.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarManualCartBar(); return; }
+
+  if (!cat) {
+    cont.innerHTML = _blocoPorCategoria(itens, renderItemRowManual);
+    atualizarManualCartBar();
+    return;
+  }
 
   if (!CATS_COM_SUBGRUPO_EST.has(cat)) {
-    cont.innerHTML = itens.map(item => renderItemRowManual(item)).join('');
+    cont.innerHTML = itens.map(item => renderItemRowManual(item)).join('') + blocoFora();
     atualizarManualCartBar();
     return;
   }
@@ -2170,7 +2181,7 @@ function renderItensManual() {
       <span class="count">${grupos[g].length} ${grupos[g].length === 1 ? 'item' : 'itens'}</span>
     </div>
     ${grupos[g].map(item => renderItemRowManual(item)).join('')}
-  `).join('');
+  `).join('') + blocoFora();
   atualizarManualCartBar();
 }
 
@@ -2232,7 +2243,8 @@ function atualizarCartSidebarComis() {
         </div>
         <div class="cs-qty">${s.qty} ${pct ? escapeHtml(rotuloPacote(s.item)) : (s.item.unidade||'')}</div>
         ${pct ? `<div class="cs-peso">
-          <input class="qty-input" type="number" step="0.001" min="0" placeholder="peso"
+          <input class="qty-input" id="mpeso-${s.item.id}" type="text"
+                 inputmode="decimal" placeholder="peso" autocomplete="off"
                  value="${s.peso ?? ''}" onclick="this.select()"
                  onchange="setPesoManual('${s.item.id}', this.value)">
           <span>${escapeHtml(unidadePeso(s.item))}</span></div>` : ''}
@@ -2283,8 +2295,14 @@ function changeQtyManual(itemId, delta) {
   if (sel) { sel.qty = novo; atualizarCartSidebarComis(); }
 }
 function setQtyManual(itemId, val) {
-  const v = parseFloat(val);
-  if (isNaN(v) || v <= 0) return;
+  const v = parseFloat(String(val).replace(',', '.'));
+  // Zero era ignorado em silencio: o campo ficava mostrando 0 e o pedido
+  // saia com o valor antigo. Agora avisa e devolve o campo ao que vale.
+  if (isNaN(v) || v <= 0) {
+    showToast('Quantidade tem que ser maior que zero.', 'error');
+    renderItensManual();
+    return;
+  }
   state.manual.qtdInputs[itemId] = v;
   const sel = state.manual.selecionados[itemId];
   if (sel) { sel.qty = v; atualizarCartSidebarComis(); }
@@ -2292,8 +2310,10 @@ function setQtyManual(itemId, val) {
 // toggleManual alias — cart sidebar chama pra remover
 function toggleManual(itemId) { removerManual(itemId); }
 
-// Peso pesado do item de pacote na saída de balcão. Vazio continua vazio:
-// "não pesado" é informação; peso inventado vira número no inventário.
+// Peso pesado do item de pacote na saída de balcão. Vazio continua NULL
+// aqui dentro — quem barra é enviarManual(), antes de gravar. A diferença
+// importa: o campo aceita estar vazio enquanto se digita, mas a saída não
+// sai sem peso.
 function setPesoManual(itemId, val) {
   const sel = state.manual.selecionados[itemId];
   if (!sel) return;
@@ -2310,6 +2330,12 @@ async function enviarManual() {
   const sel = Object.values(state.manual.selecionados);
   if (!pdvId) { showToast('Selecione o PDV de destino.', 'error'); return; }
   if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
+  const zerados = sel.filter(x => !(Number(x.qty) > 0)).map(x => x.item?.nome || x.nome || 'item');
+  if (zerados.length) {
+    showToast(`${zerados.length === 1 ? '"' + zerados[0] + '" está' : zerados.length + ' itens estão'} `
+      + 'com quantidade zerada. Corrija ou remova antes de enviar.', 'error', 6000);
+    return;
+  }
 
   // Requisição de papel, feita semanas atrás, tem que cair no mês em que
   // aconteceu — senão o relatório de consumo joga tudo no mês do
@@ -2317,6 +2343,24 @@ async function enviarManual() {
   const dataSaida = document.getElementById('m-data').value || isoDate(new Date());
   if (dataSaida > isoDate(new Date())) {
     showToast('A data da saída não pode ser no futuro.', 'error'); return;
+  }
+
+  // Item de pacote não sai sem peso. Era a única porta que ainda aceitava
+  // — a entrega normal já barrava — e foi por ela que 62 linhas de agosto
+  // entraram valendo zero no fechamento. Pesar é na balcão, com o produto
+  // na mão; descobrir no fim do mês não tem conserto.
+  const semPeso = sel.filter(s => ehPacote(s.item) && (s.peso == null || s.peso <= 0));
+  if (semPeso.length) {
+    showToast(semPeso.length === 1
+      ? `Informe o peso de "${nomeExibicao(semPeso[0].item)}" antes de registrar.`
+      : `${semPeso.length} itens estão sem peso. Informe todos antes de registrar.`,
+      'error');
+    const alvo = document.getElementById('mpeso-' + semPeso[0].item.id);
+    if (alvo) {
+      alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      alvo.focus({ preventScroll: true });
+    }
+    return;
   }
 
   _enviandoManual = true;
@@ -2450,10 +2494,10 @@ function atualizarAvisoCorte() {
 function setCatCompra(cat) {
   state.compra.cat = cat;
   document.querySelectorAll('#c-cat-tabs .cat-btn').forEach(b => {
-    b.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
-    if (b.dataset.cat === cat) b.classList.add('on-' + cat);
+    b.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos','on-todas');
+    if (b.dataset.cat === cat) b.classList.add('on-' + (cat || 'todas'));
   });
-  document.getElementById('c-search').value = '';
+  // A busca fica: é assim que se estreita o resultado por categoria.
   renderItensCompra();
 }
 
@@ -2464,7 +2508,9 @@ function renderItemRowCompra(item) {
     <div class="item-row ${sel ? 'selected' : ''}" id="crow-${item.id}">
       <div class="item-check alvo-toggle" onclick="toggleCompraItem('${item.id}')">${sel ? '✓' : ''}</div>
       <div class="item-name alvo-toggle" onclick="toggleCompraItem('${item.id}')">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
-      <div class="item-unit">${item.unidade}</div>
+      <div class="item-unit">${item.unidade}
+        <button class="hist-badge" onclick="event.stopPropagation();abrirUltimosPedidos('compra','${item.id}',state.pdvComissariaId)"
+                title="Ver as 3 últimas compras deste item">últimos</button></div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
           <button class="qty-btn" onclick="changeQtyCompra('${item.id}',-1)">−</button>
@@ -2480,15 +2526,25 @@ function renderItemRowCompra(item) {
 function renderItensCompra() {
   const cat = state.compra.cat;
   const q = (document.getElementById('c-search').value || '').toLowerCase();
-  const itens = state.catalogo.filter(i =>
-    i.categoria === cat &&
-    itemAtendeBusca(i, q)
-  );
+  // Item transformado pela propria Comissaria nao se compra de fornecedor.
+  // As outras telas de compra ja filtravam por ehCompravel; esta nao, e por
+  // isso o atum ja limpo continuava aparecendo aqui.
+  const daCompra = state.catalogo.filter(i => ehCompravel(i) && itemAtendeBusca(i, q));
+  const itens = cat ? daCompra.filter(i => i.categoria === cat) : daCompra;
+  const fora  = (cat && q) ? daCompra.filter(i => i.categoria !== cat) : [];
+  const blocoFora = () => _blocoForaCat(fora, itens.length, cat, renderItemRowCompra);
+
   const cont = document.getElementById('c-items');
-  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarCompraCartBar(); return; }
+  if (itens.length === 0 && fora.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; atualizarCompraCartBar(); return; }
+
+  if (!cat) {
+    cont.innerHTML = _blocoPorCategoria(itens, renderItemRowCompra);
+    atualizarCompraCartBar();
+    return;
+  }
 
   if (!CATS_COM_SUBGRUPO_EST.has(cat)) {
-    cont.innerHTML = itens.map(item => renderItemRowCompra(item)).join('');
+    cont.innerHTML = itens.map(item => renderItemRowCompra(item)).join('') + blocoFora();
     atualizarCompraCartBar();
     return;
   }
@@ -2510,7 +2566,7 @@ function renderItensCompra() {
       <span class="count">${grupos[g].length} ${grupos[g].length === 1 ? 'item' : 'itens'}</span>
     </div>
     ${grupos[g].map(item => renderItemRowCompra(item)).join('')}
-  `).join('');
+  `).join('') + blocoFora();
   atualizarCompraCartBar();
 }
 
@@ -2546,8 +2602,14 @@ function changeQtyCompra(itemId, delta) {
   if (sel) { sel.qty = novo; atualizarCartSidebarComis(); }
 }
 function setQtyCompra(itemId, val) {
-  const v = parseFloat(val);
-  if (isNaN(v) || v <= 0) return;
+  const v = parseFloat(String(val).replace(',', '.'));
+  // Zero era ignorado em silencio: o campo ficava mostrando 0 e o pedido
+  // saia com o valor antigo. Agora avisa e devolve o campo ao que vale.
+  if (isNaN(v) || v <= 0) {
+    showToast('Quantidade tem que ser maior que zero.', 'error');
+    renderItensCompra();
+    return;
+  }
   state.compra.qtdInputs[itemId] = v;
   const sel = state.compra.selecionados[itemId];
   if (sel) { sel.qty = v; atualizarCartSidebarComis(); }
@@ -2564,6 +2626,12 @@ function fecharModal(id) { document.getElementById(id).classList.remove('open');
 function abrirRevisaoCompraComis() {
   const sel = Object.values(state.compra.selecionados);
   if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
+  const zerados = sel.filter(x => !(Number(x.qty) > 0)).map(x => x.item?.nome || x.nome || 'item');
+  if (zerados.length) {
+    showToast(`${zerados.length === 1 ? '"' + zerados[0] + '" está' : zerados.length + ' itens estão'} `
+      + 'com quantidade zerada. Corrija ou remova antes de enviar.', 'error', 6000);
+    return;
+  }
   const dataEntrega = document.getElementById('c-data-entrega').value || null;
   const obs = document.getElementById('c-obs').value.trim();
   const itens = sel.map(s => s.item);
@@ -2612,6 +2680,12 @@ async function confirmarEnvioCompraComis() {
 async function enviarCompraCommissary() {
   const sel = Object.values(state.compra.selecionados);
   if (sel.length === 0) { showToast('Selecione ao menos um item.', 'error'); return; }
+  const zerados = sel.filter(x => !(Number(x.qty) > 0)).map(x => x.item?.nome || x.nome || 'item');
+  if (zerados.length) {
+    showToast(`${zerados.length === 1 ? '"' + zerados[0] + '" está' : zerados.length + ' itens estão'} `
+      + 'com quantidade zerada. Corrija ou remova antes de enviar.', 'error', 6000);
+    return;
+  }
   if (!state.pdvComissariaId) { showToast('PDV "Comissaria" não encontrado no banco.', 'error'); return; }
 
   const obs = document.getElementById('c-obs').value.trim();

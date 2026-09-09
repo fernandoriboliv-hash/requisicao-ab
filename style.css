@@ -1533,3 +1533,229 @@ body.has-cart .main-with-sidebar { padding-right: 340px; }
   .inv-livre-form #lv-nome { flex: 1 1 100%; }
   .inv-livre-form .btn { flex: 1 1 100%; }
 }
+
+/* ============================== FICHAS TÉCNICAS ============================== */
+/* Roda no executivo e no pdv — o módulo mora no config.js. */
+.ft-topo { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.ft-busca { flex: 1; min-width: 220px; }
+.ft-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+
+.ft-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.ft-card {
+  background: var(--panel); border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--gold);
+  padding: 14px 16px; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.ft-card:hover { background: var(--panel2); border-color: var(--border); border-left-color: var(--gold-light); }
+.ft-card-nome { font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+.ft-card-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.ft-tag {
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  border: 1px solid var(--border-subtle); padding: 2px 7px; color: var(--muted);
+}
+.ft-tag-rec { color: var(--blue); border-color: rgba(37,99,168,.45); background: rgba(37,99,168,.1); }
+
+.ft-editor-topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+
+/* Cabeçalho e linha usam o MESMO grid: se divergirem, o rótulo deixa de
+   ficar em cima da coluna que ele nomeia. */
+.ft-ing-cabec, .ft-linha {
+  display: grid; grid-template-columns: 1fr 92px 76px 92px 34px;
+  gap: 8px; align-items: center;
+}
+.ft-ing-cabec {
+  font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--muted); padding: 0 4px 6px;
+}
+.ft-ing-cabec .num, .ft-linha .num { text-align: right; }
+.ft-linha {
+  background: var(--panel); padding: 8px 10px; margin-bottom: 2px;
+  border: 1px solid transparent;
+}
+.ft-linha:hover { border-color: var(--border-subtle); }
+.ft-linha-nome { font-size: 14px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ft-mini { padding: 6px 8px !important; font-size: 13px !important; text-align: center; }
+.ft-del {
+  background: none; border: 1px solid var(--border-subtle); color: var(--muted);
+  cursor: pointer; font-size: 16px; line-height: 1; padding: 4px 8px; font-family: inherit;
+}
+.ft-del:hover { color: var(--error); border-color: var(--error); }
+
+.ft-add { position: relative; margin-top: 10px; }
+.ft-sug {
+  display: flex; flex-direction: column;
+  max-height: 260px; overflow-y: auto; margin-top: 4px;
+}
+.ft-sug-item {
+  background: var(--panel); border: 1px solid var(--border-subtle); border-bottom: none;
+  color: var(--text); font-family: inherit; font-size: 13px; text-align: left;
+  padding: 9px 12px; cursor: pointer;
+  display: flex; align-items: center; gap: 8px; justify-content: space-between;
+}
+.ft-sug-item:last-child { border-bottom: 1px solid var(--border-subtle); }
+.ft-sug-item:hover { background: var(--panel2); border-color: var(--gold); }
+
+.ft-alerg { display: flex; gap: 14px; flex-wrap: wrap; }
+.ft-alerg-item { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+
+.ft-rodape { display: flex; gap: 8px; margin-top: 22px; flex-wrap: wrap; }
+.ft-prod { margin-top: 18px; }
+.ft-prod-topo { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.ft-prod-topo label { font-size: 13px; color: var(--muted); }
+.ft-prod-acoes { margin-top: 12px; }
+
+@media (max-width: 900px) {
+  /* Dedo, não cursor: a linha vira duas faixas em vez de cinco colunas
+     espremidas. O nome ocupa a linha inteira e os campos ficam embaixo. */
+  .ft-ing-cabec { display: none; }
+  .ft-linha { grid-template-columns: 1fr 1fr 1fr 34px; grid-template-areas: 'nome nome nome del' 'qtd un fator .'; }
+  .ft-linha-nome { grid-area: nome; }
+  .ft-linha > .ft-mini:nth-of-type(1) { grid-area: qtd; }
+  .ft-linha > .ft-mini:nth-of-type(2) { grid-area: fator; }
+  .ft-linha > select { grid-area: un; }
+  .ft-del { grid-area: del; }
+  .ft-lista { grid-template-columns: 1fr; }
+}
+
+/* ===== ÚLTIMOS PEDIDOS DO ITEM ===================================== */
+/* O selo fica na linha do item, ao lado da unidade. Não é a linha
+   inteira que abre: ela já responde ao toque marcando/desmarcando. */
+.hist-badge {
+  display: inline-block;
+  /* A coluna da unidade tem 50px em todas as telas: o selo precisa caber
+     nela sem empurrar a coluna seguinte. */
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  padding: 1px 4px;
+  max-width: 100%;
+  white-space: nowrap;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.hist-badge:hover { color: var(--text); border-color: var(--muted); }
+
+.up-cabec, .up-linha {
+  display: grid;
+  grid-template-columns: 78px 1fr 92px;
+  gap: 10px;
+  align-items: start;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.up-cabec {
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted2);
+  padding-bottom: 6px;
+}
+.up-quando { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.up-qtd    { font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; }
+.up-un     { font-size: 11px; color: var(--muted); }
+.up-entregue { font-size: 11px; color: var(--green); }
+.up-status { font-size: 11px; color: var(--muted); text-align: right; }
+.up-coment { font-size: 11px; color: var(--muted); padding: 0 0 8px 88px; font-style: italic; }
+.up-media  { font-size: 12px; color: var(--muted); padding-top: 12px; }
+.up-media strong { color: var(--gold); font-variant-numeric: tabular-nums; }
+
+/* Bloco do que a busca achou fora da categoria escolhida. */
+.fora-cat-aviso {
+  margin: 22px 0 8px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-subtle);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted2);
+}
+
+/* ===== IDENTIDADE DE PROCESSO — COMPRA × REQUISIÇÃO ================ */
+/* Compra e requisição são dois processos com regras diferentes, e as
+   telas são quase iguais. A cor é o que diferencia sem depender de ler:
+   dourado é compra, verde-água é requisição.
+   Mora aqui, e não em cada página, porque tem que valer igual em todos
+   os perfis — o PDV, a Comissaria, o executivo e o gerente pedem nas
+   mesmas telas e precisam do mesmo sinal.
+
+   Dois usos:
+   - `body[data-processo]` colore a tela INTEIRA enquanto a pessoa está
+     dentro de um dos dois processos;
+   - `[data-proc]` marca um elemento avulso — item de menu, cartão da
+     página inicial — que aponta para um processo mesmo estando fora. */
+
+:root {
+  --proc-compra: #B8963E;
+  --proc-compra-hover: #D4B160;
+  --proc-compra-texto: #14100A;
+  --proc-req: #3FA7A0;
+  --proc-req-hover: #5FC4BD;
+  --proc-req-texto: #06201E;
+}
+
+body { --proc: var(--proc-compra); --proc-hover: var(--proc-compra-hover); --proc-texto: var(--proc-compra-texto); }
+body[data-processo="compra"] { --proc: var(--proc-compra); --proc-hover: var(--proc-compra-hover); --proc-texto: var(--proc-compra-texto); }
+body[data-processo="req"]    { --proc: var(--proc-req);    --proc-hover: var(--proc-req-hover);    --proc-texto: var(--proc-req-texto); }
+
+[data-proc="compra"] { --proc: var(--proc-compra); --proc-hover: var(--proc-compra-hover); --proc-texto: var(--proc-compra-texto); }
+[data-proc="req"]    { --proc: var(--proc-req);    --proc-hover: var(--proc-req-hover);    --proc-texto: var(--proc-req-texto); }
+
+/* --- a tela inteira, enquanto se pede --- */
+body[data-processo] .top-bar > .top-bar-hero,
+body[data-processo] .top-bar > div:first-child:not(.sidebar-toggle) { border-left-color: var(--proc); }
+body[data-processo] .top-title { color: var(--proc); }
+body[data-processo] .cart-strip { background: var(--proc); color: var(--proc-texto); }
+body[data-processo] .cart-fab   { background: var(--proc); color: var(--proc-texto); }
+body[data-processo] .cart-sidebar-head .title { color: var(--proc); }
+/* Cada tela batizou o seu botão de enviar com um id diferente. Ficam
+   todos aqui: é o mesmo gesto, tem que ter a mesma cor em todo perfil.
+   #btn-enviar/#btn-confirmar = pdv · #cartSendBtn/#btnConfirmarEnvioCompraComis
+   = comissaria · #execCartBtn = executivo */
+body[data-processo] #btn-enviar,
+body[data-processo] #btn-confirmar,
+body[data-processo] #cartSendBtn,
+body[data-processo] #btnConfirmarEnvioCompraComis,
+body[data-processo] #execCartBtn { background: var(--proc); color: var(--proc-texto); }
+body[data-processo] #btn-enviar:hover,
+body[data-processo] #btn-confirmar:hover,
+body[data-processo] #cartSendBtn:hover,
+body[data-processo] #btnConfirmarEnvioCompraComis:hover,
+body[data-processo] #execCartBtn:hover { background: var(--proc-hover); }
+/* Desligado tem que continuar lendo como desligado: a cor do processo
+   faria o botão parecer clicável antes de ter item na lista. */
+body[data-processo] #btn-enviar:disabled,
+body[data-processo] #btn-confirmar:disabled,
+body[data-processo] #cartSendBtn:disabled,
+body[data-processo] #execCartBtn:disabled { background: var(--muted2); color: var(--muted); }
+
+/* --- marcador permanente: menu e cartões da página inicial --- */
+/* A barra da esquerda ja existe em .nav-item (2px transparente) e so
+   acendia no item ativo. Nos dois itens de processo ela fica acesa
+   sempre: e o que diz, de qualquer tela, qual e compra e qual e
+   requisicao. Sem mexer no padding — os itens dentro de um grupo tem
+   recuo proprio e perderiam o alinhamento. */
+.nav-item[data-proc] { border-left-color: var(--proc); }
+.nav-item[data-proc]:hover,
+.nav-item[data-proc].active { color: var(--proc); }
+.nav-item[data-proc].active { background: color-mix(in srgb, var(--proc) 10%, transparent); }
+.nav-group-items .nav-item[data-proc].active { border-left-color: var(--proc); }
+.nav-item[data-proc] .nav-icon { color: var(--proc); }
+
+.card-acao[data-proc] { border-color: color-mix(in srgb, var(--proc) 45%, transparent); }
+.card-acao[data-proc] .glifo { color: var(--proc); }
+.card-acao[data-proc]:hover { border-color: var(--proc); }
+/* O cartão principal é preenchido, não contornado: o fundo dourado fixo
+   dizia "compra" mesmo no cartão da requisição. */
+.card-acao[data-proc].primaria {
+  background: var(--proc); border-color: var(--proc); color: var(--proc-texto);
+}
+.card-acao[data-proc].primaria .glifo { color: var(--proc-texto); }
+.card-acao[data-proc].primaria .desc  { color: color-mix(in srgb, var(--proc-texto) 75%, transparent); }
+
+/* --- sub-abas que escolhem o processo (executivo) --- */
+.tab[data-proc].active { color: var(--proc); border-bottom-color: var(--proc); }

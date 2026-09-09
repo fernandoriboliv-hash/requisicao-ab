@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608311859">
+<link rel="stylesheet" href="style.css?v=202609091939">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608311859"></script>
+<script src="config.js?v=202609091939"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -28,49 +28,15 @@
   .cat-btn.on-laticinios  { background: rgba(37,99,168,0.15);  border-color: var(--c-laticinios); color: var(--c-laticinios); }
   .cat-btn.on-hortifruti  { background: rgba(74,124,89,0.15);  border-color: var(--c-hortifruti); color: var(--c-hortifruti); }
   .cat-btn.on-diversos    { background: rgba(184,150,62,0.15); border-color: var(--c-diversos);   color: var(--c-diversos); }
+  .cat-btn.on-todas       { background: color-mix(in srgb, var(--proc) 15%, transparent); border-color: var(--proc); color: var(--proc); }
 
   .search-wrap { position: relative; margin-bottom: 14px; }
   .search-wrap .icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted2); }
   .search-input { padding-left: 42px; }
 
-  /* ============== IDENTIDADE DE PROCESSO ==============
-     Compra e Requisição eram a mesma tela com outro título. Pior no
-     celular: a sidebar vira menu escondido e o `.top-sub` está com
-     display:none, então sobrava só o título para dizer em qual dos dois
-     processos a pessoa estava — depois de montar a lista inteira.
-     Cada processo passa a ter uma cor, carregada nos pontos que se olha
-     enquanto pede: título, faixa do carrinho, cabeçalho da lista e o
-     botão que envia. Cor porque não depende de ler.
-     O atributo só existe nas duas abas de processo; nas outras ele sai e
-     a tela volta ao dourado padrão. */
-  body { --proc: var(--gold); --proc-hover: var(--gold-light); --proc-texto: #14100A; }
-  body[data-processo="req"] {
-    --proc: #3FA7A0; --proc-hover: #5FC4BD; --proc-texto: #06201E;
-  }
-
-  /* A cor do processo recolore a barra lateral que o cartao do topo JA tem.
-     Antes eu punha border-bottom no .top-bar, que e o container de largura
-     TOTAL — como a caixa visivel (.top-bar-hero) tem margem lateral, a
-     linha nascia solta embaixo do cartao, desalinhada dele. */
-  body[data-processo] .top-bar > .top-bar-hero,
-  body[data-processo] .top-bar > div:first-child:not(.sidebar-toggle) {
-    border-left-color: var(--proc);
-  }
-  body[data-processo] .top-title { color: var(--proc); }
-  body[data-processo] .cart-strip   { background: var(--proc); color: var(--proc-texto); }
-  body[data-processo] .cart-fab     { background: var(--proc); color: var(--proc-texto); }
-  body[data-processo] .cart-sidebar-head .title { color: var(--proc); }
-  body[data-processo] #btn-enviar,
-  body[data-processo] #btn-confirmar {
-    background: var(--proc); color: var(--proc-texto);
-  }
-  body[data-processo] #btn-enviar:hover,
-  body[data-processo] #btn-confirmar:hover { background: var(--proc-hover); }
-  /* O disabled tem que continuar lendo como desligado, senão a cor do
-     processo faz o botão parecer clicável antes de ter item na lista. */
-  body[data-processo] #btn-enviar:disabled {
-    background: var(--muted2); color: var(--muted);
-  }
+  /* Identidade de processo (compra dourado × requisição verde-água):
+     as variáveis e as regras comuns moram no style.css, para valer igual
+     em todos os perfis. Aqui embaixo fica só o que é desta tela. */
 
   .item-row {
     display: grid;
@@ -438,8 +404,8 @@
   </div>
   <div class="sidebar-nav">
     <div class="nav-item" onclick="goTab('inicio',this)"><span class="nav-icon">⌂</span> Início</div>
-    <div class="nav-item" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
-    <div class="nav-item" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição Comissaria</div>
+    <div class="nav-item" data-proc="compra" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
+    <div class="nav-item" data-proc="req" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição Comissaria</div>
     <div class="nav-item" onclick="goTab('favoritos',this)">
       <span class="nav-icon">★</span> Favoritos
       <span class="nav-badge" id="badgeFavoritos"></span>
@@ -448,6 +414,7 @@
       <span class="nav-icon">✎</span> Rascunhos
       <span class="nav-badge" id="badgeRascunhos"></span>
     </div>
+    <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas</div>
     <div class="nav-item" id="navInventario" onclick="goTab('inventario',this)" style="display:none"><span class="nav-icon">▦</span> Inventário</div>
     <div class="nav-item" onclick="goTab('historico',this)"><span class="nav-icon">⏱</span> Histórico</div>
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
@@ -479,14 +446,14 @@
        pedir ao fornecedor. -->
   <div class="tab-content active" id="tab-inicio">
     <div class="inicio-cards">
-      <button class="card-acao primaria" onclick="switchAba('req')">
+      <button class="card-acao primaria" data-proc="req" onclick="switchAba('req')">
         <span class="glifo">▤</span>
         <span class="txt">
           <span class="rot">Fazer Requisição</span>
           <span class="desc">Pedir para a Comissaria</span>
         </span>
       </button>
-      <button class="card-acao" onclick="switchAba('compra')">
+      <button class="card-acao" data-proc="compra" onclick="switchAba('compra')">
         <span class="glifo">$</span>
         <span class="txt">
           <span class="rot">Solicitar Compra</span>
@@ -538,18 +505,20 @@
     </div>
 
     <!-- Categorias -->
-    <div class="cat-tabs" id="compra-cat-tabs">
-      <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCat('compra','proteina')">Proteína</button>
-      <button class="cat-btn" data-cat="laticinios" onclick="setCat('compra','laticinios')">Laticínios</button>
-      <button class="cat-btn" data-cat="hortifruti" onclick="setCat('compra','hortifruti')">Hortifruti</button>
-      <button class="cat-btn" data-cat="diversos" onclick="setCat('compra','diversos')">Diversos</button>
-    </div>
-
     <div class="search-wrap">
       <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
       </svg>
-      <input class="input search-input" id="compra-search" placeholder="Buscar item no catálogo..." oninput="renderItens('compra')">
+      <input class="input search-input" id="compra-search"
+             placeholder="Buscar em todo o catálogo..." oninput="aoBuscar('compra', this.value)">
+    </div>
+
+    <div class="cat-tabs" id="compra-cat-tabs">
+      <button class="cat-btn" data-cat="" onclick="setCat('compra','')">Todas</button>
+      <button class="cat-btn" data-cat="proteina" onclick="setCat('compra','proteina')">Proteína</button>
+      <button class="cat-btn" data-cat="laticinios" onclick="setCat('compra','laticinios')">Laticínios</button>
+      <button class="cat-btn" data-cat="hortifruti" onclick="setCat('compra','hortifruti')">Hortifruti</button>
+      <button class="cat-btn" data-cat="diversos" onclick="setCat('compra','diversos')">Diversos</button>
     </div>
 
     <div id="compra-items"><div class="loading-text">Carregando catálogo...</div></div>
@@ -602,18 +571,20 @@
       </div>
     </div>
 
-    <div class="cat-tabs" id="req-cat-tabs">
-      <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCat('req','proteina')">Proteína</button>
-      <button class="cat-btn" data-cat="laticinios" onclick="setCat('req','laticinios')">Laticínios</button>
-      <button class="cat-btn" data-cat="hortifruti" onclick="setCat('req','hortifruti')">Hortifruti</button>
-      <button class="cat-btn" data-cat="diversos" onclick="setCat('req','diversos')">Diversos</button>
-    </div>
-
     <div class="search-wrap">
       <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
       </svg>
-      <input class="input search-input" id="req-search" placeholder="Buscar item no catálogo..." oninput="renderItens('req')">
+      <input class="input search-input" id="req-search"
+             placeholder="Buscar em todo o catálogo..." oninput="aoBuscar('req', this.value)">
+    </div>
+
+    <div class="cat-tabs" id="req-cat-tabs">
+      <button class="cat-btn" data-cat="" onclick="setCat('req','')">Todas</button>
+      <button class="cat-btn" data-cat="proteina" onclick="setCat('req','proteina')">Proteína</button>
+      <button class="cat-btn" data-cat="laticinios" onclick="setCat('req','laticinios')">Laticínios</button>
+      <button class="cat-btn" data-cat="hortifruti" onclick="setCat('req','hortifruti')">Hortifruti</button>
+      <button class="cat-btn" data-cat="diversos" onclick="setCat('req','diversos')">Diversos</button>
     </div>
 
     <div id="req-items"><div class="loading-text">Carregando catálogo...</div></div>
@@ -675,6 +646,10 @@
   <!-- ABA HISTÓRICO — tudo o que o PDV já pediu                  -->
   <!-- ========================================================== -->
   <!-- ====================== INVENTÁRIO ====================== -->
+  <div class="tab-content" id="tab-fichas">
+    <div class="main full"><div id="ftRoot"></div></div>
+  </div>
+
   <div class="tab-content" id="tab-inventario">
     <div class="main full"><div id="invRoot"></div></div>
   </div>
@@ -1022,7 +997,9 @@ function renderItemRow(item, aba) {
     <div class="item-row ${sel ? 'selected' : ''}" id="row-${aba}-${item.id}">
       <div class="item-check alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${sel ? '✓' : ''}</div>
       <div class="item-name alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${escapeHtml(aba === 'req' ? nomeExibicao(item) : item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
-      <div class="item-unit">${escapeHtml(pacote ? rotuloPacote(item) : (ehPacote(item) ? unidadePeso(item) : item.unidade))}${troca}</div>
+      <div class="item-unit">${escapeHtml(pacote ? rotuloPacote(item) : (ehPacote(item) ? unidadePeso(item) : item.unidade))}${troca}
+        <button class="hist-badge" onclick="event.stopPropagation();abrirUltimosPedidos('${aba}','${item.id}')"
+                title="Ver os 3 últimos pedidos deste item">últimos</button></div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
           <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',-1)">−</button>
@@ -1040,6 +1017,10 @@ function renderItemRow(item, aba) {
 }
 
 function renderItens(aba) {
+  // cat vazio = "Todas". A busca sempre varre o catálogo inteiro da aba;
+  // a categoria é filtro opcional em cima disso. Antes era o contrário:
+  // quem não estivesse na categoria certa não achava o item e concluía
+  // que ele não existia.
   const cat = state.catAtual[aba];
   const q = (document.getElementById(`${aba}-search`).value || '').toLowerCase();
   // A requisição mostra só o que a Comissaria tem em estoque; a compra
@@ -1048,22 +1029,32 @@ function renderItens(aba) {
   // porque esses não têm fornecedor: quem se pede é o item bruto, por
   // requisição, não por compra. A busca também olha o nome curto, senão
   // procurar "picanha peça" não acharia o item cadastrado como outra coisa.
-  const itens = state.catalogo.filter(i =>
-    i.categoria === cat &&
+  // A busca varre o catálogo inteiro da aba. A categoria continua
+  // filtrando o que aparece em cima, mas o que ela deixaria de fora vai
+  // para um bloco separado no fim: quem procurava "queijo brie" na aba
+  // Proteína via lista vazia e concluía que o item não existe.
+  const daAba = state.catalogo.filter(i =>
     (aba !== 'req' || ehDeRequisicao(i)) &&
     (aba !== 'compra' || ehCompravel(i)) &&
     (itemAtendeBusca(i, q) || (aba === 'req' && i.nome_curto && itemCasaBusca(i.nome_curto, q)))
   );
+  const itens = cat ? daAba.filter(i => i.categoria === cat) : daAba;
+  const fora  = (cat && q) ? daAba.filter(i => i.categoria !== cat) : [];
 
   const cont = document.getElementById(`${aba}-items`);
-  if (itens.length === 0) {
-    cont.innerHTML = '<div class="empty-text">Nenhum item nesta categoria — use "Item não encontrado no catálogo" abaixo.</div>';
+  if (itens.length === 0 && fora.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item com esse nome — use "Item não encontrado no catálogo" abaixo.</div>';
     return;
   }
 
+  const linha = item => renderItemRow(item, aba);
+  const blocoFora = () => blocoForaDaCategoria(fora, itens.length, cat, linha);
+
+  if (!cat) { cont.innerHTML = blocoPorCategoria(itens, linha); return; }
+
   // Categorias sem sub-grupo: layout linear (hortifruti, diversos)
   if (!CATS_COM_SUBGRUPO.has(cat)) {
-    cont.innerHTML = itens.map(item => renderItemRow(item, aba)).join('');
+    cont.innerHTML = itens.map(item => renderItemRow(item, aba)).join('') + blocoFora();
     return;
   }
 
@@ -1088,16 +1079,23 @@ function renderItens(aba) {
       <span class="count">${grupos[g].length} ${grupos[g].length === 1 ? 'item' : 'itens'}</span>
     </div>
     ${grupos[g].map(item => renderItemRow(item, aba)).join('')}
-  `).join('');
+  `).join('') + blocoFora();
+}
+
+// Digitar leva a lista para "Todas" (so na transicao de vazio -> texto).
+function aoBuscar(aba, valor) {
+  if (buscaAbriuCatalogo('pdv:' + aba, valor)) setCat(aba, '');
+  else renderItens(aba);
 }
 
 function setCat(aba, cat) {
   state.catAtual[aba] = cat;
   document.querySelectorAll(`#${aba}-cat-tabs .cat-btn`).forEach(btn => {
-    btn.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
-    if (btn.dataset.cat === cat) btn.classList.add('on-' + cat);
+    btn.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos','on-todas');
+    if (btn.dataset.cat === cat) btn.classList.add('on-' + (cat || 'todas'));
   });
-  document.getElementById(`${aba}-search`).value = '';
+  // A busca fica. Clicar numa categoria com termo digitado é justamente
+  // como se estreita o resultado — apagar o termo desfazia a busca.
   renderItens(aba);
 }
 
@@ -1204,12 +1202,21 @@ function unidadeComoPedido(aba, item) {
 }
 
 function setQty(aba, itemId, val) {
-  const v = parseFloat(val);
-  const qty = isNaN(v) || v <= 0 ? 1 : v;
-  // Se não está no carrinho ainda, só o valor do input importa (será lido no Adicionar).
+  const v = parseFloat(String(val).replace(',', '.'));
   const sel = state.selecionados[aba][itemId];
+  // Zero virava 1 sem avisar: a pessoa digitava 0 para "não quero este"
+  // e o pedido saía com 1. Agora o campo volta ao que era e ela decide —
+  // para tirar do pedido existe Remover.
+  if (isNaN(v) || v <= 0) {
+    showToast('Quantidade tem que ser maior que zero. Para tirar o item, use Remover.', 'error');
+    const input = document.querySelector(`#row-${aba}-${itemId} .qty-input`);
+    if (input) input.value = sel ? sel.qty : 1;
+    atualizarEstimativa(aba, itemId, sel ? sel.qty : 1);
+    return;
+  }
+  // Se não está no carrinho ainda, só o valor do input importa (será lido no Adicionar).
   if (!sel) return;
-  sel.qty = qty;
+  sel.qty = v;
   renderItens(aba);  // re-render pra atualizar alerta de qty alta
 }
 
@@ -1352,6 +1359,7 @@ const tabTitles = {
   rascunhos:  ['Rascunhos', 'Solicitações salvas pra continuar depois'],
   historico:  ['Histórico', 'Tudo o que o seu PDV já pediu'],
   relatorios: ['Relatórios', 'Aquisições finalizadas do seu PDV'],
+  fichas:     ['Fichas Técnicas', 'Receitas da sua cozinha'],
 };
 
 function toggleSidebar() {
@@ -1365,6 +1373,11 @@ function toggleSidebar() {
 
 // Só as cozinhas sem chef contam pelo login de PDV (Emerald Pool e Bela
 // Vista). A tela em si é a mesma do executivo.html — mora no config.js.
+async function abrirTelaFichas() {
+  await montarFichas('#ftRoot', {
+    pdvId: state.perfil.pdv_id, pdvNome: state.pdvNome });
+}
+
 async function abrirTelaInventario() {
   await montarInventario('#invRoot', {
     pdvId: state.perfil.pdv_id, pdvNome: state.pdvNome });
@@ -1390,6 +1403,7 @@ function goTab(aba, el) {
   if (aba === 'favoritos') carregarFavoritos();
   if (aba === 'historico') setupHistoricoTab();
   if (aba === 'inicio') atualizarCardRascunhos();
+  if (aba === 'fichas') abrirTelaFichas();
   if (aba === 'inventario') abrirTelaInventario();
   if (window.innerWidth <= 900) {
     document.querySelector('.sidebar')?.classList.remove('open');
@@ -1599,6 +1613,21 @@ function abrirRevisao() {
   const livres = state.livres[aba];
   if (sel.length === 0 && livres.length === 0) {
     showToast('Selecione ao menos um item antes de enviar.', 'error');
+    return;
+  }
+
+  // Trava final: nenhuma linha pode ir com quantidade zerada. Chega aqui
+  // por caminhos que não passam pelo setQty — item guardado num rascunho
+  // antigo, ou item livre digitado sem quantidade.
+  const zerados = [
+    ...sel.filter(x => !(Number(x.qty) > 0)).map(x => nomeExibicao(x.item) || x.item.nome),
+    ...livres.filter(l => !(Number(l.qtd) > 0)).map(l => l.nome),
+  ];
+  if (zerados.length) {
+    showToast(zerados.length === 1
+      ? `"${zerados[0]}" está com quantidade zerada. Corrija ou remova antes de enviar.`
+      : `${zerados.length} itens estão com quantidade zerada: ${zerados.slice(0, 3).join(', ')}${
+          zerados.length > 3 ? '...' : ''}. Corrija ou remova antes de enviar.`, 'error', 6000);
     return;
   }
 

@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202608311859">
+<link rel="stylesheet" href="style.css?v=202609091939">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202608311859"></script>
+<script src="config.js?v=202609091939"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -215,7 +215,7 @@
         <span class="chev">▸</span>
       </div>
       <div class="nav-group-items">
-        <div class="nav-item" onclick="goTab('reqCreate',this)"><span class="nav-icon">＋</span> Solicitar Requisição</div>
+        <div class="nav-item" data-proc="req" onclick="goTab('reqCreate',this)"><span class="nav-icon">＋</span> Solicitar Requisição</div>
         <div class="nav-item" onclick="goTab('niveis',this)"><span class="nav-icon">◐</span> Consultar Estoque</div>
         <div class="nav-item" onclick="goTab('divergencias',this)">
           <span class="nav-icon">△</span> Divergências
@@ -230,8 +230,8 @@
         <span class="chev">▸</span>
       </div>
       <div class="nav-group-items">
-        <div class="nav-item" onclick="goTab('compras',this)"><span class="nav-icon">$</span> Solicitações de Compra</div>
-        <div class="nav-item" onclick="goTab('requisicoes',this)"><span class="nav-icon">↔</span> Requisições Internas</div>
+        <div class="nav-item" data-proc="compra" onclick="goTab('compras',this)"><span class="nav-icon">$</span> Solicitações de Compra</div>
+        <div class="nav-item" data-proc="req" onclick="goTab('requisicoes',this)"><span class="nav-icon">↔</span> Requisições Internas</div>
       </div>
     </div>
 
@@ -312,17 +312,19 @@
           <span class="add-panel-chev" id="addPanelChev">▾</span>
         </div>
         <div class="add-panel-body" id="addPanelBody">
-          <div class="cat-tabs" id="add-cat-tabs">
-            <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCatAdd('proteina')">Proteína</button>
-            <button class="cat-btn" data-cat="laticinios" onclick="setCatAdd('laticinios')">Laticínios</button>
-            <button class="cat-btn" data-cat="hortifruti" onclick="setCatAdd('hortifruti')">Hortifruti</button>
-            <button class="cat-btn" data-cat="diversos" onclick="setCatAdd('diversos')">Diversos</button>
-          </div>
           <div class="search-wrap">
             <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
             </svg>
-            <input class="input search-input" id="add-search" placeholder="Buscar item no catálogo..." oninput="renderAddItens()">
+            <input class="input search-input" id="add-search"
+                   placeholder="Buscar em todo o catálogo..." oninput="aoBuscarAdd(this.value)">
+          </div>
+          <div class="cat-tabs" id="add-cat-tabs">
+            <button class="cat-btn" data-cat="" onclick="setCatAdd('')">Todas</button>
+            <button class="cat-btn" data-cat="proteina" onclick="setCatAdd('proteina')">Proteína</button>
+            <button class="cat-btn" data-cat="laticinios" onclick="setCatAdd('laticinios')">Laticínios</button>
+            <button class="cat-btn" data-cat="hortifruti" onclick="setCatAdd('hortifruti')">Hortifruti</button>
+            <button class="cat-btn" data-cat="diversos" onclick="setCatAdd('diversos')">Diversos</button>
           </div>
           <div id="lista-add-items"><div class="loading-text">Carregando catálogo...</div></div>
         </div>
@@ -407,14 +409,16 @@
         </div>
       </div>
       <div class="lista-add-panel" style="border-left:3px solid var(--gold);padding:0 0 0 0;">
-        <div class="cat-tabs" id="rc-cat-tabs" style="padding:16px 16px 0">
-          <button class="cat-btn on-proteina" data-cat="proteina" onclick="setCatReqCreate('proteina')">Proteína</button>
+        <div style="padding:16px 16px 12px">
+          <input class="input" id="rc-search" placeholder="Buscar em todo o catálogo..."
+                 oninput="aoBuscarReqCreate(this.value)">
+        </div>
+        <div class="cat-tabs" id="rc-cat-tabs" style="padding:0 16px 0">
+          <button class="cat-btn" data-cat="" onclick="setCatReqCreate('')">Todas</button>
+          <button class="cat-btn" data-cat="proteina" onclick="setCatReqCreate('proteina')">Proteína</button>
           <button class="cat-btn" data-cat="laticinios" onclick="setCatReqCreate('laticinios')">Laticínios</button>
           <button class="cat-btn" data-cat="hortifruti" onclick="setCatReqCreate('hortifruti')">Hortifruti</button>
           <button class="cat-btn" data-cat="diversos" onclick="setCatReqCreate('diversos')">Diversos</button>
-        </div>
-        <div style="padding:0 16px 12px">
-          <input class="input" id="rc-search" placeholder="Buscar item no catálogo..." oninput="renderItensReqCreate()">
         </div>
         <div id="rc-items" style="padding:0 16px 16px"><div class="loading-text">Carregando catálogo...</div></div>
       </div>
@@ -654,6 +658,8 @@
           <option value="sem_curto">Sem nome de cozinha</option>
           <option value="sem_aprov">Sem aproveitamento</option>
           <option value="so_req">Só requisição (fora das compras)</option>
+          <option value="na_compra">Aparecem na lista de compras</option>
+          <option value="transformado">Transformados pela Comissaria</option>
         </select>
       </div>
       <div class="aviso aviso-info" id="cat-aviso-revisar" style="display:none"></div>
@@ -912,6 +918,12 @@ function goTab(tab, el) {
   const [t, s] = tabTitles[tab] || [tab, ''];
   document.getElementById('topTitle').textContent = t;
   document.getElementById('topSub').textContent = s;
+  // Mesma convencao de cor das telas de cozinha: dourado e compra,
+  // verde-agua e requisicao. Fora dessas telas o atributo sai.
+  const PROC_DA_ABA = { compras: 'compra', lista: 'compra', aprovacao: 'compra',
+                        requisicoes: 'req', reqCreate: 'req' };
+  if (PROC_DA_ABA[tab]) document.body.dataset.processo = PROC_DA_ABA[tab];
+  else delete document.body.dataset.processo;
   // Carregamentos sob demanda
   if (tab === 'dashboard')   carregarDashboard();
   if (tab === 'aprovacao')   carregarAprovacao();
@@ -1174,13 +1186,20 @@ function toggleAddPanel() {
   if (addPanelOpen) renderAddItens();
 }
 
+// Digitar leva a lista para "Todas": procurar na categoria errada
+// escondia o item e fazia cadastrar de novo o que ja existe.
+function aoBuscarAdd(v) {
+  if (buscaAbriuCatalogo('ger:add', v)) setCatAdd('');
+  else renderAddItens();
+}
+
 function setCatAdd(cat) {
   addCat = cat;
   document.querySelectorAll('#add-cat-tabs .cat-btn').forEach(btn => {
-    btn.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
-    if (btn.dataset.cat === cat) btn.classList.add('on-' + cat);
+    btn.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos','on-todas');
+    if (btn.dataset.cat === cat) btn.classList.add('on-' + (cat || 'todas'));
   });
-  document.getElementById('add-search').value = '';
+  // A busca fica: e assim que se estreita o resultado por categoria.
   renderAddItens();
 }
 
@@ -1192,15 +1211,17 @@ function renderAddItens() {
     return;
   }
   const q = (document.getElementById('add-search').value || '').toLowerCase();
-  const itens = state.catalogo.filter(i =>
-    i.ativo && i.categoria === addCat &&
-    itemAtendeBusca(i, q)
-  );
-  if (itens.length === 0) {
-    cont.innerHTML = '<div class="empty-text">Nenhum item nesta categoria.</div>';
+  // A busca varre o catalogo inteiro; a categoria e filtro opcional em
+  // cima disso, e o que fica de fora aparece separado no fim.
+  const todos = state.catalogo.filter(i => i.ativo && itemAtendeBusca(i, q));
+  const itens = addCat ? todos.filter(i => i.categoria === addCat) : todos;
+  const fora  = (addCat && q) ? todos.filter(i => i.categoria !== addCat) : [];
+  if (itens.length === 0 && fora.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item com esse nome.</div>';
     return;
   }
-  itens.sort((a,b) => a.nome.localeCompare(b.nome));
+  const ordenar = l => l.sort((a,b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  ordenar(itens); ordenar(fora);
 
   // Marcar itens que já estão na lista final (auto ou manual) com check
   const data = document.getElementById('lista-data').value || isoDate(new Date());
@@ -1213,7 +1234,7 @@ function renderAddItens() {
     }
   }
 
-  cont.innerHTML = itens.map(item => {
+  const linhaAdd = item => {
     const inLista = jaNaLista.has(item.id);
     return `
       <div class="add-item-row" id="addrow-${item.id}">
@@ -1227,7 +1248,10 @@ function renderAddItens() {
           <button class="add-item-btn" onclick="adicionarItemManual('${item.id}')">+ Adicionar</button>
         </div>
       </div>`;
-  }).join('');
+  };
+
+  cont.innerHTML = itens.map(linhaAdd).join('')
+    + blocoForaDaCategoria(fora, itens.length, addCat, linhaAdd);
 }
 
 function changeQtyAdd(itemId, delta) {
@@ -2408,6 +2432,9 @@ function renderCatalogoTable() {
   // fornecedor. Ficava invisível aqui porque a tabela só mostrava a chave
   // da requisição.
   if (rf === 'so_req')    lista = lista.filter(i => ehDeRequisicao(i) && !ehCompravel(i));
+  // Para varrer a lista de compras inteira e tirar o que nao deveria estar la.
+  if (rf === 'na_compra')     lista = lista.filter(i => ehCompravel(i));
+  if (rf === 'transformado')  lista = lista.filter(i => !ehCompravel(i));
   if (q) lista = lista.filter(i => itemAtendeBusca(i, q)
     || (i.nome_curto && itemCasaBusca(i.nome_curto, q)));
   state.catalogoLista = lista;
@@ -2432,7 +2459,7 @@ function renderCatalogoTable() {
   const comPreco = lista.filter(i => state.precosMap && state.precosMap[i.id]).length;
   document.getElementById('catCount').textContent = `${lista.length} itens · ${comPreco} com preço`;
   cont.innerHTML = `<table class="data-table tabela-cards">
-    <thead><tr><th>Nome</th><th class="center" title="Aparece na lista de requisição do cozinheiro. Não afeta a lista de compras.">Na requisição</th><th>Categoria</th><th>Unid.</th><th class="center" title="Pacote = embalagem de peso variável. O PDV pede em pacotes e a Comissaria pesa na separação.">Pede por</th><th>Fornecedor</th><th class="center">Inventário</th><th class="center" title="Aparece por padrão no checklist de contagem da Comissaria">No checklist?</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
+    <thead><tr><th>Nome</th><th class="center" title="Aparece na lista de requisição do cozinheiro. Não afeta a lista de compras.">Na requisição</th><th class="center" title="Aparece em Solicitar Compra. Desmarque o que a Comissaria produz ou transforma — esse item só existe depois de processado, ninguém compra.">Na compra</th><th>Categoria</th><th>Unid.</th><th class="center" title="Pacote = embalagem de peso variável. O PDV pede em pacotes e a Comissaria pesa na separação.">Pede por</th><th>Fornecedor</th><th class="center">Inventário</th><th class="center" title="Aparece por padrão no checklist de contagem da Comissaria">No checklist?</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
     <tbody>${lista.map(it => {
       const p = state.precosMap ? state.precosMap[it.id] : null;
       const precoTxt = p
@@ -2455,6 +2482,10 @@ function renderCatalogoTable() {
                title="Aparece na lista de requisição do cozinheiro">
         ${it.req_revisar ? `<br><button class="btn btn-sm btn-secondary" style="font-size:10px;padding:2px 6px;margin-top:4px"
                onclick="resolverRevisao('${it.id}')">É este</button>` : ''}
+      </td>
+      <td class="center" data-label="Na compra">
+        <input type="checkbox" ${ehCompravel(it) ? 'checked' : ''} onchange="setNaCompra('${it.id}',this.checked)"
+               title="Aparece em Solicitar Compra">
       </td>
       <td data-label="Categoria"><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
       <td data-label="Unidade">${it.unidade}</td>
@@ -2497,6 +2528,27 @@ function editarItemDoCatalogo(itemId) {
 
 // Liga e desliga o item da lista de requisição. A lista de COMPRAS não
 // muda — são duas listas diferentes desde a migration 30.
+// "Na compra" nao e coluna nova: e o mesmo tipo_aquisicao que o editor
+// grava. Item transformado pela Comissaria (atum limpo virando pedaco e
+// tartar) so existe depois de processado — ninguem compra, entao nao pode
+// aparecer em Solicitar Compra. Antes disso a unica forma de tirar era
+// abrir o editor item a item.
+async function setNaCompra(id, val) {
+  const it = state.catalogo.find(x => x.id === id);
+  const patch = val
+    ? { tipo_aquisicao: 'comprado', producao_propria: false }
+    : { tipo_aquisicao: 'transformado' };
+  const { data, error } = await sb.from('itens')
+    .update(patch).eq('id', id).select().maybeSingle();
+  if (error) { showToast(msgErroPacote(error), 'error'); return; }
+  if (!data) { showToast('Seu perfil não tem permissão para editar o catálogo.', 'error'); return; }
+  if (it) Object.assign(it, patch);
+  renderCatalogoTable();
+  showToast(val
+    ? `"${data.nome}" voltou para a lista de compras.`
+    : `"${data.nome}" saiu da lista de compras.`, 'success');
+}
+
 async function setReqAtivo(id, val) {
   const { error } = await sb.from('itens').update({ req_ativo: val }).eq('id', id);
   if (error) { showToast(msgErroPacote(error), 'error'); return; }
@@ -2903,13 +2955,19 @@ function initReqCreate() {
   setCatReqCreate(state.reqNew.cat);
 }
 
+// Digitar leva a lista para "Todas" — a categoria e filtro, nao porta.
+function aoBuscarReqCreate(v) {
+  if (buscaAbriuCatalogo('ger:rc', v)) setCatReqCreate('');
+  else renderItensReqCreate();
+}
+
 function setCatReqCreate(cat) {
   state.reqNew.cat = cat;
   document.querySelectorAll('#rc-cat-tabs .cat-btn').forEach(btn => {
-    btn.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos');
-    if (btn.dataset.cat === cat) btn.classList.add('on-' + cat);
+    btn.classList.remove('on-proteina','on-laticinios','on-hortifruti','on-diversos','on-todas');
+    if (btn.dataset.cat === cat) btn.classList.add('on-' + (cat || 'todas'));
   });
-  document.getElementById('rc-search').value = '';
+  // A busca fica: e assim que se estreita o resultado por categoria.
   renderItensReqCreate();
 }
 
@@ -2956,15 +3014,25 @@ function renderItensReqCreate() {
   const q = (document.getElementById('rc-search').value || '').toLowerCase();
   const cat = state.reqNew.cat;
   // Esta tela cria REQUISIÇÃO — vale a mesma lista que o cozinheiro vê
-  const itens = state.catalogo.filter(i =>
-    i.ativo && i.categoria === cat && ehDeRequisicao(i) &&
+  // A busca varre a lista inteira da requisicao; a categoria filtra o
+  // que aparece em cima e o resto vai num bloco separado no fim.
+  const daReq = state.catalogo.filter(i =>
+    i.ativo && ehDeRequisicao(i) &&
     (itemAtendeBusca(i, q) || (i.nome_curto && itemCasaBusca(i.nome_curto, q)))
   );
-  if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item nesta categoria.</div>'; return; }
-  itens.sort((a,b) => nomeExibicao(a).localeCompare(nomeExibicao(b)));
+  const itens = cat ? daReq.filter(i => i.categoria === cat) : daReq;
+  const fora  = (cat && q) ? daReq.filter(i => i.categoria !== cat) : [];
+  if (itens.length === 0 && fora.length === 0) {
+    cont.innerHTML = '<div class="empty-text">Nenhum item com esse nome.</div>'; return;
+  }
+  const ordenar = l => l.sort((a,b) => nomeExibicao(a).localeCompare(nomeExibicao(b), 'pt-BR'));
+  ordenar(itens); ordenar(fora);
+  const blocoFora = () => blocoForaDaCategoria(fora, itens.length, cat, renderItemRowRC);
+
+  if (!cat) { cont.innerHTML = blocoPorCategoria(itens, renderItemRowRC); return; }
 
   if (!CATS_COM_SUBGRUPO_RC.has(cat)) {
-    cont.innerHTML = itens.map(item => renderItemRowRC(item)).join('');
+    cont.innerHTML = itens.map(item => renderItemRowRC(item)).join('') + blocoFora();
     return;
   }
 
@@ -2985,7 +3053,7 @@ function renderItensReqCreate() {
       <span class="count">${grupos[g].length} ${grupos[g].length === 1 ? 'item' : 'itens'}</span>
     </div>
     ${grupos[g].map(item => renderItemRowRC(item)).join('')}
-  `).join('');
+  `).join('') + blocoFora();
 }
 
 function changeQtyRC(itemId, delta) {

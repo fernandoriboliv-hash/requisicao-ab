@@ -462,7 +462,7 @@ function _montarEditorItem() {
         </div>
 
         <div class="ed-secao">Cadastro</div>
-        <div class="form-row col2">
+        <div class="form-row col3">
           <div><label class="field-label">Categoria</label>
             <select class="select" id="ed-cat">
               <option value="proteina">Proteína</option>
@@ -470,6 +470,10 @@ function _montarEditorItem() {
               <option value="hortifruti">Hortifruti</option>
               <option value="diversos">Diversos</option>
             </select></div>
+          <div><label class="field-label">Subgrupo na tela de pedido</label>
+            <input class="input" id="ed-sub" list="ed-sub-lista"
+                   placeholder="vazio = OUTROS">
+            <datalist id="ed-sub-lista"></datalist></div>
           <div><label class="field-label">Unidade de compra</label>
             <input class="input" id="ed-unid" placeholder="KG, UN, CX..."></div>
         </div>
@@ -481,7 +485,7 @@ function _montarEditorItem() {
 
         <div class="form-row col2 so-gerente">
           <div><label class="field-label">Tipo de aquisição</label>
-            <select class="select" id="ed-tipo">
+            <select class="select" id="ed-tipo" onchange="_edSincCheck()">
               <option value="comprado">Comprado</option>
               <option value="transformado">Transformado na cozinha</option>
               <option value="ambos">Ambos</option>
@@ -490,6 +494,8 @@ function _montarEditorItem() {
         </div>
 
         <div class="ed-checks so-gerente">
+          <label><input type="checkbox" id="ed-compra" onchange="_edSincTipo()">
+            Aparece na lista de compras</label>
           <label><input type="checkbox" id="ed-req"> Aparece na lista de requisição</label>
           <label><input type="checkbox" id="ed-chk"> Entra no checklist da Comissaria</label>
           <label><input type="checkbox" id="ed-inv"> Conta no inventário</label>
@@ -550,7 +556,16 @@ async function abrirEditorItem(itemId, catalogo, aoSalvar) {
   v('ed-curto', data.nome_curto);
   v('ed-inv-nome', data.nome_inventario);
   v('ed-cat', data.categoria || 'proteina');
+  v('ed-sub', data.subcategoria);
   v('ed-unid', data.unidade);
+  // O subgrupo e o que separa "BOVINOS" de "PESCADOS" na tela de pedido.
+  // Digitado livre viraria grupo novo por causa de um acento, entao a lista
+  // oferece os que ja existem na mesma categoria.
+  const subs = [...new Set((catalogo || [])
+    .filter(i => i.categoria === data.categoria && i.subcategoria)
+    .map(i => String(i.subcategoria).trim()))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  document.getElementById('ed-sub-lista').innerHTML =
+    subs.map(x => `<option value="${_escEd(x)}">`).join('');
   // Preço e prazo são do PAR item + fornecedor, então moram aqui dentro:
   // é a mesma tela onde se decide quem é o principal.
   const { data: vinc } = await sb.from('item_fornecedores')
@@ -579,6 +594,7 @@ async function abrirEditorItem(itemId, catalogo, aoSalvar) {
 
   v('ed-tipo', data.tipo_aquisicao || 'comprado');
   c('ed-req', ehDeRequisicao(data));
+  c('ed-compra', ehCompravel(data));
   c('ed-chk', data.no_checklist_estoque);
   c('ed-inv', data.inventario);
   v('ed-pede', data.pede_por === 'pacote' ? 'pacote' : 'peso');
@@ -775,6 +791,26 @@ function _edAproveitamento() {
   }
 }
 
+// O checkbox e o seletor de tipo descrevem a MESMA regra. Sincronizo os
+// dois na tela para nao existir estado impossivel: "Comprado" marcado com
+// a caixa de compras desmarcada nao quer dizer nada.
+function _edSincTipo() {
+  const marcado = document.getElementById('ed-compra').checked;
+  const sel = document.getElementById('ed-tipo');
+  if (!sel) return;
+  if (marcado) {
+    // Sai de transformado; 'ambos' ja aparece na compra, entao fica.
+    if (sel.value === 'transformado') sel.value = 'comprado';
+  } else {
+    sel.value = 'transformado';
+  }
+}
+
+function _edSincCheck() {
+  const el = document.getElementById('ed-compra');
+  if (el) el.checked = document.getElementById('ed-tipo').value !== 'transformado';
+}
+
 async function salvarEditorItem() {
   if (!_edItem) return;
   const t = id => document.getElementById(id).value.trim();
@@ -798,6 +834,7 @@ async function salvarEditorItem() {
   const patch = {
     nome,
     categoria:       document.getElementById('ed-cat').value,
+    subcategoria:    t('ed-sub') || null,
     unidade:         t('ed-unid') || _edItem.unidade,
     // Deixa de ser digitado: é o fornecedor marcado como principal na lista.
     fornecedor_principal:
@@ -842,7 +879,7 @@ async function salvarEditorItem() {
   }
   btn.disabled = false; btn.textContent = 'Salvar';
 
-  if (error) { showToast(_msgErroEditor(error), 'error'); return; }
+  if (error) { showToast(_msgErroEditor(error, patch), 'error'); return; }
 
   const errosForn = await _edSalvarFornecedores(_edItem.id);
   if (errosForn.length) showToast('Fornecedores: ' + errosForn[0], 'error');
@@ -858,8 +895,17 @@ async function salvarEditorItem() {
   if (_edAoSalvar) _edAoSalvar(data);
 }
 
-function _msgErroEditor(err) {
+function _msgErroEditor(err, patch) {
   const m = err.message || '';
+  // Nome repetido: o banco so diz o nome da constraint. Quem esta na tela
+  // precisa saber QUAL nome ja esta em uso — senao a mensagem nao ajuda.
+  // Nada foi gravado: o UPDATE inteiro foi recusado.
+  if (err.code === '23505' && /itens_nome_categoria_key/.test(m)) {
+    const cat = _CAT_ITEM[patch?.categoria] || patch?.categoria || '';
+    return `Já existe outro item chamado "${patch?.nome}" em ${cat}. `
+         + 'Dois itens não podem ter o mesmo nome dentro da mesma categoria. '
+         + 'Nada foi alterado — mude o nome ou desative o repetido.';
+  }
   if (err.code === 'PGRST204' || err.code === '42703'
       || /aproveitamento_pct|item_origem_id|nome_inventario/.test(m)) {
     return 'Os campos de aproveitamento e nome de inventário ainda não existem no banco — falta rodar a migration 40.';
@@ -2033,4 +2079,680 @@ async function _invApagarLivre(id) {
   if (error) { showToast('Não apagou: ' + error.message, 'error'); return; }
   _INV.livres = (_INV.livres || []).filter(x => x.id !== id);
   _invRenderLivres();
+}
+
+// =====================================================================
+// FICHAS TÉCNICAS — a receita registrada
+// =====================================================================
+// Mora aqui pelo mesmo motivo do inventário: roda no executivo.html (chef)
+// e no pdv.html (cozinheiro). Duplicar garantiria que uma das duas ficasse
+// para trás.
+//
+// A tela existe para três coisas que o Fernando prometeu aos chefs:
+// consultar a ficha, calcular os insumos de N produções, e registrar o que
+// foi produzido. E, no fim do mês, é ela que deixa o inventário pesar a
+// produção em vez de contar ingrediente por ingrediente.
+//
+// DUAS GRANDEZAS QUE NÃO SÃO A MESMA COISA, e a tela precisa deixar isso
+// óbvio para quem preenche:
+//   fator de correção   por LINHA — bruto ÷ líquido do ingrediente
+//   rendimento          por RECEITA — quanto sai de produto pronto
+// Ver migration 66.
+
+const _FT = {
+  raiz: null, pdvId: null, pdvNome: null,
+  lista: [], catalogo: [], categoria: null, busca: '',
+  aberta: null, linhas: [], usada: [], salvando: false,
+};
+
+const _FT_ALERGENOS = [
+  ['gluten', 'Glúten'], ['crustaceos', 'Crustáceos'], ['ovos', 'Ovos'],
+  ['peixes', 'Peixes'], ['amendoim', 'Amendoim'], ['soja', 'Soja'],
+  ['leite', 'Leite'], ['castanhas', 'Castanhas'], ['gergelim', 'Gergelim'],
+  ['sulfitos', 'Sulfitos'],
+];
+const _FT_UNIDADES = ['g', 'kg', 'ml', 'L', 'un'];
+
+// Aceita vírgula: <input type="number"> recusa "1,8" e a cozinha digita
+// com vírgula. Mesma correção que o inventário precisou.
+function _ftNum(v) {
+  const t = String(v == null ? '' : v).trim().replace(',', '.');
+  if (t === '') return null;
+  if (!/^[0-9]+(\.[0-9]+)?$/.test(t)) return null;
+  const n = parseFloat(t);
+  return isNaN(n) || n <= 0 ? null : n;
+}
+const _ftFmt = n => n == null ? '' :
+  Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+const _ftNorm = s => String(s || '').toUpperCase().normalize('NFD')
+  .replace(/[̀-ͯ]/g, '');
+
+// ---------------------------------------------------------------------
+async function montarFichas(seletor, opts) {
+  const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
+  if (!raiz) return;
+  _FT.raiz = raiz;
+  _FT.pdvId = opts.pdvId;
+  _FT.pdvNome = opts.pdvNome || '';
+  raiz.innerHTML = '<div class="loading-text">Carregando fichas...</div>';
+
+  const { data, error } = await sb.from('fichas_tecnicas')
+    .select('id, nome, categoria, rendimento, rendimento_un, porcoes, versao, atualizada_em')
+    .eq('pdv_id', _FT.pdvId).eq('ativa', true).order('categoria').order('nome');
+  if (error) {
+    raiz.innerHTML = '<div class="empty-text">Não consegui carregar as fichas.</div>'
+      + '<div class="text-muted" style="font-size:11px;text-align:center;margin-top:6px">'
+      + escapeHtml(error.message) + '</div>';
+    return;
+  }
+  _FT.lista = data || [];
+  _FT.aberta = null;
+  if (!_FT.catalogo.length) await _ftCarregarCatalogo();
+  _ftRenderLista();
+}
+
+// O catálogo inteiro de uma vez: são centenas de itens e a busca tem que
+// responder enquanto se digita, sem ida ao servidor por tecla.
+async function _ftCarregarCatalogo() {
+  let todos = [];
+  for (let i = 0; ; i += 1000) {
+    const { data } = await sb.from('itens')
+      .select('id, nome, unidade, categoria').eq('ativo', true)
+      .order('nome').range(i, i + 999);
+    todos = todos.concat(data || []);
+    if (!data || data.length < 1000) break;
+  }
+  _FT.catalogo = todos;
+}
+
+// ---------------------------------------------------------------------
+// A LISTA
+// ---------------------------------------------------------------------
+function _ftRenderLista() {
+  const cats = [...new Set(_FT.lista.map(f => f.categoria).filter(Boolean))].sort();
+  const q = _ftNorm(_FT.busca);
+  const vis = _FT.lista.filter(f =>
+    (!_FT.categoria || f.categoria === _FT.categoria) &&
+    (!q || _ftNorm(f.nome).includes(q)));
+
+  const chip = (rot, val, n) => `<button class="filter-chip${
+    _FT.categoria === val ? ' active' : ''}" onclick="_ftFiltrar(${
+    val === null ? 'null' : "'" + String(val).replace(/'/g, "\\'") + "'"})"
+    >${escapeHtml(rot)}${n != null ? ` <span class="text-muted">${n}</span>` : ''}</button>`;
+
+  _FT.raiz.innerHTML = `
+    <div class="ft-topo">
+      <button class="btn btn-primary" onclick="_ftNova()">+ Nova ficha</button>
+      <input class="input ft-busca" id="ft-busca" placeholder="Buscar receita pelo nome"
+             value="${escapeHtml(_FT.busca)}" oninput="_ftBuscar(this.value)" autocomplete="off">
+    </div>
+    <div class="ft-chips">
+      ${chip('Todas', null, _FT.lista.length)}
+      ${cats.map(c => chip(c, c, _FT.lista.filter(f => f.categoria === c).length)).join('')}
+    </div>
+    ${vis.length ? `<div class="ft-lista">${vis.map(f => `
+      <div class="ft-card" onclick="_ftAbrir('${f.id}')">
+        <div class="ft-card-nome">${escapeHtml(f.nome)}</div>
+        <div class="ft-card-meta">
+          ${f.categoria ? `<span class="ft-tag">${escapeHtml(f.categoria)}</span>` : ''}
+          ${f.rendimento ? `<span>rende ${_ftFmt(f.rendimento)} ${escapeHtml(f.rendimento_un)}</span>` : ''}
+          ${f.porcoes ? `<span>${f.porcoes} porç.</span>` : ''}
+        </div>
+      </div>`).join('')}</div>`
+      : `<div class="empty-text">${_FT.lista.length
+          ? 'Nenhuma receita com esse filtro.'
+          : 'Nenhuma ficha cadastrada ainda. Comece por "Nova ficha".'}</div>`}`;
+}
+
+function _ftFiltrar(cat) { _FT.categoria = cat; _ftRenderLista(); }
+function _ftBuscar(v) {
+  _FT.busca = v;
+  const el = document.getElementById('ft-busca');
+  const pos = el && el.selectionStart;
+  _ftRenderLista();
+  const novo = document.getElementById('ft-busca');
+  if (novo) { novo.focus(); if (pos != null) novo.setSelectionRange(pos, pos); }
+}
+
+// ---------------------------------------------------------------------
+// O EDITOR
+// ---------------------------------------------------------------------
+function _ftNova() {
+  _FT.aberta = { id: null, nome: '', categoria: '', rendimento: null,
+                 rendimento_un: 'kg', porcoes: null, modo_preparo: '',
+                 alergenos: [], versao: 0 };
+  _FT.linhas = [];
+  _FT.usada = [];
+  _ftRenderEditor();
+}
+
+async function _ftAbrir(id) {
+  _FT.raiz.innerHTML = '<div class="loading-text">Abrindo...</div>';
+  const { data: f } = await sb.from('fichas_tecnicas').select('*').eq('id', id).maybeSingle();
+  if (!f) { showToast('Ficha não encontrada.', 'error'); return montarFichas(_FT.raiz, _FT); }
+  const { data: linhas } = await sb.from('ficha_itens')
+    .select('id, item_id, sub_ficha_id, quantidade, unidade, fator_correcao, ordem, itens(nome), fichas_tecnicas!ficha_itens_sub_ficha_id_fkey(nome)')
+    .eq('ficha_id', id).order('ordem');
+  // Onde esta receita é usada — é o que avisa do impacto antes de mexer.
+  const { data: usada } = await sb.rpc('fichas_que_usam', { p_ficha_id: id });
+
+  _FT.aberta = f;
+  _FT.linhas = (linhas || []).map(l => ({
+    id: l.id, item_id: l.item_id, sub_ficha_id: l.sub_ficha_id,
+    nome: l.item_id ? (l.itens?.nome || '?') : (l.fichas_tecnicas?.nome || '?'),
+    quantidade: Number(l.quantidade), unidade: l.unidade,
+    fator_correcao: Number(l.fator_correcao),
+  }));
+  _FT.usada = usada || [];
+  _ftRenderEditor();
+}
+
+function _ftRenderEditor() {
+  const f = _FT.aberta;
+  const novo = !f.id;
+  const cats = [...new Set(_FT.lista.map(x => x.categoria).filter(Boolean))].sort();
+
+  _FT.raiz.innerHTML = `
+    <div class="ft-editor">
+      <div class="ft-editor-topo">
+        <button class="btn btn-secondary btn-sm" onclick="_ftVoltar()">← Voltar</button>
+        ${novo ? '' : `<span class="text-muted" style="font-size:12px">versão ${f.versao}</span>`}
+      </div>
+
+      <div class="form-row col2">
+        <div class="form-group">
+          <label>Nome da receita</label>
+          <input class="input" id="ft-nome" value="${escapeHtml(f.nome)}" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Categoria</label>
+          <input class="input" id="ft-cat" value="${escapeHtml(f.categoria || '')}"
+                 list="ft-cats" autocomplete="off" placeholder="Entrada, Molho, Sobremesa...">
+          <datalist id="ft-cats">${cats.map(c => `<option value="${escapeHtml(c)}">`).join('')}</datalist>
+        </div>
+      </div>
+
+      <div class="form-row col3">
+        <div class="form-group">
+          <label>Rendimento</label>
+          <input class="input" id="ft-rend" inputmode="decimal" autocomplete="off"
+                 value="${f.rendimento == null ? '' : _ftFmt(f.rendimento)}"
+                 placeholder="quanto sai pronto">
+        </div>
+        <div class="form-group">
+          <label>Unidade</label>
+          <select class="select" id="ft-rend-un">
+            ${_FT_UNIDADES.map(u => `<option value="${u}"${
+              f.rendimento_un === u ? ' selected' : ''}>${u}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Porções</label>
+          <input class="input" id="ft-porcoes" inputmode="numeric" autocomplete="off"
+                 value="${f.porcoes || ''}">
+        </div>
+      </div>
+
+      <div class="section-title"><span>Ingredientes</span></div>
+      <div class="ft-ing-cabec">
+        <span>Ingrediente</span><span class="num">Qtd</span>
+        <span>Un</span><span class="num">Fator</span><span></span>
+      </div>
+      <div id="ft-linhas">${_ftLinhasHtml()}</div>
+
+      <div class="ft-add">
+        <input class="input" id="ft-add-busca" autocomplete="off"
+               placeholder="Digite para achar um item ou outra receita..."
+               oninput="_ftSugerir(this.value)">
+        <div id="ft-sug" class="ft-sug"></div>
+      </div>
+
+      <div class="section-title mt-3"><span>Alérgenos</span></div>
+      <div class="ft-alerg">${_FT_ALERGENOS.map(([v, r]) => `
+        <label class="ft-alerg-item">
+          <input type="checkbox" value="${v}"${
+            (f.alergenos || []).includes(v) ? ' checked' : ''}> ${r}
+        </label>`).join('')}</div>
+
+      <div class="form-group mt-3">
+        <label>Modo de preparo</label>
+        <textarea class="input" id="ft-modo" rows="5"></textarea>
+      </div>
+
+      ${_FT.usada.length ? `
+        <div class="aviso aviso-info mt-3">
+          Esta receita é usada em: ${_FT.usada.map(u =>
+            escapeHtml(u.nome) + (u.nivel > 1 ? ` (via ${u.nivel} níveis)` : '')).join(' · ')}.
+          Mudar as quantidades muda o cálculo dessas também.
+        </div>` : ''}
+
+      <div class="ft-rodape">
+        <button class="btn btn-primary" onclick="_ftSalvar()">
+          ${novo ? 'Criar ficha' : 'Salvar'}</button>
+        ${novo ? '' : `
+          <button class="btn btn-outline" onclick="_ftProduzir()">Calcular produção</button>
+          <button class="btn btn-secondary" onclick="_ftArquivar()">Arquivar</button>`}
+      </div>
+      <div id="ft-producao"></div>
+    </div>`;
+
+  // O textarea recebe o valor por .value, nunca por innerHTML: a primeira
+  // quebra de linha é descartada na análise do HTML e o texto sobe uma
+  // linha inteira. Já mordeu no bloco do fechamento.
+  const modo = document.getElementById('ft-modo');
+  if (modo) modo.value = f.modo_preparo || '';
+}
+
+function _ftLinhasHtml() {
+  if (!_FT.linhas.length) {
+    return '<div class="empty-text" style="padding:14px">Nenhum ingrediente ainda.</div>';
+  }
+  return _FT.linhas.map((l, i) => `
+    <div class="ft-linha">
+      <div class="ft-linha-nome">
+        ${escapeHtml(l.nome)}
+        ${l.sub_ficha_id ? '<span class="ft-tag ft-tag-rec">receita</span>' : ''}
+      </div>
+      <input class="input ft-mini" inputmode="decimal" value="${_ftFmt(l.quantidade)}"
+             onchange="_ftSetQtd(${i}, this.value)" onclick="this.select()">
+      <select class="select ft-mini" onchange="_ftSetUn(${i}, this.value)">
+        ${_FT_UNIDADES.map(u => `<option value="${u}"${
+          l.unidade === u ? ' selected' : ''}>${u}</option>`).join('')}
+      </select>
+      <input class="input ft-mini" inputmode="decimal" value="${_ftFmt(l.fator_correcao)}"
+             title="Fator de correção: bruto ÷ líquido. 1 = não há perda no preparo."
+             onchange="_ftSetFator(${i}, this.value)" onclick="this.select()">
+      <button class="ft-del" onclick="_ftRemover(${i})" title="Remover">×</button>
+    </div>`).join('');
+}
+
+function _ftRedesenharLinhas() {
+  const el = document.getElementById('ft-linhas');
+  if (el) el.innerHTML = _ftLinhasHtml();
+}
+
+function _ftSetQtd(i, v) {
+  const n = _ftNum(v);
+  if (n === null) { showToast('Quantidade inválida.', 'error'); _ftRedesenharLinhas(); return; }
+  _FT.linhas[i].quantidade = n;
+}
+function _ftSetUn(i, v) { _FT.linhas[i].unidade = v; }
+function _ftSetFator(i, v) {
+  const n = _ftNum(v);
+  // Fator é bruto ÷ líquido: nunca menor que 1. Aceitar 0,8 aqui seria
+  // gravar um número que subavalia o estoque sem ninguém perceber.
+  if (n === null || n < 1) {
+    showToast('O fator vai de 1 para cima (bruto ÷ líquido).', 'error');
+    _ftRedesenharLinhas(); return;
+  }
+  _FT.linhas[i].fator_correcao = n;
+}
+function _ftRemover(i) { _FT.linhas.splice(i, 1); _ftRedesenharLinhas(); }
+
+// ---------------------------------------------------------------------
+// Busca de ingrediente: itens do catálogo E outras receitas do PDV
+// ---------------------------------------------------------------------
+function _ftSugerir(v) {
+  const cx = document.getElementById('ft-sug');
+  const q = _ftNorm(v).trim();
+  if (!cx) return;
+  if (q.length < 2) { cx.innerHTML = ''; return; }
+
+  const jaTem = new Set(_FT.linhas.map(l => l.item_id || l.sub_ficha_id));
+  const recs = _FT.lista
+    .filter(f => f.id !== (_FT.aberta && _FT.aberta.id) && !jaTem.has(f.id)
+              && _ftNorm(f.nome).includes(q))
+    .slice(0, 5)
+    .map(f => ({ tipo: 'rec', id: f.id, nome: f.nome, un: f.rendimento_un || 'g' }));
+  const itens = _FT.catalogo
+    .filter(i => !jaTem.has(i.id) && _ftNorm(i.nome).includes(q))
+    .slice(0, 12)
+    .map(i => ({ tipo: 'item', id: i.id, nome: i.nome, un: 'g' }));
+
+  const todos = [...recs, ...itens];
+  cx.innerHTML = todos.length
+    ? todos.map(x => `
+        <button class="ft-sug-item" onclick="_ftAdicionar('${x.tipo}','${x.id}')">
+          ${escapeHtml(x.nome)}
+          ${x.tipo === 'rec' ? '<span class="ft-tag ft-tag-rec">receita</span>' : ''}
+        </button>`).join('')
+    : '<div class="text-muted" style="font-size:12px;padding:8px">'
+      + 'Nada encontrado. Se o ingrediente não existe no catálogo, avise o gerente de compras.</div>';
+}
+
+function _ftAdicionar(tipo, id) {
+  const o = tipo === 'rec'
+    ? _FT.lista.find(f => f.id === id)
+    : _FT.catalogo.find(i => i.id === id);
+  if (!o) return;
+  _FT.linhas.push({
+    id: null,
+    item_id: tipo === 'item' ? id : null,
+    sub_ficha_id: tipo === 'rec' ? id : null,
+    nome: o.nome, quantidade: 100, unidade: 'g', fator_correcao: 1,
+  });
+  const b = document.getElementById('ft-add-busca');
+  if (b) b.value = '';
+  const s = document.getElementById('ft-sug');
+  if (s) s.innerHTML = '';
+  _ftRedesenharLinhas();
+  if (b) b.focus();
+}
+
+// ---------------------------------------------------------------------
+// Gravar
+// ---------------------------------------------------------------------
+async function _ftSalvar() {
+  if (_FT.salvando) return;
+  const nome = (document.getElementById('ft-nome').value || '').trim();
+  if (!nome) { showToast('Dê um nome à receita.', 'error'); return; }
+  if (!_FT.linhas.length) { showToast('Adicione ao menos um ingrediente.', 'error'); return; }
+
+  const rend = _ftNum(document.getElementById('ft-rend').value);
+  // Rendimento não é enfeite: sem ele a explosão não sabe quantas receitas
+  // são 6 kg de recheio, e a ficha não serve para o inventário.
+  if (rend === null) {
+    showToast('Informe o rendimento — é ele que diz quanto sai pronto.', 'error');
+    document.getElementById('ft-rend').focus();
+    return;
+  }
+  const porc = document.getElementById('ft-porcoes').value.trim();
+  const alerg = [...document.querySelectorAll('.ft-alerg input:checked')].map(x => x.value);
+
+  const cabec = {
+    pdv_id: _FT.pdvId,
+    nome,
+    categoria: (document.getElementById('ft-cat').value || '').trim() || null,
+    rendimento: rend,
+    rendimento_un: document.getElementById('ft-rend-un').value,
+    porcoes: porc ? parseInt(porc, 10) : null,
+    modo_preparo: document.getElementById('ft-modo').value.trim() || null,
+    alergenos: alerg,
+    criada_por: (window.state && window.state.perfil && window.state.perfil.id) || null,
+    atualizada_em: new Date().toISOString(),
+  };
+
+  _FT.salvando = true;
+  try {
+    let fichaId = _FT.aberta.id;
+    if (fichaId) {
+      const { data, error } = await sb.from('fichas_tecnicas')
+        .update(cabec).eq('id', fichaId).select('id').maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('sem permissão para alterar esta ficha');
+      // Reescreve as linhas: comparar uma a uma daria o mesmo resultado
+      // com muito mais chance de divergir.
+      await sb.from('ficha_itens').delete().eq('ficha_id', fichaId);
+    } else {
+      const { data, error } = await sb.from('fichas_tecnicas')
+        .insert(cabec).select('id').single();
+      if (error) throw error;
+      fichaId = data.id;
+    }
+
+    const linhas = _FT.linhas.map((l, i) => ({
+      ficha_id: fichaId, item_id: l.item_id, sub_ficha_id: l.sub_ficha_id,
+      quantidade: l.quantidade, unidade: l.unidade,
+      fator_correcao: l.fator_correcao, ordem: i,
+    }));
+    const { error: eL } = await sb.from('ficha_itens').insert(linhas);
+    if (eL) throw eL;
+
+    showToast('Ficha salva.', 'success');
+    await montarFichas(_FT.raiz, _FT);
+  } catch (e) {
+    showToast('Não gravou: ' + (e.message || e), 'error');
+  } finally {
+    _FT.salvando = false;
+  }
+}
+
+async function _ftArquivar() {
+  if (!_FT.aberta.id) return;
+  if (!confirm('Arquivar esta ficha? Ela sai da lista, mas o histórico continua.')) return;
+  const { error } = await sb.from('fichas_tecnicas')
+    .update({ ativa: false }).eq('id', _FT.aberta.id);
+  if (error) { showToast('Não arquivou: ' + error.message, 'error'); return; }
+  showToast('Ficha arquivada.', 'success');
+  await montarFichas(_FT.raiz, _FT);
+}
+
+function _ftVoltar() { montarFichas(_FT.raiz, _FT); }
+
+// ---------------------------------------------------------------------
+// "Quero produzir N" — e registrar o que foi produzido
+// ---------------------------------------------------------------------
+async function _ftProduzir() {
+  const cx = document.getElementById('ft-producao');
+  if (!cx || !_FT.aberta.id) return;
+  cx.innerHTML = `
+    <div class="form-panel ft-prod" style="display:block">
+      <div class="section-title" style="margin-top:0"><span>Calcular produção</span></div>
+      <div class="ft-prod-topo">
+        <label>Quantas receitas?</label>
+        <input class="input ft-mini" id="ft-qtd" inputmode="decimal" value="1"
+               onclick="this.select()" onchange="_ftCalcular()">
+        <button class="btn btn-sm btn-outline" onclick="_ftCalcular()">Calcular</button>
+      </div>
+      <div id="ft-prod-res"></div>
+    </div>`;
+  _ftCalcular();
+}
+
+async function _ftCalcular() {
+  const n = _ftNum(document.getElementById('ft-qtd').value);
+  const res = document.getElementById('ft-prod-res');
+  if (n === null) { res.innerHTML = '<div class="empty-text">Quantidade inválida.</div>'; return; }
+  res.innerHTML = '<div class="loading-text">Calculando...</div>';
+
+  const { data, error } = await sb.rpc('explodir_ficha',
+    { p_ficha_id: _FT.aberta.id, p_quantidade: n });
+  if (error) { res.innerHTML = '<div class="empty-text">' + escapeHtml(error.message) + '</div>'; return; }
+  if (!data || !data.length) { res.innerHTML = '<div class="empty-text">Nada a calcular.</div>'; return; }
+
+  res.innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>Insumo</th><th class="num">Líquido</th>
+        <th class="num">Retirar da câmara</th><th>Un</th></tr></thead>
+      <tbody>${data.map(x => `
+        <tr>
+          <td data-label="Insumo">${escapeHtml(x.nome)}</td>
+          <td class="num text-muted" data-label="Líquido">${_ftFmt(x.qtd_liquida)}</td>
+          <td class="num" style="font-weight:500" data-label="Retirar">${_ftFmt(x.qtd_bruta)}</td>
+          <td class="text-muted">${escapeHtml(x.unidade || '')}</td>
+        </tr>`).join('')}</tbody>
+    </table>
+    <div class="text-muted" style="font-size:12px;margin-top:8px">
+      A coluna da direita já tem o fator de correção de cada linha aplicado.
+      Sub-receitas aparecem explodidas nos insumos delas.
+    </div>
+    <div class="ft-prod-acoes">
+      <button class="btn btn-primary btn-sm" onclick="_ftRegistrarProducao()">
+        Registrar produção de ${_ftFmt(n)} receita(s)</button>
+    </div>`;
+}
+
+async function _ftRegistrarProducao() {
+  const n = _ftNum(document.getElementById('ft-qtd').value);
+  if (n === null) return;
+  if (!confirm(`Registrar que foram produzidas ${_ftFmt(n)} receita(s) de "${_FT.aberta.nome}"?`)) return;
+
+  const { error } = await sb.from('producoes').insert({
+    ficha_id: _FT.aberta.id, pdv_id: _FT.pdvId, quantidade: n,
+    // Guarda a versão usada: mudar a receita depois não pode reescrever
+    // o que já foi produzido.
+    ficha_versao: _FT.aberta.versao,
+    usuario_id: (window.state && window.state.perfil && window.state.perfil.id) || null,
+  });
+  if (error) { showToast('Não registrou: ' + error.message, 'error'); return; }
+  showToast('Produção registrada.', 'success');
+}
+
+// =====================================================================
+// ÚLTIMOS PEDIDOS DO ITEM — "quanto eu pedi da última vez?"
+// =====================================================================
+// A pergunta aparece na hora de montar o pedido, não depois. Quem não
+// tinha a resposta chutava, e o chute vira sobra ou falta. Mostra os três
+// últimos deste PDV para este item, no mesmo processo em que a pessoa
+// está — pedido de compra não ajuda quem está fazendo requisição.
+//
+// Só leitura, e sem preço: a tela do cozinheiro nunca mostra valor.
+
+function _upModal() {
+  let el = document.getElementById('ultimosPedidosModal');
+  if (el) return el;
+  el = document.createElement('div');
+  el.className = 'modal-overlay';
+  el.id = 'ultimosPedidosModal';
+  el.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <span id="up-titulo">Últimos pedidos</span>
+        <button class="modal-close" onclick="_upFechar()">&times;</button>
+      </div>
+      <div class="modal-body" id="up-corpo"></div>
+    </div>`;
+  el.addEventListener('click', ev => { if (ev.target === el) _upFechar(); });
+  document.body.appendChild(el);
+  return el;
+}
+
+function _upFechar() {
+  document.getElementById('ultimosPedidosModal')?.classList.remove('open');
+}
+
+function _upData(v) {
+  if (!v) return '';
+  const d = new Date(String(v).length <= 10 ? v + 'T12:00:00' : v);
+  return isNaN(d) ? '' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+
+function _upQtd(n) {
+  const v = Number(n);
+  if (!isFinite(v)) return '—';
+  return v.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+}
+
+const _UP_STATUS = {
+  rascunho: 'rascunho', enviada: 'enviada', aprovada: 'aprovada',
+  rejeitada: 'rejeitada', entregue: 'entregue',
+  enviado: 'enviada', separacao: 'em separação', cancelada: 'cancelada',
+};
+
+// pdvIdExplicito: a Comissaria pede em nome de outro PDV, entao o
+// historico que interessa a ela e o do PDV de destino, nao o dela.
+async function abrirUltimosPedidos(aba, itemId, pdvIdExplicito) {
+  const el = _upModal();
+  const corpo = document.getElementById('up-corpo');
+  const item = (window.state?.catalogo || []).find(i => i.id === itemId);
+  const pdvId = pdvIdExplicito || window.state?.pdvId || window.state?.perfil?.pdv_id || null;
+
+  document.getElementById('up-titulo').textContent =
+    item ? (aba === 'req' && item.nome_curto ? item.nome_curto : item.nome) : 'Últimos pedidos';
+  corpo.innerHTML = '<div class="loading-text">Buscando os últimos pedidos...</div>';
+  el.classList.add('open');
+
+  if (!pdvId) {
+    corpo.innerHTML = '<div class="aviso aviso-warn">Escolha primeiro o PDV de destino '
+      + 'para eu saber de quem é o histórico.</div>';
+    return;
+  }
+
+  const req = aba === 'req';
+  const q = req
+    ? sb.from('requisicao_itens')
+        .select('quantidade_solicitada,quantidade_entregue,item_unidade,pedido_por,comentario,created_at,'
+              + 'requisicoes!inner(id,pdv_id,status,data_competencia)')
+        .eq('item_id', itemId).eq('requisicoes.pdv_id', pdvId)
+    : sb.from('solicitacao_compra_itens')
+        .select('quantidade_solicitada,item_unidade,pedido_por,comentario,created_at,'
+              + 'solicitacoes_compra!inner(id,pdv_id,status,data_competencia)')
+        .eq('item_id', itemId).eq('solicitacoes_compra.pdv_id', pdvId)
+        .neq('solicitacoes_compra.status', 'rascunho');
+
+  const { data, error } = await q.order('created_at', { ascending: false }).limit(3);
+
+  if (error) {
+    corpo.innerHTML = `<div class="aviso aviso-warn">Não consegui carregar: ${_esc(error.message)}</div>`;
+    return;
+  }
+  if (!data || !data.length) {
+    corpo.innerHTML = `<div class="empty-text" style="padding:18px">
+      Este PDV ainda não pediu este item ${req ? 'por requisição' : 'por compra'}.</div>`;
+    return;
+  }
+
+  const linhas = data.map(l => {
+    const pai = req ? l.requisicoes : l.solicitacoes_compra;
+    const un = l.pedido_por === 'pacote' ? (item ? rotuloPacote(item) : 'PCT') : (l.item_unidade || '');
+    // Na requisição o que interessa é o par: o que pediu e o que chegou.
+    // Em pedido por pacote o que chega é peso; nos outros a unidade é a
+    // mesma em que se pediu.
+    const unEntregue = l.pedido_por === 'pacote'
+      ? (item ? unidadePeso(item) : 'kg')
+      : (l.item_unidade || '');
+    const entregue = req && l.quantidade_entregue != null
+      ? `<span class="up-entregue">chegou ${_upQtd(l.quantidade_entregue)} ${_esc(unEntregue)}</span>`
+      : '';
+    return `
+      <div class="up-linha">
+        <div class="up-quando">${_upData(pai?.data_competencia || l.created_at)}</div>
+        <div class="up-qtd">${_upQtd(l.quantidade_solicitada)} <span class="up-un">${_esc(un)}</span>${
+          entregue ? '<br>' + entregue : ''}</div>
+        <div class="up-status">${_esc(_UP_STATUS[pai?.status] || pai?.status || '')}</div>
+      </div>
+      ${l.comentario ? `<div class="up-coment">“${_esc(l.comentario)}”</div>` : ''}`;
+  }).join('');
+
+  const media = data.reduce((s, l) => s + Number(l.quantidade_solicitada || 0), 0) / data.length;
+  corpo.innerHTML = `
+    <div class="up-cabec"><span>Quando</span><span>Pediu</span><span>Situação</span></div>
+    ${linhas}
+    <div class="up-media">Média dos ${data.length === 1 ? 'último pedido' : data.length + ' últimos'}:
+      <strong>${_upQtd(media)}</strong></div>`;
+}
+
+// =====================================================================
+// A BUSCA MANDA; A CATEGORIA É FILTRO
+// =====================================================================
+// Quem digita um nome quer procurar no catálogo inteiro. Enquanto a
+// categoria vinha primeiro, procurar "flor de abobrinha" na aba Proteína
+// devolvia lista vazia — e a pessoa concluía que o item não existe e
+// mandava cadastrar de novo um item que já estava lá.
+//
+// Por isso, começar a digitar leva a lista para "Todas". Só na transição
+// de vazio → com texto: se a pessoa escolher uma categoria de propósito
+// no meio da digitação, o filtro dela fica de pé até limpar a busca.
+
+const _buscaAnterior = {};
+
+function buscaAbriuCatalogo(chave, valor) {
+  const antes = String(_buscaAnterior[chave] || '').trim();
+  const agora = String(valor || '').trim();
+  _buscaAnterior[chave] = valor || '';
+  return !antes && !!agora;
+}
+
+// Agrupa por categoria — é o cabeçalho que diz onde o item mora quando o
+// resultado vem de várias.
+function blocoPorCategoria(lista, renderLinha) {
+  const porCat = {};
+  lista.forEach(it => { (porCat[it.categoria] = porCat[it.categoria] || []).push(it); });
+  return Object.keys(_CAT_ITEM).filter(c => porCat[c]).map(c => `
+    <div class="subgroup-head">
+      <span>${_escEd(_CAT_ITEM[c] || c)}</span>
+      <span class="count">${porCat[c].length} ${porCat[c].length === 1 ? 'item' : 'itens'}</span>
+    </div>
+    ${porCat[c].map(i => renderLinha(i)).join('')}`).join('');
+}
+
+// Rede de segurança para quem estreitou a busca de propósito: o que ficou
+// fora da categoria escolhida aparece embaixo, separado, em vez de sumir.
+function blocoForaDaCategoria(fora, quantosDentro, cat, renderLinha) {
+  if (!fora.length) return '';
+  return `
+    <div class="fora-cat-aviso">${quantosDentro
+      ? 'Também achei em outras categorias:'
+      : 'Nada em ' + _escEd(_CAT_ITEM[cat] || cat) + '. Achei em outras categorias:'}</div>
+    ${blocoPorCategoria(fora, renderLinha)}`;
 }
