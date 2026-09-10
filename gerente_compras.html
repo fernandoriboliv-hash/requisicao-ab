@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609091939">
+<link rel="stylesheet" href="style.css?v=202609101035">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609091939"></script>
+<script src="config.js?v=202609101035"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -1176,7 +1176,7 @@ let listaRemovidos = {};   // { 'YYYY-MM-DD': Set<'cat:key'> }
 let listaOrigens = {};
 
 // Painel adicionar itens avulsos — catálogo navegável
-let addCat = 'proteina';
+let addCat = '';   // '' = Todas
 let addPanelOpen = false;
 
 function toggleAddPanel() {
@@ -2938,7 +2938,7 @@ function baixarCSV(filename, linhas) {
 // =====================================================================
 // SOLICITAR REQUISIÇÃO (nova capacidade — gerente cria em nome de PDV)
 // =====================================================================
-state.reqNew = { pdvId: '', cat: 'proteina', selecionados: {} };
+state.reqNew = { pdvId: '', cat: '', selecionados: {} };
 
 function initReqCreate() {
   // Popula PDVs (só destinos, não comissaria)

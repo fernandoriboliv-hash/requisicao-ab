@@ -1746,16 +1746,16 @@ body[data-processo] #execCartBtn:disabled { background: var(--muted2); color: va
 .nav-group-items .nav-item[data-proc].active { border-left-color: var(--proc); }
 .nav-item[data-proc] .nav-icon { color: var(--proc); }
 
-.card-acao[data-proc] { border-color: color-mix(in srgb, var(--proc) 45%, transparent); }
-.card-acao[data-proc] .glifo { color: var(--proc); }
-.card-acao[data-proc]:hover { border-color: var(--proc); }
-/* O cartão principal é preenchido, não contornado: o fundo dourado fixo
-   dizia "compra" mesmo no cartão da requisição. */
-.card-acao[data-proc].primaria {
+/* Compra e requisição são dois processos de peso igual: os dois cartões
+   ficam preenchidos com a própria cor. Antes só o "principal" era
+   preenchido, e ele era o da requisição — o de compra ficava escuro e
+   parecia desligado ao lado dele. */
+.card-acao[data-proc] {
   background: var(--proc); border-color: var(--proc); color: var(--proc-texto);
 }
-.card-acao[data-proc].primaria .glifo { color: var(--proc-texto); }
-.card-acao[data-proc].primaria .desc  { color: color-mix(in srgb, var(--proc-texto) 75%, transparent); }
+.card-acao[data-proc] .glifo { color: var(--proc-texto); }
+.card-acao[data-proc] .desc  { color: color-mix(in srgb, var(--proc-texto) 75%, transparent); }
+.card-acao[data-proc]:hover  { background: var(--proc-hover); border-color: var(--proc-hover); }
 
 /* --- sub-abas que escolhem o processo (executivo) --- */
 .tab[data-proc].active { color: var(--proc); border-bottom-color: var(--proc); }

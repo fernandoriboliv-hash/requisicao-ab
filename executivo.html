@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609091939">
+<link rel="stylesheet" href="style.css?v=202609101035">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609091939"></script>
+<script src="config.js?v=202609101035"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -437,7 +437,7 @@ const state = {
   catalogo: [],
   abaAtual: 'criar',
   subAtual: 'compra',
-  catAtual: { compra:'proteina', req:'proteina' },
+  catAtual: { compra:'', req:'' },
   selecionados: { compra:{}, req:{} },
 };
 // config.js e compartilhado e nao enxerga o `const state` desta tela.
@@ -474,8 +474,8 @@ window.addEventListener('load', async () => {
   ['vc-de','vr-de','rel-de'].forEach(id => document.getElementById(id).value = isoDate(primMes));
 
   await carregarCatalogo();
-  setCat('compra', 'proteina');
-  setCat('req', 'proteina');
+  setCat('compra', '');
+  setCat('req', '');
   atualizarAvisoCorte();
   setInterval(atualizarAvisoCorte, 60_000);
   montarChipsPdv();
@@ -656,7 +656,7 @@ function renderExecItemRow(item, modo) {
     <div class="item-name">${escapeHtml(modo === 'req' ? nomeExibicao(item) : item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''} ${alerta}</div>
     <div class="item-unit">${item.unidade}
       <button class="hist-badge" onclick="event.stopPropagation();abrirUltimosPedidos('${modo}','${item.id}')"
-              title="Ver os 3 últimos pedidos deste item">últimos</button></div>
+              title="Ver os 3 últimos pedidos deste item">⏱</button></div>
     <div class="item-qty-wrap" onclick="event.stopPropagation()">
       <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',-1)">−</button>
       <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQty('${modo}','${item.id}',this.value)">

@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609091939">
+<link rel="stylesheet" href="style.css?v=202609101035">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609091939"></script>
+<script src="config.js?v=202609101035"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -188,6 +188,7 @@
   .livre-row .input { flex: 1; min-width: 140px; }
   .livre-row .qtd { width: 80px; flex: none; }
   .livre-row .unid { width: 90px; flex: none; }
+  .livre-row .cat  { width: 132px; flex: none; }
   .livre-list { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
   .livre-chip {
     display: flex; align-items: center; gap: 8px;
@@ -224,11 +225,11 @@
   .card-acao .txt { display: flex; flex-direction: column; gap: 3px; }
   .card-acao .rot { font-size: 17px; font-weight: 600; }
   .card-acao .desc { font-size: 13px; color: var(--muted); }
-  .card-acao.primaria {
-    background: var(--gold); border-color: var(--gold); color: #14100A; min-height: 92px;
-  }
+  /* "primaria" cuida so do tamanho. O preenchimento vem da cor do
+     processo (style.css, .card-acao[data-proc]) — o dourado fixo daqui
+     pintava de compra tambem o cartao da requisicao. */
+  .card-acao.primaria { min-height: 92px; }
   .card-acao.primaria .rot { font-size: 20px; }
-  .card-acao.primaria .desc { color: rgba(20,16,10,.75); }
   .card-acao:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
   /* ── Barra inferior — só no celular ──────────────────────────
@@ -528,6 +529,13 @@
       <div class="uppercase-label mb-2">⚠ Item não encontrado no catálogo</div>
       <div class="livre-row">
         <input class="input" id="compra-livre-nome" placeholder="Nome do item">
+        <select class="select cat" id="compra-livre-cat" title="Categoria do item">
+          <option value="">Categoria...</option>
+          <option value="proteina">Proteína</option>
+          <option value="laticinios">Laticínios</option>
+          <option value="hortifruti">Hortifruti</option>
+          <option value="diversos">Diversos</option>
+        </select>
         <input class="input qtd" id="compra-livre-qtd" type="number" min="0.1" step="0.1" placeholder="Qtd">
         <select class="select unid" id="compra-livre-unid">
           <option value="kg">KG</option>
@@ -593,6 +601,13 @@
       <div class="uppercase-label mb-2">⚠ Item não encontrado no catálogo</div>
       <div class="livre-row">
         <input class="input" id="req-livre-nome" placeholder="Nome do item">
+        <select class="select cat" id="req-livre-cat" title="Categoria do item">
+          <option value="">Categoria...</option>
+          <option value="proteina">Proteína</option>
+          <option value="laticinios">Laticínios</option>
+          <option value="hortifruti">Hortifruti</option>
+          <option value="diversos">Diversos</option>
+        </select>
         <input class="input qtd" id="req-livre-qtd" type="number" min="0.1" step="0.1" placeholder="Qtd">
         <select class="select unid" id="req-livre-unid">
           <option value="kg">KG</option>
@@ -817,7 +832,8 @@ const state = {
   favAberto: null,                         // modelo aberto no modal
   favUsadoId: null,                        // favorito que originou o carrinho atual
   favEditandoId: null,                     // id quando está salvando por cima
-  catAtual: { compra: 'proteina', req: 'proteina' },
+  // Abre em "Todas": a categoria e filtro, nao porta de entrada.
+  catAtual: { compra: '', req: '' },
   selecionados: { compra: {}, req: {} }, // { itemId: { item, qty, comentario } }
   livres: { compra: [], req: [] },        // [{ nome, qtd, unidade, comentario }]
   // Itens de pacote que o cozinheiro trocou para pedir por peso NESTE
@@ -886,8 +902,8 @@ window.addEventListener('load', async () => {
   atualizarAvisoCorte();
   setInterval(atualizarAvisoCorte, 60_000);
 
-  setCat('compra', 'proteina');
-  setCat('req', 'proteina');
+  setCat('compra', '');
+  setCat('req', '');
 
   // Celular abre no Início; desktop continua abrindo em Solicitar Compra,
   // como era antes de 13/08. Desde 22/08 o Início vale em qualquer largura:
@@ -999,7 +1015,7 @@ function renderItemRow(item, aba) {
       <div class="item-name alvo-toggle" onclick="toggleItem('${aba}','${item.id}')">${escapeHtml(aba === 'req' ? nomeExibicao(item) : item.nome)}${estoqueBadge}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
       <div class="item-unit">${escapeHtml(pacote ? rotuloPacote(item) : (ehPacote(item) ? unidadePeso(item) : item.unidade))}${troca}
         <button class="hist-badge" onclick="event.stopPropagation();abrirUltimosPedidos('${aba}','${item.id}')"
-                title="Ver os 3 últimos pedidos deste item">últimos</button></div>
+                title="Ver os 3 últimos pedidos deste item">⏱</button></div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
           <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',-1)">−</button>
@@ -1233,13 +1249,19 @@ function addLivre(aba) {
   const nome = document.getElementById(`${aba}-livre-nome`).value.trim();
   const qtd  = parseFloat(document.getElementById(`${aba}-livre-qtd`).value);
   const unid = document.getElementById(`${aba}-livre-unid`).value;
+  // A categoria vem do formulário. Antes vinha da aba aberta, que era chute
+  // — e virava vazia na aba "Todas", derrubando o envio inteiro.
+  const cat  = document.getElementById(`${aba}-livre-cat`).value
+            || state.catAtual[aba] || null;
   if (!nome || isNaN(qtd) || qtd <= 0) {
     showToast('Informe nome e quantidade válida do item livre.', 'error');
     return;
   }
-  state.livres[aba].push({ nome, qtd, unidade: unid, comentario: '' });
+  if (!cat) { showToast('Escolha a categoria do item.', 'error'); return; }
+  state.livres[aba].push({ nome, qtd, unidade: unid, categoria: cat, comentario: '' });
   document.getElementById(`${aba}-livre-nome`).value = '';
   document.getElementById(`${aba}-livre-qtd`).value = '';
+  document.getElementById(`${aba}-livre-cat`).value = '';
   renderLivres(aba);
   atualizarCarrinho();
 }
@@ -1822,7 +1844,7 @@ function itensRequisicaoPayload() {
     ...livres.map(l => ({
       item_id: null,
       item_nome: l.nome,
-      item_categoria: state.catAtual.req,
+      item_categoria: l.categoria || state.catAtual.req || null,
       item_unidade: l.unidade,
       quantidade_solicitada: l.qtd,
       comentario: l.comentario || null,
@@ -1856,7 +1878,7 @@ function itensSolicitacaoPayload(aba) {
     ...livres.map(l => ({
       item_id: null,
       item_nome: l.nome,
-      item_categoria: state.catAtual[aba],
+      item_categoria: l.categoria || state.catAtual[aba] || null,
       item_unidade: l.unidade,
       quantidade_solicitada: l.qtd,
       comentario: l.comentario || null,

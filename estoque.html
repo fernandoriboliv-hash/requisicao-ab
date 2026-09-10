@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609091939">
+<link rel="stylesheet" href="style.css?v=202609101035">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609091939"></script>
+<script src="config.js?v=202609101035"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -1335,9 +1335,9 @@ const state = {
   filtro: 'pendentes',
   reqs: [], pendentes: [], fechadas: [],
   // Manual
-  manual: { pdvId: null, cat: 'proteina', search: '', selecionados: {}, qtdInputs: {} },
+  manual: { pdvId: null, cat: '', search: '', selecionados: {}, qtdInputs: {} },
   // Compra Comissaria
-  compra: { cat: 'proteina', search: '', selecionados: {}, qtdInputs: {} },
+  compra: { cat: '', search: '', selecionados: {}, qtdInputs: {} },
   // Checklist
   chk: { itens: [], contagens: {}, dirty: {}, historico: {}, itensAvulsos: new Set() },
   // Histórico
@@ -1388,8 +1388,8 @@ window.addEventListener('load', async () => {
   atualizarBadgeChecklist();
   atualizarBadgeDivergencias();
 
-  setCatManual('proteina');
-  setCatCompra('proteina');
+  setCatManual('');
+  setCatCompra('');
   atualizarAvisoCorte();
   setInterval(atualizarAvisoCorte, 60_000);
 });
@@ -2122,7 +2122,7 @@ function renderItemRowManual(item) {
       <div class="item-name alvo-toggle" onclick="toggleManualItem('${item.id}')">${escapeHtml(nomeExibicao(item))}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
       <div class="item-unit">${item.unidade}
         <button class="hist-badge" onclick="event.stopPropagation();abrirUltimosPedidos('req','${item.id}',state.manual.pdvId)"
-                title="Ver os 3 últimos pedidos deste item para o PDV escolhido">últimos</button></div>
+                title="Ver os 3 últimos pedidos deste item para o PDV escolhido">⏱</button></div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
           <button class="qty-btn" onclick="changeQtyManual('${item.id}',-1)">−</button>
@@ -2510,7 +2510,7 @@ function renderItemRowCompra(item) {
       <div class="item-name alvo-toggle" onclick="toggleCompraItem('${item.id}')">${escapeHtml(item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''}</div>
       <div class="item-unit">${item.unidade}
         <button class="hist-badge" onclick="event.stopPropagation();abrirUltimosPedidos('compra','${item.id}',state.pdvComissariaId)"
-                title="Ver as 3 últimas compras deste item">últimos</button></div>
+                title="Ver as 3 últimas compras deste item">⏱</button></div>
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
           <button class="qty-btn" onclick="changeQtyCompra('${item.id}',-1)">−</button>
