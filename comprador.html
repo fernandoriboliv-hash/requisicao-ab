@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprador — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609101035">
+<link rel="stylesheet" href="style.css?v=202609101455">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609101035"></script>
+<script src="config.js?v=202609101455"></script>
 <style>
   /* Bloco de um fornecedor na fila de aprovados */
   .forn-bloco {
@@ -368,7 +368,7 @@
         <div class="form-row col2 mt-2">
           <div>
             <label class="field-label">Preço unitário (R$)</label>
-            <input class="input" id="ni-preco" type="number" step="0.01" min="0">
+            <input class="input" id="ni-preco" type="text" inputmode="decimal">
           </div>
           <div>
             <label class="field-label">Prazo de entrega (dias)</label>
@@ -635,7 +635,7 @@
       <div class="form-row col2">
         <div>
           <label class="field-label">Faturamento mínimo (R$)</label>
-          <input class="input" id="fm-fat-min" type="number" step="0.01" min="0"
+          <input class="input" id="fm-fat-min" type="text" inputmode="decimal"
                  placeholder="deixe vazio se não houver">
         </div>
         <div>
@@ -1060,7 +1060,7 @@ async function salvarNovoItem() {
   const unid = document.getElementById('ni-unid').value.trim() || 'UN';
   const fid  = document.getElementById('ni-forn').value;
   const forn = state.fornecedores.find(f => f.id === fid);
-  const preco = parseFloat(String(document.getElementById('ni-preco').value).replace(',', '.'));
+  const preco = numBR(document.getElementById('ni-preco').value);
   const prazo = parseInt(document.getElementById('ni-prazo').value, 10);
 
   // Item novo NASCE fora da lista de requisição. Quem decide o que a cozinha
@@ -1618,9 +1618,9 @@ function renderPOEdit() {
           ? `<span class="po-alt" onclick="abrirAlternativas(${i})">${l.alternativas.length} fornecedores — trocar</span>` : ''}
         ${refsDaLinha(l)}
       </div>
-      <input class="po-inp ${l.moq != null && l.qtd < l.moq ? 'alerta' : ''}" type="number" step="0.001" min="0"
+      <input class="po-inp ${l.moq != null && l.qtd < l.moq ? 'alerta' : ''}" type="text" inputmode="decimal"
              value="${l.qtd}" onchange="mudarLinhaPO(${i},'qtd',this.value)" ${l.incluir ? '' : 'disabled'}>
-      <input class="po-inp" type="number" step="0.01" min="0" placeholder="preço"
+      <input class="po-inp" type="text" inputmode="decimal" placeholder="preço"
              value="${l.preco || ''}" onchange="mudarLinhaPO(${i},'preco',this.value)" ${l.incluir ? '' : 'disabled'}>
       <div class="num right" style="font-size:13px">${l.preco ? fmtMoeda(l.qtd * l.preco) : '—'}</div>
       <button class="po-del" onclick="alternarLinhaPO(${i})"
@@ -1633,9 +1633,9 @@ function renderPOEdit() {
         <div class="po-nome-edit">${escapeHtml(p.nome)}</div>
         <span class="linha-origem">falta de entrega anterior · ${escapeHtml(rotuloMotivo(p.motivo))}</span>
       </div>
-      <input class="po-inp" type="number" step="0.001" min="0" value="${p.qtd}"
+      <input class="po-inp" type="text" inputmode="decimal" value="${p.qtd}"
              onchange="mudarPendPO(${i},'qtd',this.value)" ${p.incluir ? '' : 'disabled'}>
-      <input class="po-inp" type="number" step="0.01" min="0" placeholder="preço" value="${p.preco || ''}"
+      <input class="po-inp" type="text" inputmode="decimal" placeholder="preço" value="${p.preco || ''}"
              onchange="mudarPendPO(${i},'preco',this.value)" ${p.incluir ? '' : 'disabled'}>
       <div class="num right" style="font-size:13px">${p.preco ? fmtMoeda(p.qtd * p.preco) : '—'}</div>
       <button class="po-del" onclick="alternarPendPO(${i})">${p.incluir ? '✕' : '＋'}</button>
@@ -1704,7 +1704,7 @@ function renderPOEdit() {
 
 function mudarLinhaPO(i, campo, valor) {
   const l = state.poAtual.linhas[i];
-  l[campo] = parseFloat(valor) || 0;
+  l[campo] = numBR(valor) || 0;
   renderPOEdit();
 }
 function alternarLinhaPO(i) {
@@ -1712,7 +1712,7 @@ function alternarLinhaPO(i) {
   renderPOEdit();
 }
 function mudarPendPO(i, campo, valor) {
-  state.poAtual.pendencias[i][campo] = parseFloat(valor) || 0;
+  state.poAtual.pendencias[i][campo] = numBR(valor) || 0;
   renderPOEdit();
 }
 function alternarPendPO(i) {
@@ -2688,7 +2688,7 @@ function abrirIF(ifId, itemIdNovo) {
     <div class="form-row col2 mt-2">
       <div>
         <label class="field-label">Preço unitário (R$)</label>
-        <input class="input" type="number" step="0.01" min="0" id="if-preco" value="${op?.preco ?? ''}">
+        <input class="input" type="text" inputmode="decimal" id="if-preco" value="${op?.preco ?? ''}">
       </div>
       <div>
         <label class="field-label">Prazo de entrega (dias)</label>
@@ -2728,10 +2728,7 @@ function abrirIF(ifId, itemIdNovo) {
 
 async function salvarIF() {
   const a = state.ifAtual;
-  const num = id => {
-    const v = document.getElementById(id).value.trim();
-    return v === '' ? null : parseFloat(v);
-  };
+  const num = id => numBR(document.getElementById(id).value);
   const txt = id => document.getElementById(id).value.trim() || null;
 
   const payload = {
@@ -2975,8 +2972,7 @@ async function salvarFornecedor() {
       return v === '' ? null : (parseInt(v, 10) || 0);
     })(),
     faturamento_minimo: (() => {
-      const v = document.getElementById('fm-fat-min').value.trim();
-      return v === '' ? null : (parseFloat(v.replace(',', '.')) || 0);
+      return numBR(document.getElementById('fm-fat-min').value);
     })(),
     // NULL não é "não cobra": é "ninguém perguntou ainda".
     cobra_frete: (() => {
@@ -3204,7 +3200,7 @@ function renderCotacoes() {
           </div>
           ${fechada
             ? `<div class="${ehMenor ? 'cot-melhor' : ''}">${p != null ? fmtMoeda(p) : '<span class="cot-sem">sem resposta</span>'}</div>`
-            : `<input class="cot-inp" type="number" step="0.01" min="0" placeholder="preço"
+            : `<input class="cot-inp" type="text" inputmode="decimal" placeholder="preço"
                  value="${p ?? ''}" onchange="salvarRespostaCotacao('${f.id}','preco_unitario',this.value)">`}
           ${fechada ? `<div>${f.prazo_entrega_dias ?? '—'}d</div>`
             : `<input class="cot-inp" type="number" step="1" min="0" placeholder="prazo"
@@ -3297,7 +3293,7 @@ function abrirNovaCotacao() {
 
     <div class="form-row col2 mt-3">
       <div><label class="field-label">Quantidade de referência</label>
-        <input class="input" id="nc-qtd" type="number" step="0.001" min="0" placeholder="opcional"></div>
+        <input class="input" id="nc-qtd" type="text" inputmode="decimal" placeholder="opcional"></div>
       <div><label class="field-label">Responder até</label>
         <input class="input" id="nc-prazo" type="date" value="${isoDate(prazo)}"></div>
     </div>
@@ -3356,7 +3352,7 @@ async function criarCotacao() {
   const btn = document.getElementById('btnCriarCotacao');
   btn.disabled = true; btn.textContent = 'Criando...';
   try {
-    const qtd = parseFloat(document.getElementById('nc-qtd').value);
+    const qtd = numBR(document.getElementById('nc-qtd').value);
     const { data: cot, error } = await inserirIdempotente(sb, 'cotacoes', {
       item_id: _cotItem.id,
       quantidade: isNaN(qtd) || qtd <= 0 ? null : qtd,
@@ -3393,7 +3389,7 @@ async function salvarRespostaCotacao(linhaId, campo, valor) {
     if (valor && dataIncompleta(valor)) return;
     patch[campo] = valor || null;
   } else {
-    const n = parseFloat(String(valor).replace(',', '.'));
+    const n = numBR(valor);
     patch[campo] = isNaN(n) || n < 0 ? null : n;
   }
   // Preço preenchido = o fornecedor respondeu. Carimba a data sozinho: pedir

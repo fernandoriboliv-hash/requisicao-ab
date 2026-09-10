@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609101035">
+<link rel="stylesheet" href="style.css?v=202609101455">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609101035"></script>
+<script src="config.js?v=202609101455"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -641,8 +641,12 @@
           <button class="btn btn-secondary" onclick="toggleForm('formCatalogo')">Cancelar</button>
         </div>
       </div>
-      <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-        <input class="input" id="cat-busca" placeholder="Buscar item..." oninput="renderCatalogoTable()">
+      <!-- Contadores: cada um é um atalho para o filtro correspondente.
+           Servem de painel de progresso da faxina do catálogo. -->
+      <div class="cat-contadores" id="catContadores"></div>
+
+      <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <input class="input" id="cat-busca" placeholder="Buscar item..." oninput="renderCatalogoTable()" style="min-width:180px">
         <select class="select" id="cat-cat-filtro" onchange="renderCatalogoTable()" style="max-width:180px">
           <option value="">Todas as categorias</option>
           <option value="proteina">Proteína</option>
@@ -650,17 +654,55 @@
           <option value="hortifruti">Hortifruti</option>
           <option value="diversos">Diversos</option>
         </select>
-        <select class="select" id="cat-req-filtro" onchange="renderCatalogoTable()" style="max-width:220px">
-          <option value="">Requisição: todos</option>
-          <option value="revisar">⚠ Pendentes de revisão</option>
-          <option value="sim">Só os da requisição</option>
-          <option value="nao">Só os fora da requisição</option>
-          <option value="sem_curto">Sem nome de cozinha</option>
-          <option value="sem_aprov">Sem aproveitamento</option>
-          <option value="so_req">Só requisição (fora das compras)</option>
-          <option value="na_compra">Aparecem na lista de compras</option>
-          <option value="transformado">Transformados pela Comissaria</option>
+        <select class="select" id="cat-req-filtro" onchange="renderCatalogoTable()" style="max-width:250px">
+          <option value="">Todos os itens</option>
+          <optgroup label="Em qual lista está">
+            <option value="na_compra">Na lista de compras</option>
+            <option value="transformado">Fora da compra (transformado)</option>
+            <option value="sim">Na lista de requisição</option>
+            <option value="nao">Fora da requisição</option>
+            <option value="so_req">Só requisição (fora das compras)</option>
+            <option value="no_inv">No inventário</option>
+            <option value="no_chk">No checklist da Comissaria</option>
+          </optgroup>
+          <optgroup label="O que está faltando">
+            <option value="revisar">⚠ Pendentes de revisão</option>
+            <option value="sem_subgrupo">Sem subgrupo</option>
+            <option value="sem_curto">Sem nome de cozinha</option>
+            <option value="sem_inv_nome">Sem nome de inventário</option>
+            <option value="transf_sem_origem">Transformado sem item de origem</option>
+            <option value="sem_aprov">Sem aproveitamento</option>
+            <option value="inv_sem_volta">No inventário sem saber voltar ao comprado</option>
+            <option value="sem_forn">Sem fornecedor</option>
+            <option value="repetido">Nome repetido no catálogo</option>
+          </optgroup>
         </select>
+        <button class="btn btn-sm btn-secondary" onclick="limparFiltrosCatalogo()">Limpar filtros</button>
+      </div>
+
+      <!-- Barra de ação em massa: só aparece com item marcado. -->
+      <div class="cat-massa" id="catMassa" style="display:none">
+        <span class="cat-massa-conta" id="catMassaConta"></span>
+        <select class="select" id="cat-massa-acao" style="max-width:280px">
+          <option value="">Escolha o que fazer...</option>
+          <optgroup label="Listas">
+            <option value="compra:1">Pôr na lista de compras</option>
+            <option value="compra:0">Tirar da lista de compras</option>
+            <option value="req:1">Pôr na lista de requisição</option>
+            <option value="req:0">Tirar da lista de requisição</option>
+            <option value="chk:1">Pôr no checklist da Comissaria</option>
+            <option value="chk:0">Tirar do checklist da Comissaria</option>
+            <option value="inv:1">Contar no inventário</option>
+            <option value="inv:0">Não contar no inventário</option>
+          </optgroup>
+          <optgroup label="Cadastro">
+            <option value="subgrupo">Definir o subgrupo...</option>
+            <option value="categoria">Trocar a categoria...</option>
+          </optgroup>
+        </select>
+        <button class="btn btn-sm btn-gold" onclick="aplicarMassa()">Aplicar</button>
+        <button class="btn btn-sm btn-secondary" onclick="limparSelecaoCatalogo()">Desmarcar</button>
+        <span class="cat-massa-desfazer" id="catMassaDesfazer"></span>
       </div>
       <div class="aviso aviso-info" id="cat-aviso-revisar" style="display:none"></div>
       <div id="catalogoContainer"><div class="loading-text">Carregando...</div></div>
@@ -2435,6 +2477,24 @@ function renderCatalogoTable() {
   // Para varrer a lista de compras inteira e tirar o que nao deveria estar la.
   if (rf === 'na_compra')     lista = lista.filter(i => ehCompravel(i));
   if (rf === 'transformado')  lista = lista.filter(i => !ehCompravel(i));
+  if (rf === 'no_inv')        lista = lista.filter(i => i.inventario);
+  if (rf === 'no_chk')        lista = lista.filter(i => i.no_checklist_estoque);
+  // "O que esta faltando": e por estes filtros que a faxina do catalogo
+  // deixa de ser invisivel.
+  if (rf === 'sem_subgrupo')  lista = lista.filter(i => !i.subcategoria);
+  if (rf === 'sem_inv_nome')  lista = lista.filter(i => i.inventario && !i.nome_inventario);
+  if (rf === 'transf_sem_origem') lista = lista.filter(i => !ehCompravel(i) && !i.item_origem_id);
+  if (rf === 'inv_sem_volta') lista = lista.filter(i =>
+    i.inventario && !ehCompravel(i) && (!i.item_origem_id || !i.aproveitamento_pct));
+  if (rf === 'sem_forn')      lista = lista.filter(i =>
+    !(i.fornecedor_principal || '').trim() && !(state.precosMap && state.precosMap[i.id]));
+  if (rf === 'repetido') {
+    const conta = {};
+    state.catalogo.filter(i => i.ativo).forEach(i => {
+      const k = _catChave(i.nome); conta[k] = (conta[k] || 0) + 1;
+    });
+    lista = lista.filter(i => i.ativo && conta[_catChave(i.nome)] > 1);
+  }
   if (q) lista = lista.filter(i => itemAtendeBusca(i, q)
     || (i.nome_curto && itemCasaBusca(i.nome_curto, q)));
   state.catalogoLista = lista;
@@ -2453,13 +2513,18 @@ function renderCatalogoTable() {
       na coluna <strong>Na requisição</strong>.`;
   }
 
+  renderContadoresCatalogo();
+  atualizarBarraMassa();
+
   const cont = document.getElementById('catalogoContainer');
   if (lista.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum item.</div>'; return; }
   const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
   const comPreco = lista.filter(i => state.precosMap && state.precosMap[i.id]).length;
   document.getElementById('catCount').textContent = `${lista.length} itens · ${comPreco} com preço`;
+  const todosMarcados = lista.length > 0 && lista.every(i => state.catSelecao.has(i.id));
   cont.innerHTML = `<table class="data-table tabela-cards">
-    <thead><tr><th>Nome</th><th class="center" title="Aparece na lista de requisição do cozinheiro. Não afeta a lista de compras.">Na requisição</th><th class="center" title="Aparece em Solicitar Compra. Desmarque o que a Comissaria produz ou transforma — esse item só existe depois de processado, ninguém compra.">Na compra</th><th>Categoria</th><th>Unid.</th><th class="center" title="Pacote = embalagem de peso variável. O PDV pede em pacotes e a Comissaria pesa na separação.">Pede por</th><th>Fornecedor</th><th class="center">Inventário</th><th class="center" title="Aparece por padrão no checklist de contagem da Comissaria">No checklist?</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
+    <thead><tr><th class="center th-sel"><input type="checkbox" ${todosMarcados ? 'checked' : ''}
+        onchange="marcarTodosFiltrados(this.checked)" title="Marcar todos os itens filtrados"></th><th>Nome</th><th class="center" title="Em quais listas o item aparece">Listas</th><th>Categoria</th><th>Subgrupo</th><th>Unid.</th><th class="center" title="Pacote = embalagem de peso variável. O PDV pede em pacotes e a Comissaria pesa na separação.">Pede por</th><th>Fornecedor</th><th>Preço atual</th><th class="center">Média/dia</th><th>Status</th><th class="center">Ações</th></tr></thead>
     <tbody>${lista.map(it => {
       const p = state.precosMap ? state.precosMap[it.id] : null;
       const precoTxt = p
@@ -2467,8 +2532,11 @@ function renderCatalogoTable() {
         : `<span class="text-muted">sem preço</span>`;
       const noChk = it.no_checklist_estoque === true;
       const req = ehDeRequisicao(it);
-      const clsLinha = it.req_revisar ? 'linha-revisar' : '';
+      const marcado = state.catSelecao.has(it.id);
+      const clsLinha = (it.req_revisar ? 'linha-revisar' : '') + (marcado ? ' linha-marcada' : '');
       return `<tr class="${clsLinha}">
+      <td class="center td-sel"><input type="checkbox" ${marcado ? 'checked' : ''}
+             onchange="marcarItem('${it.id}',this.checked)"></td>
       <td class="td-titulo">${escapeHtml(it.nome)}${
         !ehCompravel(it) ? ` <span class="badge badge-muted" style="font-size:9px"
           title="Só requisição: ${it.producao_propria ? 'é produção própria' : 'é transformado na cozinha'}, então não aparece em Solicitar Compra">SÓ REQUISIÇÃO</span>` : ''}${
@@ -2477,17 +2545,21 @@ function renderCatalogoTable() {
         it.req_revisar ? ' <span class="badge badge-orange" style="font-size:9px">REVISAR</span>' : ''}${
         it.nome_curto && it.nome_curto !== it.nome ? `<br><span class="nome-compra">requisição: ${escapeHtml(it.nome_curto)}</span>` : ''}${
         it.nome_inventario && it.nome_inventario !== it.nome ? `<br><span class="nome-compra">inventário: ${escapeHtml(it.nome_inventario)}</span>` : ''}</td>
-      <td class="center" data-label="Na requisição">
-        <input type="checkbox" ${req ? 'checked' : ''} onchange="setReqAtivo('${it.id}',this.checked)"
-               title="Aparece na lista de requisição do cozinheiro">
-        ${it.req_revisar ? `<br><button class="btn btn-sm btn-secondary" style="font-size:10px;padding:2px 6px;margin-top:4px"
+      <td class="td-listas" data-label="Listas">
+        <label title="Aparece em Solicitar Compra"><input type="checkbox" ${ehCompravel(it) ? 'checked' : ''}
+               onchange="setNaCompra('${it.id}',this.checked)"> compra</label>
+        <label title="Aparece na lista de requisição do cozinheiro"><input type="checkbox" ${req ? 'checked' : ''}
+               onchange="setReqAtivo('${it.id}',this.checked)"> requisição</label>
+        <label title="Aparece por padrão no checklist de contagem da Comissaria"><input type="checkbox" ${noChk ? 'checked' : ''}
+               onchange="toggleNoChecklist('${it.id}',this.checked)"> checklist</label>
+        <label title="É contado no inventário do mês"><input type="checkbox" ${it.inventario ? 'checked' : ''}
+               onchange="setInventario('${it.id}',this.checked)"> inventário</label>
+        ${it.req_revisar ? `<button class="btn btn-sm btn-secondary" style="font-size:10px;padding:2px 6px;grid-column:1/-1"
                onclick="resolverRevisao('${it.id}')">É este</button>` : ''}
       </td>
-      <td class="center" data-label="Na compra">
-        <input type="checkbox" ${ehCompravel(it) ? 'checked' : ''} onchange="setNaCompra('${it.id}',this.checked)"
-               title="Aparece em Solicitar Compra">
-      </td>
       <td data-label="Categoria"><span class="cat-pill cat-${it.categoria}">${catLabels[it.categoria]||it.categoria}</span></td>
+      <td class="text-muted" data-label="Subgrupo" style="font-size:11px">${
+        it.subcategoria ? escapeHtml(it.subcategoria) : '<span class="text-orange">—</span>'}</td>
       <td data-label="Unidade">${it.unidade}</td>
       <td class="center" data-label="Pede por">
         <select class="select" style="font-size:11px;padding:4px" onchange="setPedePor('${it.id}',this.value)">
@@ -2500,8 +2572,6 @@ function renderCatalogoTable() {
           title="Peso médio de UM pacote. Deixe em branco — o sistema aprende na primeira pesagem.">` : ''}
       </td>
       <td class="text-muted" data-label="Fornecedor">${escapeHtml(p?.fornecedor || it.fornecedor_principal||'—')}</td>
-      <td class="center" data-label="Inventário">${it.inventario ? '<span class="text-green">Sim</span>' : '<span class="text-muted">—</span>'}</td>
-      <td class="center" data-label="No checklist?"><input type="checkbox" ${noChk?'checked':''} onchange="toggleNoChecklist('${it.id}',this.checked)" title="Marcar/desmarcar do checklist da Comissaria"></td>
       <td data-label="Preço atual">${precoTxt} <button class="btn btn-sm btn-outline" style="margin-left:6px" onclick="editarPreco('${it.id}')">${p ? '✎' : '+ Definir'}</button></td>
       <td class="center num" data-label="Média/dia">${it.media_diaria ? parseFloat(it.media_diaria).toFixed(1) : '—'}</td>
       <td data-label="Status"><span class="badge ${it.ativo?'badge-green':'badge-muted'}">${it.ativo?'Ativo':'Inativo'}</span></td>
@@ -2547,6 +2617,230 @@ async function setNaCompra(id, val) {
   showToast(val
     ? `"${data.nome}" voltou para a lista de compras.`
     : `"${data.nome}" saiu da lista de compras.`, 'success');
+}
+
+// =====================================================================
+// CATÁLOGO — SELEÇÃO, CONTADORES E AÇÃO EM MASSA
+// =====================================================================
+// Editar 700 itens de um em um pelo modal era o que empurrava o trabalho
+// para o Excel. O padrão aqui é o dos PIM: filtra, marca, aplica ao
+// conjunto — e a confirmação diz o número, porque ação em massa errada é
+// o risco real desta tela.
+
+state.catSelecao = new Set();
+let _catUltimaAcao = null;   // para o desfazer
+
+// Chave de comparação de nome: ignora acento, caixa e espaço repetido. É
+// mais frouxa que a UNIQUE do banco, que só pega o nome idêntico — foi
+// assim que MINI AGRIAO e MINI AGRIÃO passaram os dois.
+function _catChave(nome) {
+  return String(nome || '').toLowerCase().normalize('NFD')
+    .replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function marcarItem(id, val) {
+  if (val) state.catSelecao.add(id); else state.catSelecao.delete(id);
+  atualizarBarraMassa();
+}
+
+function marcarTodosFiltrados(val) {
+  (state.catalogoLista || []).forEach(i => {
+    if (val) state.catSelecao.add(i.id); else state.catSelecao.delete(i.id);
+  });
+  renderCatalogoTable();
+}
+
+function limparSelecaoCatalogo() {
+  state.catSelecao.clear();
+  renderCatalogoTable();
+}
+
+function limparFiltrosCatalogo() {
+  document.getElementById('cat-busca').value = '';
+  document.getElementById('cat-cat-filtro').value = '';
+  document.getElementById('cat-req-filtro').value = '';
+  renderCatalogoTable();
+}
+
+function atualizarBarraMassa() {
+  const barra = document.getElementById('catMassa');
+  if (!barra) return;
+  const n = state.catSelecao.size;
+  barra.style.display = n ? '' : 'none';
+  document.getElementById('catMassaConta').textContent =
+    n === 1 ? '1 item marcado' : n + ' itens marcados';
+}
+
+// Contadores clicáveis: o número e o atalho para o filtro que o produz.
+function renderContadoresCatalogo() {
+  const el = document.getElementById('catContadores');
+  if (!el) return;
+  const ativos = (state.catalogo || []).filter(i => i.ativo);
+  const conta = {};
+  ativos.forEach(i => { const k = _catChave(i.nome); conta[k] = (conta[k] || 0) + 1; });
+
+  const grupos = [
+    ['', 'ativos', ativos.length, ''],
+    ['na_compra', 'na compra', ativos.filter(ehCompravel).length, ''],
+    ['sim', 'na requisição', ativos.filter(ehDeRequisicao).length, ''],
+    ['no_inv', 'no inventário', ativos.filter(i => i.inventario).length, ''],
+    ['sem_subgrupo', 'sem subgrupo', ativos.filter(i => !i.subcategoria).length, 'falta'],
+    ['transf_sem_origem', 'transformado sem origem',
+      ativos.filter(i => !ehCompravel(i) && !i.item_origem_id).length, 'falta'],
+    ['inv_sem_volta', 'no inventário sem voltar ao comprado',
+      ativos.filter(i => i.inventario && !ehCompravel(i) && (!i.item_origem_id || !i.aproveitamento_pct)).length, 'falta'],
+    ['repetido', 'nome repetido',
+      ativos.filter(i => conta[_catChave(i.nome)] > 1).length, 'falta'],
+  ];
+  const atual = document.getElementById('cat-req-filtro')?.value || '';
+  el.innerHTML = grupos.filter(g => g[2] > 0 || g[0] === '').map(g => {
+    const [f, rot, n, cls] = g;
+    return '<button class="cat-contador ' + cls + (atual === f ? ' on' : '') + '"'
+      + ' onclick="filtrarPorContador(\'' + f + '\')">'
+      + '<strong>' + n + '</strong> ' + rot + '</button>';
+  }).join('');
+}
+
+function filtrarPorContador(f) {
+  const sel = document.getElementById('cat-req-filtro');
+  sel.value = sel.value === f ? '' : f;
+  renderCatalogoTable();
+}
+
+// ── ação em massa ────────────────────────────────────────────────
+const _MASSA_PATCH = {
+  'compra:1': { tipo_aquisicao: 'comprado', producao_propria: false },
+  'compra:0': { tipo_aquisicao: 'transformado' },
+  'req:1':    { req_ativo: true },
+  'req:0':    { req_ativo: false },
+  'chk:1':    { no_checklist_estoque: true },
+  'chk:0':    { no_checklist_estoque: false },
+  'inv:1':    { inventario: true },
+  'inv:0':    { inventario: false },
+};
+const _MASSA_ROTULO = {
+  'compra:1': 'pôr na lista de compras',   'compra:0': 'tirar da lista de compras',
+  'req:1': 'pôr na lista de requisição',   'req:0': 'tirar da lista de requisição',
+  'chk:1': 'pôr no checklist',             'chk:0': 'tirar do checklist',
+  'inv:1': 'contar no inventário',         'inv:0': 'não contar no inventário',
+};
+
+async function aplicarMassa() {
+  const acao = document.getElementById('cat-massa-acao').value;
+  const ids = [...state.catSelecao];
+  if (!acao) { showToast('Escolha o que fazer com os itens marcados.', 'error'); return; }
+  if (!ids.length) { showToast('Nenhum item marcado.', 'error'); return; }
+
+  let patch = _MASSA_PATCH[acao];
+  let rotulo = _MASSA_ROTULO[acao];
+
+  if (acao === 'subgrupo') {
+    const cats = [...new Set(ids.map(id => state.catalogo.find(i => i.id === id)?.categoria))];
+    const sugestoes = [...new Set(state.catalogo
+      .filter(i => cats.includes(i.categoria) && i.subcategoria)
+      .map(i => String(i.subcategoria).trim()))].sort();
+    const v = prompt('Subgrupo para os ' + ids.length + ' itens marcados.\n\n'
+      + 'Já existem: ' + (sugestoes.join(' · ') || '(nenhum)'), '');
+    if (v === null) return;
+    patch = { subcategoria: v.trim() || null };
+    rotulo = v.trim() ? 'pôr no subgrupo "' + v.trim() + '"' : 'tirar o subgrupo';
+  }
+
+  if (acao === 'categoria') {
+    const v = prompt('Categoria para os ' + ids.length + ' itens marcados:\n'
+      + 'proteina / laticinios / hortifruti / diversos', '');
+    if (v === null) return;
+    const c = v.trim().toLowerCase();
+    if (!['proteina', 'laticinios', 'hortifruti', 'diversos'].includes(c)) {
+      showToast('Categoria inválida. Use proteina, laticinios, hortifruti ou diversos.', 'error');
+      return;
+    }
+    patch = { categoria: c };
+    rotulo = 'trocar a categoria para ' + c;
+  }
+
+  if (!patch) return;
+  if (!confirm('Confirma ' + rotulo + ' em ' + ids.length
+      + (ids.length === 1 ? ' item?' : ' itens?'))) return;
+
+  // Guarda o estado anterior campo a campo, para o desfazer devolver
+  // exatamente o que era — inclusive quem já estava do jeito novo.
+  const campos = Object.keys(patch);
+  const antes = ids.map(id => {
+    const it = state.catalogo.find(x => x.id === id) || {};
+    const g = { id };
+    campos.forEach(c => { g[c] = it[c] ?? null; });
+    return g;
+  });
+
+  const btn = document.querySelector('#catMassa .btn-gold');
+  if (btn) { btn.disabled = true; btn.textContent = 'Aplicando...'; }
+  const falhas = await _gravarMassa(ids, patch);
+  if (btn) { btn.disabled = false; btn.textContent = 'Aplicar'; }
+
+  if (falhas.length === ids.length) {
+    showToast('Não consegui alterar nenhum item: ' + falhas[0].erro, 'error');
+    return;
+  }
+  _catUltimaAcao = { antes, campos, rotulo };
+  document.getElementById('catMassaDesfazer').innerHTML =
+    '<button class="btn btn-sm btn-outline" onclick="desfazerMassa()">Desfazer</button>';
+
+  state.catSelecao.clear();
+  document.getElementById('cat-massa-acao').value = '';
+  renderCatalogoTable();
+  showToast(falhas.length
+    ? (ids.length - falhas.length) + ' itens alterados, ' + falhas.length + ' falharam.'
+    : ids.length + (ids.length === 1 ? ' item alterado.' : ' itens alterados.'),
+    falhas.length ? 'warn' : 'success');
+}
+
+async function _gravarMassa(ids, patch) {
+  const falhas = [];
+  for (const id of ids) {
+    const { data, error } = await sb.from('itens').update(patch).eq('id', id).select().maybeSingle();
+    if (error)      falhas.push({ id, erro: error.message });
+    else if (!data) falhas.push({ id, erro: 'sem permissão' });
+    else {
+      const n = state.catalogo.findIndex(x => x.id === id);
+      if (n >= 0) state.catalogo[n] = { ...state.catalogo[n], ...data };
+    }
+  }
+  return falhas;
+}
+
+async function desfazerMassa() {
+  if (!_catUltimaAcao) return;
+  const { antes, campos, rotulo } = _catUltimaAcao;
+  if (!confirm('Desfazer "' + rotulo + '" nos ' + antes.length + ' itens?')) return;
+  let ok = 0;
+  for (const g of antes) {
+    const patch = {};
+    campos.forEach(c => { patch[c] = g[c]; });
+    const { data } = await sb.from('itens').update(patch).eq('id', g.id).select().maybeSingle();
+    if (data) {
+      ok++;
+      const n = state.catalogo.findIndex(x => x.id === g.id);
+      if (n >= 0) state.catalogo[n] = { ...state.catalogo[n], ...data };
+    }
+  }
+  _catUltimaAcao = null;
+  document.getElementById('catMassaDesfazer').innerHTML = '';
+  renderCatalogoTable();
+  showToast(ok + ' de ' + antes.length + ' itens voltaram ao que eram.', 'success');
+}
+
+// Inventário na linha — as outras três listas já tinham função própria.
+async function setInventario(id, val) {
+  const { data, error } = await sb.from('itens')
+    .update({ inventario: val }).eq('id', id).select().maybeSingle();
+  if (error) { showToast(msgErroPacote(error), 'error'); return; }
+  if (!data) { showToast('Seu perfil não tem permissão para editar o catálogo.', 'error'); return; }
+  const it = state.catalogo.find(x => x.id === id);
+  if (it) it.inventario = val;
+  renderCatalogoTable();
+  showToast(val ? '"' + data.nome + '" passa a ser contado no inventário.'
+                : '"' + data.nome + '" saiu do inventário.', 'success');
 }
 
 async function setReqAtivo(id, val) {

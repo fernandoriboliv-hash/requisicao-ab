@@ -2756,3 +2756,23 @@ function blocoForaDaCategoria(fora, quantosDentro, cat, renderLinha) {
       : 'Nada em ' + _escEd(_CAT_ITEM[cat] || cat) + '. Achei em outras categorias:'}</div>
     ${blocoPorCategoria(fora, renderLinha)}`;
 }
+
+// =====================================================================
+// NÚMERO DIGITADO EM PORTUGUÊS
+// =====================================================================
+// `<input type="number">` recusa vírgula: quem digita "1,8" tem o campo
+// recusado pelo navegador ou lido como 1. Nas telas o padrão passa a ser
+// `type="text" inputmode="decimal"` — o teclado do celular continua
+// numérico — e a leitura vem por aqui.
+//
+// Devolve null para vazio e para lixo, nunca NaN: NaN escapava para o
+// banco como null silencioso ou quebrava a conta na tela.
+function numBR(v) {
+  if (v === null || v === undefined) return null;
+  const t = String(v).trim();
+  if (t === '') return null;
+  // "1.234,56" (formato pt-BR) e "1234.56" (o que o input devolve)
+  const limpo = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t;
+  const n = parseFloat(limpo);
+  return isFinite(n) ? n : null;
+}
