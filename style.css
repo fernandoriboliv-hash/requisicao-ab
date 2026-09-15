@@ -1582,6 +1582,49 @@ body.has-cart .main-with-sidebar { padding-right: 340px; }
 .ft-del:hover { color: var(--error); border-color: var(--error); }
 
 .ft-add { position: relative; margin-top: 10px; }
+
+/* Linha em aberto (sem item) e observação da linha — fichas da Comissaria,
+   migration 69. A linha aberta tem de ser reconhecível de longe: é o que
+   ainda falta validar. */
+.ft-linha-nome { flex-wrap: wrap; }
+.ft-linha-obs { flex-basis: 100%; font-size: 11px; color: var(--muted); font-style: italic; line-height: 1.35; }
+.ft-linha-aberta { border-left: 2px dashed var(--orange); }
+.ft-tag-aberto { color: var(--orange); border-color: rgba(224,140,62,.45); background: rgba(224,140,62,.08); }
+.ft-add-aberto { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.ft-add-aberto .input { flex: 1; min-width: 220px; }
+.ft-produto-sel {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--panel); border: 1px solid var(--border-subtle); padding: 8px 10px; font-size: 14px;
+}
+.ft-custo {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline;
+  margin-top: 8px; padding: 10px 12px; font-size: 13px;
+  background: rgba(184,150,62,.07); border: 1px solid rgba(184,150,62,.25);
+}
+.ft-custo-falta { font-size: 11.5px; color: var(--orange); }
+
+/* Ficha em leitura e histórico de versões (migration 71). A leitura não
+   tem campo nenhum: abrir a ficha não pode alterar a ficha. */
+.ft-ver-titulo { font-family: 'Cormorant Garamond', serif; font-size: 26px; line-height: 1.2; margin: 4px 0 8px; }
+.ft-ver-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; color: var(--muted); }
+.ft-ver-meta strong { color: var(--text); font-weight: 500; }
+.ft-ver-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 4px; }
+.ft-ver-texto { font-size: 13.5px; line-height: 1.55; background: var(--panel); border: 1px solid var(--border-subtle); padding: 10px 12px; }
+.ft-ver-tabela tr.ft-linha-aberta td:first-child { border-left: 2px dashed var(--orange); }
+.ft-modo-edicao { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--orange); }
+.ft-hist { display: flex; flex-direction: column; gap: 2px; }
+.ft-hist-linha { background: var(--panel); padding: 10px 12px; border: 1px solid var(--border-subtle); }
+.ft-hist-cab { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13px; }
+.ft-hist-cab .btn { margin-left: auto; }
+.ft-hist-resumo { font-size: 12.5px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+
+/* Ingredientes carregados na linha da requisição */
+.req-insumos { margin-top: 14px; }
+.req-insumos summary { cursor: pointer; font-size: 13px; padding: 8px 0; color: var(--text); }
+.req-insumos summary .text-muted { font-size: 11.5px; }
+.req-insumos table { margin-top: 4px; }
+.ficha-tag { font-size: 10px; letter-spacing: .5px; color: var(--gold); white-space: nowrap; }
+.ficha-tag.parcial { color: var(--orange); }
 .ft-sug {
   display: flex; flex-direction: column;
   max-height: 260px; overflow-y: auto; margin-top: 4px;

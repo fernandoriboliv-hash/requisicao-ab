@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609101455">
+<link rel="stylesheet" href="style.css?v=202609151104">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609101455"></script>
+<script src="config.js?v=202609151104"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -1169,20 +1169,26 @@ async function gerarRel() {
 
   if (fonte === 'ambos' || fonte === 'req') {
     let q = sb.from('requisicoes')
-      .select('id, data_competencia, status, pdv_id, requisicao_itens(item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, pacotes_entregues, pedido_por, peso_medio_pacote, itens(fornecedor_principal))')
+      .select('id, data_competencia, status, pdv_id, requisicao_itens(id, item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, pacotes_entregues, pedido_por, peso_medio_pacote, itens(fornecedor_principal))')
       .eq('status', 'entregue')
       .gte('data_competencia', de)
       .lte('data_competencia', ate);
     if (pdvIds) q = q.in('pdv_id', pdvIds);
     const { data, error } = await q;
     if (error) { showToast('Erro (requisições): ' + error.message, 'error'); cont.innerHTML = ''; return; }
+    // Produto da Comissaria com ficha: o custo é o dos ingredientes que a
+    // receita consumiu (migration 69), não um preço do produto pronto. Vem
+    // só o valor — a receita não é do PDV deste chef (migration 71).
+    const custos = await custosPelaFicha(sb,
+      (data || []).flatMap(r => (r.requisicao_itens || []).map(it => it.id)));
     (data || []).forEach(r => (r.requisicao_itens || []).forEach(it => {
       if (cat && it.item_categoria !== cat) return;
       // Ver o comentário em qtdInventario(): pacote entra em peso, e falta
       // de peso entra como zero com aviso — nunca como contagem de pacotes.
       const inv = qtdInventario(it);
+      const ficha = custos[it.id];
       rows.push({ fonte:'req', itemId:it.item_id, nome:it.item_nome, cat:it.item_categoria, unid:inv.unidade,
-                  qty: inv.qtd, semPeso: inv.semPeso,
+                  qty: inv.qtd, semPeso: inv.semPeso, ficha,
                   forn: it.itens?.fornecedor_principal || '—' });
     }));
   }
@@ -1192,15 +1198,26 @@ async function gerarRel() {
   rows.forEach(r => {
     const k = `${r.nome}||${r.cat}||${r.unid || ''}`;
     if (!acc[k]) acc[k] = { itemId:r.itemId, nome:r.nome, cat:r.cat, unid:r.unid, forn:r.forn,
-                            qtyCompra:0, qtyReq:0, qtyTotal:0, semPeso:0 };
+                            qtyCompra:0, qtyReq:0, qtyTotal:0, semPeso:0,
+                            qtyFicha:0, valorFicha:0, fichaParcial:0 };
     if (r.fonte === 'compra') acc[k].qtyCompra += r.qty;
     else acc[k].qtyReq += r.qty;
     acc[k].qtyTotal += r.qty;
     if (r.semPeso) acc[k].semPeso++;
+    if (r.ficha?.temFicha) {
+      acc[k].qtyFicha += r.qty;
+      acc[k].valorFicha += r.ficha.valor;
+      acc[k].fichaParcial += r.ficha.semPreco + r.ficha.abertos;
+    }
   });
   const itens = Object.values(acc).map(x => {
     const preco = state.precos[x.itemId] || 0;
-    return { ...x, preco, valorTotal: preco * x.qtyTotal };
+    // O que veio pela ficha soma o custo dos ingredientes; o resto, se houver
+    // (uma compra do mesmo item, por exemplo), continua preço × quantidade.
+    const valorTotal = preco * (x.qtyTotal - x.qtyFicha) + x.valorFicha;
+    const porFicha = x.qtyFicha > 0;
+    return { ...x, preco: porFicha && x.qtyTotal > 0 ? valorTotal / x.qtyTotal : preco,
+             valorTotal, porFicha };
   }).sort((a,b) => b.valorTotal - a.valorTotal);
 
   relCache = { itens, de, ate, fonte, cat, pdvIds };
@@ -1229,7 +1246,8 @@ function renderRelKPIs(itens) {
     <div class="stat-card">
       <div class="stat-label">Valor total estimado</div>
       <div class="stat-val green">${fmtBRL(valorTotal)}</div>
-      <div class="stat-sub">preço vigente × qtd</div>
+      <div class="stat-sub">preço vigente × qtd${
+        itens.some(x => x.porFicha) ? ' · produtos da Comissaria pela ficha' : ''}</div>
     </div>
   `;
 }
@@ -1267,8 +1285,11 @@ function renderRelTabela(itens, fonte) {
           ${showR ? `<td class="num" data-label="Requisitada">${x.qtyReq > 0 ? fmtQty(x.qtyReq) : '—'}</td>` : ''}
           <td class="num" style="font-weight:500" data-label="Total">${fmtQty(x.qtyTotal)}${
             x.semPeso ? `<br><span class="text-error" style="font-size:11px">${x.semPeso} entrega(s) sem peso</span>` : ''}</td>
-          <td class="num text-muted" data-label="Preço un.">${x.preco > 0 ? fmtBRL(x.preco) : '—'}</td>
-          <td class="num" style="font-weight:500" data-label="Valor total">${x.preco > 0 ? fmtBRL(x.valorTotal) : '—'}</td>
+          <td class="num text-muted" data-label="Preço un.">${x.preco > 0 ? fmtBRL(x.preco) : '—'}${
+            x.porFicha ? `<br><span class="ficha-tag${x.fichaParcial ? ' parcial' : ''}" title="${
+              x.fichaParcial ? x.fichaParcial + ' ingrediente(s) sem preço ou em aberto' : 'Custo dos ingredientes da ficha técnica'}">${
+              x.fichaParcial ? 'pela ficha · parcial' : 'pela ficha'}</span>` : ''}</td>
+          <td class="num" style="font-weight:500" data-label="Valor total">${x.valorTotal > 0 ? fmtBRL(x.valorTotal) : '—'}</td>
         </tr>`).join('')}</tbody>
       </table>
     `;

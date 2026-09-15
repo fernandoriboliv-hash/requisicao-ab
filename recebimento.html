@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Recebimento — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609101455">
+<link rel="stylesheet" href="style.css?v=202609151104">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609101455"></script>
+<script src="config.js?v=202609151104"></script>
 <style>
   /* Card de PO aguardando chegada */
   .po-card {
@@ -433,7 +433,8 @@ function renderAChegar() {
       : d === 0 ? '<span class="prazo-pill prazo-hoje">chega hoje</span>'
       : `<span class="prazo-pill prazo-futuro">em ${d}d</span>`;
 
-    const nItens = (o.ordem_compra_itens || []).length;
+    // Linha cancelada pela compradora não chega — ver migration 68
+    const nItens = (o.ordem_compra_itens || []).filter(i => !i.cancelada).length;
     const parcial = o.status === 'recebida_parcial';
 
     return `
@@ -460,7 +461,9 @@ async function abrirConferencia(ordemId) {
     .eq('id', ordemId).single();
   if (error) { showToast('Erro: ' + error.message, 'error'); return; }
 
-  const itens = (ordem.ordem_compra_itens || []).sort((a, b) => a.item_nome.localeCompare(b.item_nome));
+  const itens = (ordem.ordem_compra_itens || [])
+    .filter(i => !i.cancelada)
+    .sort((a, b) => a.item_nome.localeCompare(b.item_nome));
 
   // Como cada item precisa ser conservado — define se pede temperatura
   let porItem = {};

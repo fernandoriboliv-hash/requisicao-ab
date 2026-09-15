@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprador — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609101455">
+<link rel="stylesheet" href="style.css?v=202609151104">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609101455"></script>
+<script src="config.js?v=202609151104"></script>
 <style>
   /* Bloco de um fornecedor na fila de aprovados */
   .forn-bloco {
@@ -212,6 +212,65 @@
   .po-add-linha:hover { border-color: var(--gold); background: rgba(184,150,62,0.06); }
   .po-add-mais { color: var(--gold); font-size: 17px; line-height: 1; }
 
+  /* ---- Fila por item ----
+     O modo padrão da fila. A decisão de compra é por linha de item: ela vê
+     todos os fornecedores daquele item e escolhe ali mesmo. O corte por
+     fornecedor vem depois, na hora de emitir. */
+  .modo-fila { display: flex; border: 1px solid var(--border-subtle); }
+  .modo-btn {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-family: inherit; font-size: 12px; letter-spacing: 0.5px;
+    padding: 7px 14px;
+  }
+  .modo-btn.ativo { background: rgba(184,150,62,0.15); color: var(--gold); }
+  .modo-btn + .modo-btn { border-left: 1px solid var(--border-subtle); }
+
+  .fila-sel {
+    background: var(--bg); border: 1px solid var(--border-subtle);
+    color: var(--text); font-family: inherit; font-size: 12px;
+    padding: 5px 6px; max-width: 210px; width: 100%;
+  }
+  .fila-sel.sem-opcao { color: var(--muted); font-style: italic; }
+  .tabela-item .nowrap { white-space: nowrap; }
+  .tabela-item td { vertical-align: top; }
+  .tabela-item .td-acoes { white-space: nowrap; }
+  @media (max-width: 900px) { .tabela-item colgroup { display: none; } }
+  .fila-trocado { font-size: 10.5px; color: var(--gold); letter-spacing: 0.5px; }
+  .fila-rodape {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 14px 0 4px; border-top: 1px solid var(--border-subtle); margin-top: 4px;
+  }
+  .fila-rodape .resumo { flex: 1; font-size: 12px; color: var(--muted); }
+
+  /* ---- Emitir várias ordens de uma vez ---- */
+  .lote-linha {
+    display: grid; grid-template-columns: 26px 1fr 90px 110px 130px;
+    gap: 10px; align-items: center; padding: 10px 12px; font-size: 12.5px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .lote-linha:last-child { border-bottom: none; }
+  .lote-linha.fora { opacity: 0.4; }
+  .lote-forn { color: var(--gold); }
+
+  /* ---- Lista de POs: ordenar e agrupar ---- */
+  #ordensContainer .nowrap { white-space: nowrap; }
+  .th-ord { cursor: pointer; user-select: none; white-space: nowrap; }
+  .th-ord:hover { color: var(--gold); }
+  .th-ord .seta { font-size: 9px; opacity: 0.8; }
+  .grupo-po {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    padding: 10px 12px; margin-top: 14px;
+    background: rgba(184,150,62,0.07); border-left: 2px solid var(--gold);
+  }
+  .grupo-po .titulo { color: var(--gold); font-size: 13px; letter-spacing: 0.5px; flex: 1; }
+  .grupo-po .sub { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .linha-cancelada { opacity: 0.5; }
+  .linha-cancelada .td-titulo { text-decoration: line-through; }
+  .motivo-tag {
+    font-size: 10.5px; color: var(--orange); letter-spacing: 0.5px;
+    text-decoration: none; display: inline-block;
+  }
+
   /* ---- Pendências de entrega (backorder) ---- */
   .pend-bloco {
     background: rgba(224,140,62,0.06); border: 1px solid rgba(224,140,62,0.35);
@@ -225,6 +284,9 @@
   body { padding-bottom: 60px; }
 
   @media (max-width: 900px) {
+    .lote-linha { grid-template-columns: 26px 1fr; row-gap: 4px; }
+    .lote-linha > :nth-child(n+3) { grid-column: 2 / -1; }
+    .fila-sel { max-width: none; }
     .opc-forn { grid-template-columns: 22px 1fr 90px; row-gap: 6px; }
     .opc-forn > :nth-child(n+4) { grid-column: 2 / -1; }
     .po-linha-edit {
@@ -303,6 +365,10 @@
         <label class="field-label" style="margin:0">Data de competência</label>
         <input class="input" type="date" id="f-data" onchange="carregarFila()" style="max-width:180px">
         <button class="btn btn-sm btn-secondary" onclick="carregarFila()">Atualizar</button>
+        <div class="modo-fila" style="margin-left:auto">
+          <button class="modo-btn ativo" id="modoItemBtn" onclick="setModoFila('item')">Por item</button>
+          <button class="modo-btn" id="modoFornBtn" onclick="setModoFila('fornecedor')">Por fornecedor</button>
+        </div>
       </div>
 
       <!-- Faltas do recebimento voltam para cá até serem recompradas -->
@@ -319,8 +385,8 @@
     <div class="main full">
       <div class="aviso aviso-info">
         Peça preço do mesmo item a vários fornecedores, registre as respostas conforme chegam
-        e compare lado a lado. Ao escolher o vencedor, o preço e a data entram na matriz —
-        é assim que a comparação de fornecedor deixa de ser cotação velha de planilha.
+        e compare lado a lado. <strong>Adjudicar</strong> concede a cotação ao vencedor: o preço
+        e a data entram na matriz e, se você quiser, a ordem de compra sai na hora.
         <br><strong>O sistema não envia e-mail</strong>: ele monta o texto e você copia para o seu.
       </div>
 
@@ -433,7 +499,14 @@
           <option value="recebida">Recebida</option>
           <option value="cancelada">Cancelada</option>
         </select>
-        <input class="input" id="o-busca" placeholder="Buscar por nº da PO ou fornecedor..." oninput="renderOrdens()">
+        <select class="select" id="o-agrupar" onchange="setAgruparOrdens(this.value)" style="max-width:200px">
+          <option value="">Sem agrupamento</option>
+          <option value="fornecedor">Agrupar por fornecedor</option>
+          <option value="status">Agrupar por status</option>
+          <option value="semana">Agrupar por semana de entrega</option>
+        </select>
+        <button class="btn btn-sm btn-secondary" id="btnAtraso" onclick="alternarAtraso()">Em atraso</button>
+        <input class="input" id="o-busca" placeholder="Buscar por nº da PO ou fornecedor..." oninput="renderOrdens()" style="flex:1;min-width:180px">
       </div>
       <div class="section-title">
         <span>Ordens de compra (<span id="oCount">0</span>)</span>
@@ -576,6 +649,51 @@
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="fecharModal('poModal')">Voltar</button>
       <button class="btn btn-primary" id="btnGerarPO" onclick="gerarPO()">Gerar PO</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: gerar várias ordens de uma vez ============ -->
+<div class="modal-overlay" id="loteModal">
+  <div class="modal" style="width:720px">
+    <div class="modal-header">
+      <span>Gerar as ordens da fila</span>
+      <button class="modal-close" onclick="fecharModal('loteModal')">✕</button>
+    </div>
+    <div class="modal-body" id="loteBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('loteModal')">Cancelar</button>
+      <button class="btn btn-primary" id="btnGerarLote" onclick="gerarTodasOrdens()">Gerar as ordens</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: cancelar ordem ou linha ============ -->
+<div class="modal-overlay" id="cancelModal">
+  <div class="modal" style="width:520px">
+    <div class="modal-header">
+      <span id="cancelModalTitle">Cancelar</span>
+      <button class="modal-close" onclick="fecharModal('cancelModal')">✕</button>
+    </div>
+    <div class="modal-body" id="cancelModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('cancelModal')">Voltar</button>
+      <button class="btn btn-primary" id="btnConfirmarCancel" onclick="confirmarCancelamento()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: adjudicar cotação ============ -->
+<div class="modal-overlay" id="adjModal">
+  <div class="modal" style="width:600px">
+    <div class="modal-header">
+      <span id="adjModalTitle">Adjudicar cotação</span>
+      <button class="modal-close" onclick="fecharModal('adjModal')">✕</button>
+    </div>
+    <div class="modal-body" id="adjModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('adjModal')">Voltar</button>
+      <button class="btn btn-primary" id="btnAdjudicar" onclick="adjudicarCotacao()">Adjudicar</button>
     </div>
   </div>
 </div>
@@ -761,7 +879,15 @@ const state = {
   fornecedores: [],
   precos: {},          // itemId -> preco_unitario vigente (fallback pré-migration 22)
   fila: [],            // itens aprovados sem PO
+  filaModo: 'item',    // 'item' = decide linha a linha (padrão) · 'fornecedor' = confere o corte
   ordens: [],
+  ordOrdem: { campo: 'numero', dir: 'desc' },  // clique no cabeçalho da lista de POs
+  ordAgrupar: '',      // '' | fornecedor | status | semana
+  ordAtraso: false,    // só as atrasadas
+  altCtx: null,        // de onde o modal de alternativas foi aberto
+  lote: null,          // ordens a emitir de uma vez, uma por fornecedor
+  cancelCtx: null,     // ordem ou linha aguardando motivo de cancelamento
+  adjCtx: null,        // cotação sendo adjudicada
   config: {},
   poAtual: null,       // { grupo, fornecedor, linhas } — edição em andamento
   emailAtual: null,
@@ -1257,39 +1383,43 @@ async function carregarFila() {
   renderFila();
 }
 
-// Agrupa a fila por fornecedor e, dentro dele, consolida item repetido de PDVs
-// diferentes. Com a matriz, o fornecedor de cada item é a opção primária (ou a
-// mais barata); sem ela, cai no fornecedor_principal como antes.
-function agruparFilaPorFornecedor() {
-  const grupos = {};
+// =====================================================================
+// A FILA — UMA LINHA POR ITEM
+// =====================================================================
+// A decisão de compra é POR ITEM: quanto comprar deste item e de quem.
+// O fornecedor só vira agrupamento na hora de cortar as ordens, que é o
+// último passo. Por isso a fila é montada uma vez em linhas de item
+// (`linhasDaFila`) e as duas visões leem a MESMA lista — se fossem dois
+// cálculos, a tela por item e a por fornecedor podiam discordar.
+//
+// Consolida o mesmo item pedido por PDVs diferentes: a compradora compra
+// uma vez e o rateio por PDV fica em `origem_pdvs`.
+function linhasDaFila() {
+  const linhas = {};
   state.fila.forEach(it => {
-    // Troca "só neste pedido" tem precedência sobre a preferência do cadastro
-    const forcado = overrideFornecedor[it.item_id];
-    const op = !state.matrizOk ? null
-      : (forcado ? opcoesDe(it.item_id).find(o => o.fornecedor_id === forcado) : null)
-        || opcaoPadrao(it.item_id);
-    const forn = op ? op.fornecedor
-      : ((it.itens?.fornecedor_principal || '').trim() || 'SEM FORNECEDOR');
-
-    grupos[forn] ||= { fornecedor: forn, fornecedor_id: op?.fornecedor_id || null, linhas: {}, ids: [] };
-    const g = grupos[forn];
-    g.ids.push(it.id);
-
     const chave = it.item_id || it.item_nome;
-    if (!g.linhas[chave]) {
+    if (!linhas[chave]) {
+      // Troca "só neste pedido" tem precedência sobre a preferência do cadastro
+      const forcado = overrideFornecedor[it.item_id];
       const alternativas = state.matrizOk ? opcoesDe(it.item_id) : [];
-      // Só conta como economia se a cotação for da mesma época — ver
-      // DIAS_COTACAO_COMPARAVEL
-      const maisBarata = alternativaComparavel(op, alternativas);
+      const op = !state.matrizOk ? null
+        : (forcado ? alternativas.find(o => o.fornecedor_id === forcado) : null)
+          || opcaoPadrao(it.item_id);
 
-      g.linhas[chave] = {
+      linhas[chave] = {
+        chave,
         item_id: it.item_id, nome: it.item_nome,
         categoria: it.item_categoria, unidade: it.item_unidade,
         qtd: 0,
         preco: op?.preco ?? state.precos[it.item_id] ?? 0,
         opcao: op,                    // fornecedor escolhido para esta linha
         alternativas,                 // todas as opções ativas do item
-        maisBarata,                   // referência para o aviso de economia
+        // Só conta como economia se a cotação for da mesma época — ver
+        // DIAS_COTACAO_COMPARAVEL
+        maisBarata: alternativaComparavel(op, alternativas),
+        trocado: !!(forcado && op && op.fornecedor_id === forcado),
+        fornecedor: op ? op.fornecedor
+          : ((it.itens?.fornecedor_principal || '').trim() || 'SEM FORNECEDOR'),
         moq: op?.moq ?? null,
         codigo: op?.codigo ?? null,
         pdvs: [], itemIds: [],
@@ -1297,7 +1427,7 @@ function agruparFilaPorFornecedor() {
         removida: false, obsLinha: '',
       };
     }
-    const l = g.linhas[chave];
+    const l = linhas[chave];
     // Quantidade de trabalho = a que o gerente liberou. A pedida fica junto
     // para a tela poder mostrar "12 kg (o PDV pediu 20)".
     l.qtd += it.quantidade || 0;
@@ -1312,33 +1442,119 @@ function agruparFilaPorFornecedor() {
     if (pdv && !l.pdvs.includes(pdv)) l.pdvs.push(pdv);
   });
 
+  return Object.values(linhas).sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+// O corte: as mesmas linhas, agrupadas pelo fornecedor que cada uma escolheu.
+// É esta visão que vira ordem de compra — uma PO por bloco.
+function agruparFilaPorFornecedor(linhas) {
+  const grupos = {};
+  (linhas || linhasDaFila()).forEach(l => {
+    const g = grupos[l.fornecedor] ||= {
+      fornecedor: l.fornecedor, fornecedor_id: null, linhas: [],
+    };
+    if (!g.fornecedor_id && l.opcao?.fornecedor_id) g.fornecedor_id = l.opcao.fornecedor_id;
+    g.linhas.push(l);
+  });
+
   return Object.values(grupos).map(g => {
-    const linhas = Object.values(g.linhas).sort((a, b) => a.nome.localeCompare(b.nome));
-    const valor = linhas.reduce((s, l) => s + l.qtd * l.preco, 0);
+    const valor = g.linhas.reduce((s, l) => s + l.qtd * l.preco, 0);
     // Quanto sairia se cada item fosse comprado no fornecedor mais barato
-    const economia = linhas.reduce((s, l) =>
+    const economia = g.linhas.reduce((s, l) =>
       s + (l.maisBarata && l.preco ? Math.max(0, (l.preco - l.maisBarata.preco) * l.qtd) : 0), 0);
-    return { ...g, linhas, valor, economia };
+    return { ...g, valor, economia };
   }).sort((a, b) => b.valor - a.valor);
 }
 
+function setModoFila(modo) {
+  state.filaModo = modo;
+  renderFila();
+}
+
 function renderFila() {
-  const grupos = agruparFilaPorFornecedor();
+  const linhas = linhasDaFila();
+  const grupos = agruparFilaPorFornecedor(linhas);
   const cont = document.getElementById('filaContainer');
 
-  const totalItens = grupos.reduce((s, g) => s + g.linhas.length, 0);
   const totalValor = grupos.reduce((s, g) => s + g.valor, 0);
   document.getElementById('stForn').textContent  = grupos.length;
-  document.getElementById('stItens').textContent = totalItens;
+  document.getElementById('stItens').textContent = linhas.length;
   document.getElementById('stValor').textContent = fmtMoeda(totalValor);
   setBadge('badgeFila', grupos.length);
 
-  if (!grupos.length) {
+  document.getElementById('modoItemBtn').classList.toggle('ativo', state.filaModo === 'item');
+  document.getElementById('modoFornBtn').classList.toggle('ativo', state.filaModo !== 'item');
+
+  if (!linhas.length) {
     cont.innerHTML = '<div class="empty-text">Nenhuma solicitação aprovada aguardando ordem de compra nesta data.</div>';
     return;
   }
 
-  cont.innerHTML = grupos.map((g, gi) => {
+  cont.innerHTML = (state.filaModo === 'item'
+    ? filaPorItem(linhas)
+    : filaPorFornecedor(grupos)) + rodapeDaFila(linhas, grupos);
+}
+
+// ── Modo por item: uma linha por item, fornecedor escolhido na própria linha ──
+function filaPorItem(linhas) {
+  const corpo = linhas.map(l => {
+    const ganho = l.maisBarata ? (l.preco - l.maisBarata.preco) * l.qtd : 0;
+    const idade = idadePreco(l.opcao);
+    const abaixoMOQ = l.moq != null && l.qtd < l.moq;
+
+    // Sem matriz não há de quem escolher: mostra o fornecedor_principal do
+    // catálogo como texto, que é de onde a fila tirava tudo antes.
+    const seletor = l.alternativas.length && l.item_id
+      ? `<select class="fila-sel" onchange="trocarFornecedorNaFila('${l.item_id}', this.value)"
+                 onclick="event.stopPropagation()">
+           ${l.alternativas.map(o => `<option value="${o.fornecedor_id}"
+             ${o.fornecedor_id === l.opcao?.fornecedor_id ? 'selected' : ''}>${
+               escapeHtml(o.fornecedor)}${o.preco != null ? ' — ' + fmtMoeda(o.preco) : ' — sem preço'}
+             · ${o.prazo}d</option>`).join('')}
+         </select>
+         ${l.trocado ? '<div class="fila-trocado">trocado só neste pedido</div>' : ''}`
+      : `<span class="${l.fornecedor === 'SEM FORNECEDOR' ? 'text-muted' : ''}">${
+           escapeHtml(l.fornecedor)}</span>`;
+
+    return `
+      <tr>
+        <td class="td-titulo">${escapeHtml(l.nome)}
+          ${l.pdvs.length ? `<br><span class="linha-origem">${escapeHtml(l.pdvs.join(' · '))}</span>` : ''}
+          ${ganho > 0 ? `<br><span class="mtz-econ">${escapeHtml(l.maisBarata.fornecedor)} cobra
+             ${fmtMoeda(l.maisBarata.preco)} — economia de ${fmtMoeda(ganho)}</span>` : ''}
+          ${abaixoMOQ ? `<br><span class="po-moq">abaixo do pedido mínimo de
+             ${fmtQtd(l.moq)} ${escapeHtml(l.unidade || '')}</span>` : ''}
+        </td>
+        <td class="num" data-label="Quantidade">${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}
+          ${l.cortada ? `<br><span class="linha-corte" title="O gerente ajustou na Lista do Dia">
+             pedido: ${fmtQtd(l.qtdPedida)}</span>` : ''}</td>
+        <td data-label="Fornecedor">${seletor}</td>
+        <td class="num" data-label="Preço un.">${l.preco ? fmtMoeda(l.preco) : '<span class="text-muted">sem preço</span>'}
+          ${idade ? `<br><span class="linha-origem">${escapeHtml(idade)}</span>` : ''}</td>
+        <td class="num right nowrap" data-label="Total">${l.preco ? fmtMoeda(l.qtd * l.preco) : '—'}</td>
+        <td class="td-acoes">
+          ${l.alternativas.length > 1
+            ? `<button class="btn btn-sm btn-secondary" onclick="abrirAlternativasFila('${l.item_id}')"
+                    title="Comparar preço, prazo e pedido mínimo">${l.alternativas.length} opções</button>` : ''}
+          ${l.item_id
+            ? `<button class="btn btn-sm btn-secondary" onclick="cotarItemDaFila('${l.item_id}', ${l.qtd})"
+                    title="Pedir preço deste item a outros fornecedores">Cotar</button>` : ''}
+        </td>
+      </tr>`;
+  }).join('');
+
+  return `<table class="data-table tabela-cards tabela-item">
+    <colgroup><col><col style="width:92px"><col style="width:232px">
+      <col style="width:118px"><col style="width:112px"><col style="width:156px"></colgroup>
+    <thead><tr><th>Item</th><th class="num">Qtd</th><th>Fornecedor</th>
+      <th class="num">Preço un.</th><th class="num right">Total</th>
+      <th class="center">Ações</th></tr></thead>
+    <tbody>${corpo}</tbody></table>`;
+}
+
+// ── Modo por fornecedor: a conferência do corte, e o que vira cada PO ──
+function filaPorFornecedor(grupos) {
+  return grupos.map((g, gi) => {
     const f = state.fornecedores.find(x => x.nome === g.fornecedor);
     const semCadastro = !f;
     const alertaCert = f ? alertaFornecedor(f.id) : null;
@@ -1384,7 +1600,7 @@ function renderFila() {
           ${g.economia > 0 ? `<div class="aviso aviso-info">
             Comprando cada item no fornecedor mais barato, este bloco sairia
             <strong>${fmtMoeda(g.economia)}</strong> mais barato. A troca é feita item a item
-            na tela de gerar a ordem.</div>` : ''}
+            no modo <strong>Por item</strong>.</div>` : ''}
           <table class="data-table tabela-cards">
             <thead><tr><th>Item</th><th class="num">Qtd</th><th class="num">Preço un.</th>
               <th class="num right">Total</th><th class="center">Cotação</th></tr></thead>
@@ -1403,6 +1619,155 @@ function renderFila() {
 function toggleForn(i) {
   document.getElementById('bodyF-' + i).classList.toggle('open');
   document.getElementById('chevF-' + i).classList.toggle('open');
+}
+
+// O fim do trabalho: as decisões tomadas linha a linha viram N ordens.
+function rodapeDaFila(linhas, grupos) {
+  const semPreco = linhas.filter(l => !l.preco).length;
+  const total = grupos.reduce((s, g) => s + g.valor, 0);
+  return `
+    <div class="fila-rodape">
+      <div class="resumo">
+        ${linhas.length} item(ns) · ${grupos.length} fornecedor(es) · ${fmtMoeda(total)}
+        ${semPreco ? ` · <span style="color:var(--orange)">${semPreco} sem preço</span>` : ''}
+      </div>
+      ${state.filaModo === 'item'
+        ? `<button class="btn btn-sm btn-secondary" onclick="setModoFila('fornecedor')">Conferir o corte por fornecedor</button>`
+        : `<button class="btn btn-sm btn-secondary" onclick="setModoFila('item')">Voltar para a lista por item</button>`}
+      <button class="btn btn-gold" onclick="abrirGerarTodas()">Gerar as ordens</button>
+    </div>`;
+}
+
+// Trocar o fornecedor direto na linha da fila. Vale só para este pedido —
+// mudar o padrão do cadastro continua sendo a decisão separada, no modal
+// de opções, porque ela vale para todos os pedidos futuros.
+function trocarFornecedorNaFila(itemId, fornecedorId) {
+  const padrao = opcaoPadrao(itemId);
+  if (padrao && padrao.fornecedor_id === fornecedorId) delete overrideFornecedor[itemId];
+  else overrideFornecedor[itemId] = fornecedorId;
+  renderFila();
+}
+
+function abrirAlternativasFila(itemId) {
+  const l = linhasDaFila().find(x => x.item_id === itemId);
+  if (!l) return;
+  state.altCtx = { origem: 'fila', linha: l };
+  renderAlternativas(l);
+}
+
+// =====================================================================
+// GERAR VÁRIAS ORDENS DE UMA VEZ
+// =====================================================================
+// Depois de decidir item a item, emitir uma PO por vez é trabalho manual
+// sem decisão nenhuma. O lote mostra o que vai ser criado — fornecedor,
+// itens, valor e data de entrega — e cria tudo de uma vez. Quem quiser
+// mexer numa ordem específica desmarca e usa "Revisar e gerar ordem".
+function abrirGerarTodas() {
+  const grupos = agruparFilaPorFornecedor();
+  if (!grupos.length) { showToast('Nada na fila para gerar.', 'error'); return; }
+
+  state.lote = grupos.map(g => {
+    const f = state.fornecedores.find(x => x.nome === g.fornecedor);
+    const prazo = f?.prazo_entrega_dias ?? 1;
+    const prev = new Date(); prev.setDate(prev.getDate() + prazo);
+    return {
+      fornecedor: g.fornecedor, linhas: g.linhas, valor: g.valor,
+      fornecedorObj: f || null, entrega: isoDate(prev),
+      semCadastro: !f,
+      semPreco: g.linhas.filter(l => !l.preco).length,
+      incluir: true,
+    };
+  });
+
+  renderLote();
+  abrirModal('loteModal');
+}
+
+function renderLote() {
+  const lote = state.lote || [];
+  const dentro = lote.filter(x => x.incluir);
+  const total = dentro.reduce((s, x) => s + x.valor, 0);
+  const nItens = dentro.reduce((s, x) => s + x.linhas.length, 0);
+  const semCad = dentro.filter(x => x.semCadastro).length;
+  const semPreco = dentro.reduce((s, x) => s + x.semPreco, 0);
+
+  document.getElementById('loteBody').innerHTML = `
+    <div class="aviso aviso-info">
+      Vou criar <strong>${dentro.length} ordem(ns)</strong> de ${dentro.length} fornecedor(es),
+      somando <strong>${fmtMoeda(total)}</strong> em ${nItens} item(ns).
+      As ordens nascem como <strong>rascunho</strong> — nada é enviado.
+    </div>
+    ${semCad ? `<div class="aviso aviso-warn">${semCad} fornecedor(es) ainda não cadastrado(s).
+      O cadastro é criado junto, com o nome apenas — complete depois em Fornecedores.</div>` : ''}
+    ${semPreco ? `<div class="aviso aviso-warn">${semPreco} item(ns) sem preço.
+      A ordem sai com o total incompleto. Para digitar o preço antes, desmarque o fornecedor
+      aqui e use <strong>Revisar e gerar ordem</strong> no bloco dele.</div>` : ''}
+
+    <div style="border:1px solid var(--border-subtle);margin-top:12px">
+      <div class="lote-linha po-cabecalho">
+        <div></div><div>FORNECEDOR</div><div class="right">ITENS</div>
+        <div class="right">VALOR</div><div class="right">ENTREGA</div>
+      </div>
+      ${lote.map((x, i) => `
+        <div class="lote-linha ${x.incluir ? '' : 'fora'}">
+          <div><input type="checkbox" ${x.incluir ? 'checked' : ''} onchange="alternarLote(${i})"></div>
+          <div class="lote-forn">${escapeHtml(x.fornecedor)}
+            ${x.semCadastro ? '<span class="forn-sem-email"> · não cadastrado</span>' : ''}</div>
+          <div class="num right">${x.linhas.length}</div>
+          <div class="num right">${fmtMoeda(x.valor)}</div>
+          <div><input class="po-inp" type="date" value="${x.entrega}"
+                      onchange="mudarEntregaLote(${i}, this.value)"></div>
+        </div>`).join('')}
+    </div>
+
+    <label class="field-label mt-3">Observação — entra em todas as ordens deste lote</label>
+    <input class="input" id="lote-obs" placeholder="opcional">`;
+
+  const btn = document.getElementById('btnGerarLote');
+  btn.disabled = !dentro.length;
+  btn.textContent = dentro.length === 1 ? 'Gerar 1 ordem' : `Gerar ${dentro.length} ordens`;
+}
+
+function alternarLote(i) { state.lote[i].incluir = !state.lote[i].incluir; renderLote(); }
+function mudarEntregaLote(i, v) { if (!dataIncompleta(v)) state.lote[i].entrega = v || null; }
+
+async function gerarTodasOrdens() {
+  if (state.enviando) return;
+  const dentro = (state.lote || []).filter(x => x.incluir);
+  if (!dentro.length) return;
+
+  state.enviando = true;
+  const btn = document.getElementById('btnGerarLote');
+  btn.disabled = true; btn.textContent = 'Gerando...';
+  const obs = document.getElementById('lote-obs').value.trim() || null;
+
+  const feitas = [], falhas = [];
+  try {
+    for (const x of dentro) {
+      const r = await gravarOrdem({
+        fornecedorNome: x.fornecedor,
+        linhas: x.linhas.map(l => ({ ...l, incluir: true })),
+        pendencias: [],
+        entrega: x.entrega, obs,
+        token: 'po-' + x.fornecedor,
+      });
+      if (r.error) falhas.push(x.fornecedor + ': ' + r.error.message);
+      else feitas.push(fmtPO(r.ordem.numero));
+    }
+  } finally {
+    state.enviando = false;
+    btn.disabled = false;
+    renderLote();
+  }
+
+  fecharModal('loteModal');
+  if (feitas.length) showToast(feitas.length + ' ordem(ns) gerada(s): ' + feitas.join(', '), 'success', 7000);
+  if (falhas.length) showToast('Falhou em ' + falhas.length + ': ' + falhas.join(' | '), 'error', 9000);
+
+  await carregarMatriz();
+  await carregarPendencias();
+  await carregarFila();
+  await carregarOrdens();
 }
 
 // =====================================================================
@@ -1725,7 +2090,11 @@ function alternarPendPO(i) {
 // (o item sai daqui e vai para o bloco do outro fornecedor na fila) ou mudar
 // o cadastro, que passa a valer para todos os pedidos seguintes.
 function abrirAlternativas(i) {
-  const l = state.poAtual.linhas[i];
+  state.altCtx = { origem: 'po', i, linha: state.poAtual.linhas[i] };
+  renderAlternativas(state.poAtual.linhas[i]);
+}
+
+function renderAlternativas(l) {
   const atual = l.opcao?.fornecedor_id;
 
   document.getElementById('altModalTitle').textContent = l.nome;
@@ -1752,21 +2121,22 @@ function abrirAlternativas(i) {
           <td class="center" data-label="Prazo">${o.prazo}d</td>
           <td class="center" data-label="Pedido mínimo">${o.moq != null ? fmtQtd(o.moq) : '—'}</td>
           <td class="td-acoes">${ehAtual ? '<span class="text-muted">em uso neste pedido</span>' : `
-            <button class="btn btn-sm btn-secondary" onclick="trocarFornecedorLinha(${i},'${o.fornecedor_id}',false)">Só aqui</button>
-            <button class="btn btn-sm btn-gold" onclick="trocarFornecedorLinha(${i},'${o.fornecedor_id}',true)">Tornar primário</button>`}</td>
+            <button class="btn btn-sm btn-secondary" onclick="trocarFornecedorLinha('${o.fornecedor_id}',false)">Só aqui</button>
+            <button class="btn btn-sm btn-gold" onclick="trocarFornecedorLinha('${o.fornecedor_id}',true)">Tornar primário</button>`}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>
     <div class="text-muted mt-2" style="font-size:11px">
-      <strong>Só aqui</strong> tira o item deste pedido e o joga para o bloco do outro fornecedor,
-      sem tocar no cadastro. <strong>Tornar primário</strong> muda o padrão do item para todos
-      os pedidos futuros.
+      <strong>Só aqui</strong> vale apenas para este pedido e não toca no cadastro.
+      <strong>Tornar primário</strong> muda o padrão do item para todos os pedidos futuros.
     </div>`;
   abrirModal('altModal');
 }
 
-async function trocarFornecedorLinha(i, fornecedorId, permanente) {
-  const l = state.poAtual.linhas[i];
+async function trocarFornecedorLinha(fornecedorId, permanente) {
+  const ctx = state.altCtx;
+  if (!ctx) return;
+  const l = ctx.linha;
 
   if (permanente) {
     // preferencia 1 no escolhido, 2 nos demais do mesmo item
@@ -1777,6 +2147,9 @@ async function trocarFornecedorLinha(i, fornecedorId, permanente) {
       preferencia: 1, atualizado_em: new Date().toISOString(), atualizado_por: state.perfil.id,
     }).eq('id', alvo.id);
     if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    // Uma troca "só aqui" anterior venceria o padrão novo e a tela mostraria
+    // o fornecedor antigo logo depois de ela mandar mudar o padrão.
+    delete overrideFornecedor[l.item_id];
     showToast(alvo.fornecedor + ' agora é o fornecedor padrão de ' + l.nome + '.', 'success');
     await carregarMatriz();
   } else {
@@ -1785,8 +2158,101 @@ async function trocarFornecedorLinha(i, fornecedorId, permanente) {
   }
 
   fecharModal('altModal');
-  fecharModal('poModal');
+  // Vindo da revisão do pedido, o item muda de bloco: a revisão aberta deixa
+  // de valer e a fila é o lugar certo para ver onde ele foi parar. Vindo da
+  // própria fila, basta redesenhar.
+  if (state.altCtx?.origem === 'po') fecharModal('poModal');
+  state.altCtx = null;
   renderFila();
+}
+
+// ── O núcleo da emissão ───────────────────────────────────────────
+// Grava UMA ordem: cabeçalho, itens, baixa das solicitações e das
+// pendências, preço de volta na matriz. Usado pelos três caminhos —
+// revisão de um fornecedor, lote da fila inteira e cotação adjudicada —
+// para que os três gravem exatamente a mesma coisa.
+async function gravarOrdem({ fornecedorNome, linhas, pendencias = [],
+                             entrega, obs, token, cotacaoId }) {
+  let forn = state.fornecedores.find(x => x.nome === fornecedorNome);
+  if (!forn) {
+    const { data, error } = await sb.from('fornecedores')
+      .insert({ nome: fornecedorNome }).select().single();
+    if (error) return { error };
+    forn = data;
+    state.fornecedores.push(forn);
+  }
+
+  const total = linhas.reduce((s, l) => s + l.qtd * (l.preco || 0), 0)
+              + pendencias.reduce((s, p) => s + p.qtd * (p.preco || 0), 0);
+
+  const { data: ordem, error } = await inserirIdempotente(sb, 'ordens_compra', {
+    fornecedor_id: forn.id,
+    status: 'rascunho',
+    data_emissao: isoDate(new Date()),
+    data_entrega_prevista: entrega || null,
+    valor_total: total,
+    observacao: obs || null,
+    email_destino: forn.email || null,   // só registro — o sistema não envia
+    criada_por: state.perfil.id,
+  }, token);
+
+  if (error) return { error, duplicado: ehEnvioDuplicado(error) };
+
+  const itensPO = [
+    ...linhas.map(l => ({
+      ordem_id: ordem.id, item_id: l.item_id, item_nome: l.nome,
+      item_categoria: l.categoria, item_unidade: l.unidade,
+      quantidade: l.qtd,
+      preco_unitario: l.preco || null,
+      valor_linha: l.preco ? l.qtd * l.preco : null,
+      origem_pdvs: (l.pdvs || []).join(' · ') || null,
+      codigo_fornecedor: l.codigo || null,
+    })),
+    ...pendencias.map(p => ({
+      ordem_id: ordem.id, item_id: p.item_id, item_nome: p.nome,
+      item_unidade: p.unidade, quantidade: p.qtd,
+      preco_unitario: p.preco || null,
+      valor_linha: p.preco ? p.qtd * p.preco : null,
+      origem_pdvs: null,
+      observacao: 'reposição de entrega anterior',
+    })),
+  ];
+  let { error: ei } = await sb.from('ordem_compra_itens').insert(itensPO);
+  // codigo_fornecedor só existe a partir da migration 22
+  if (ei && (ei.code === 'PGRST204' || ei.code === '42703')) {
+    ({ error: ei } = await sb.from('ordem_compra_itens')
+      .insert(itensPO.map(({ codigo_fornecedor, ...resto }) => resto)));
+  }
+  if (ei) return { error: ei, ordem };
+
+  // Solicitações atendidas por esta PO — só as linhas que ficaram
+  const idsSolic = linhas.flatMap(l => l.itemIds || []);
+  if (idsSolic.length) {
+    await sb.from('solicitacao_compra_itens')
+      .update({ ordem_compra_id: ordem.id }).in('id', idsSolic);
+  }
+
+  // Pendências incluídas ficam resolvidas por esta PO
+  if (pendencias.length) {
+    await sb.from('pendencias_compra').update({
+      status: 'recomprada', ordem_compra_id: ordem.id,
+      resolvida_em: new Date().toISOString(), resolvida_por: state.perfil.id,
+    }).in('id', pendencias.map(p => p.pendencia_id));
+  }
+
+  // A cotação que gerou esta PO passa a saber disso — é o que responde
+  // "por que compramos deste?" seis meses depois.
+  if (cotacaoId) {
+    const { error: ec } = await sb.from('cotacoes')
+      .update({ ordem_compra_id: ordem.id }).eq('id', cotacaoId);
+    if (ec) console.warn('[cotação] vínculo com a PO não gravado — rode a migration 68.', ec.message);
+  }
+
+  // Preço editado à mão vira o preço vigente do par item × fornecedor
+  if (state.matrizOk) await atualizarPrecosMatriz(linhas, forn.id);
+
+  resetTokenCarrinho(token);
+  return { ordem, forn, itens: itensPO.length };
 }
 
 async function gerarPO() {
@@ -1805,88 +2271,28 @@ async function gerarPO() {
   btn.disabled = true; btn.textContent = 'Gerando...';
 
   try {
-    let forn = state.fornecedores.find(x => x.nome === po.fornecedorNome);
-    if (!forn) {
-      const { data, error } = await sb.from('fornecedores')
-        .insert({ nome: po.fornecedorNome }).select().single();
-      if (error) { showToast('Erro ao criar fornecedor: ' + error.message, 'error'); return; }
-      forn = data;
-      state.fornecedores.push(forn);
+    const r = await gravarOrdem({
+      fornecedorNome: po.fornecedorNome,
+      linhas, pendencias: pends,
+      entrega: document.getElementById('po-entrega').value || null,
+      obs: document.getElementById('po-obs').value.trim() || null,
+      token: 'po-' + po.fornecedorNome,
+      cotacaoId: po.cotacaoId || null,
+    });
+
+    if (r.error) {
+      if (r.duplicado) { showToast('Esta PO já havia sido gerada.', 'info'); fecharModal('poModal'); return; }
+      showToast('Erro ao gerar PO: ' + r.error.message, 'error'); return;
     }
 
-    const entrega = document.getElementById('po-entrega').value || null;
-    const obs = document.getElementById('po-obs').value.trim() || null;
-    const total = totalPO();
-
-    const { data: ordem, error } = await inserirIdempotente(sb, 'ordens_compra', {
-      fornecedor_id: forn.id,
-      status: 'rascunho',
-      data_emissao: isoDate(new Date()),
-      data_entrega_prevista: entrega,
-      valor_total: total,
-      observacao: obs,
-      email_destino: forn.email || null,   // só registro — o sistema não envia
-      criada_por: state.perfil.id,
-    }, 'po-' + po.fornecedorNome);
-
-    if (error) {
-      if (ehEnvioDuplicado(error)) { showToast('Esta PO já havia sido gerada.', 'info'); fecharModal('poModal'); return; }
-      showToast('Erro ao gerar PO: ' + error.message, 'error'); return;
-    }
-
-    const itensPO = [
-      ...linhas.map(l => ({
-        ordem_id: ordem.id, item_id: l.item_id, item_nome: l.nome,
-        item_categoria: l.categoria, item_unidade: l.unidade,
-        quantidade: l.qtd,
-        preco_unitario: l.preco || null,
-        valor_linha: l.preco ? l.qtd * l.preco : null,
-        origem_pdvs: l.pdvs.join(' · ') || null,
-        codigo_fornecedor: l.codigo || null,
-      })),
-      ...pends.map(p => ({
-        ordem_id: ordem.id, item_id: p.item_id, item_nome: p.nome,
-        item_unidade: p.unidade, quantidade: p.qtd,
-        preco_unitario: p.preco || null,
-        valor_linha: p.preco ? p.qtd * p.preco : null,
-        origem_pdvs: null,
-        observacao: 'reposição de entrega anterior',
-      })),
-    ];
-    let { error: ei } = await sb.from('ordem_compra_itens').insert(itensPO);
-    // codigo_fornecedor só existe a partir da migration 22
-    if (ei && (ei.code === 'PGRST204' || ei.code === '42703')) {
-      ({ error: ei } = await sb.from('ordem_compra_itens')
-        .insert(itensPO.map(({ codigo_fornecedor, ...resto }) => resto)));
-    }
-    if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
-
-    // Solicitações atendidas por esta PO — só as linhas que ficaram
-    const idsSolic = linhas.flatMap(l => l.itemIds);
-    if (idsSolic.length) {
-      await sb.from('solicitacao_compra_itens')
-        .update({ ordem_compra_id: ordem.id }).in('id', idsSolic);
-    }
-
-    // Pendências incluídas ficam resolvidas por esta PO
-    if (pends.length) {
-      await sb.from('pendencias_compra').update({
-        status: 'recomprada', ordem_compra_id: ordem.id,
-        resolvida_em: new Date().toISOString(), resolvida_por: state.perfil.id,
-      }).in('id', pends.map(p => p.pendencia_id));
-    }
-
-    // Preço editado à mão vira o preço vigente do par item × fornecedor
-    if (state.matrizOk) await atualizarPrecosMatriz(linhas, forn.id);
-
-    resetTokenCarrinho('po-' + po.fornecedorNome);
-    showToast('PO ' + fmtPO(ordem.numero) + ' gerada com ' + itensPO.length + ' item(ns).', 'success');
+    showToast('PO ' + fmtPO(r.ordem.numero) + ' gerada com ' + r.itens + ' item(ns).', 'success');
     fecharModal('poModal');
     await carregarMatriz();
     await carregarPendencias();
     await carregarFila();
     await carregarOrdens();
-    abrirEmail(ordem.id);
+    if (po.cotacaoId) await carregarCotacoes();
+    abrirEmail(r.ordem.id);
   } finally {
     state.enviando = false;
     btn.disabled = false; btn.textContent = 'Gerar PO';
@@ -1934,7 +2340,11 @@ async function abrirEmail(ordemId) {
   if (error) { showToast('Erro: ' + error.message, 'error'); return; }
 
   const f = ordem.fornecedores;
-  const itens = (ordem.ordem_compra_itens || []).sort((a, b) => a.item_nome.localeCompare(b.item_nome));
+  // Linha cancelada não vai no texto do pedido — o fornecedor não deve
+  // separar o que foi retirado. Ela continua visível no detalhe da PO.
+  const itens = (ordem.ordem_compra_itens || [])
+    .filter(i => !i.cancelada)
+    .sort((a, b) => a.item_nome.localeCompare(b.item_nome));
   const cfg = state.config;
 
   const assunto = `Pedido de Compra ${fmtPO(ordem.numero)}`
@@ -2176,13 +2586,20 @@ async function carregarOrdens() {
   cont.innerHTML = '<div class="loading-text">Carregando...</div>';
   const f = document.getElementById('o-status').value;
 
-  let q = sb.from('ordens_compra')
-    .select('*, fornecedores(nome, email), ordem_compra_itens(id), recebimentos(id, status, data_recebimento)')
-    .order('numero', { ascending: false }).limit(200);
-  if (f === 'abertas') q = q.in('status', ['rascunho', 'enviada', 'confirmada', 'recebida_parcial']);
-  else if (f)          q = q.eq('status', f);
+  // `cancelada` na linha é da migration 68. Sem ela o select inteiro falha,
+  // e aí a lista volta a contar todos os itens, como antes.
+  const consulta = colsItens => {
+    let q = sb.from('ordens_compra')
+      .select(`*, fornecedores(nome, email), ordem_compra_itens(${colsItens}),
+               recebimentos(id, status, data_recebimento)`)
+      .order('numero', { ascending: false }).limit(200);
+    if (f === 'abertas') q = q.in('status', ['rascunho', 'enviada', 'confirmada', 'recebida_parcial']);
+    else if (f)          q = q.eq('status', f);
+    return q;
+  };
 
-  const { data, error } = await q;
+  let { data, error } = await consulta('id, cancelada');
+  if (error) ({ data, error } = await consulta('id'));
   if (error) { cont.innerHTML = '<div class="empty-text">Erro: ' + escapeHtml(error.message) + '</div>'; return; }
   state.ordens = data || [];
 
@@ -2209,42 +2626,133 @@ function pillPrazo(o) {
   return `<span class="prazo-pill prazo-ok">em ${-d}d</span>`;
 }
 
+const STATUS_PO = {
+  rascunho:'Rascunho', enviada:'Enviada', confirmada:'Confirmada',
+  recebida_parcial:'Recebida parcial', recebida:'Recebida', cancelada:'Cancelada',
+};
+
+const itensAtivos = o => (o.ordem_compra_itens || []).filter(i => !i.cancelada).length;
+
+// =====================================================================
+// LISTA DE POs — ordenar clicando na coluna, agrupar com subtotal
+// =====================================================================
+// É a tela em que a compradora passa o dia. Um filtro de status no topo
+// não responde "quanto tenho em aberto com este fornecedor?" nem "o que
+// chega esta semana?" — ordenação e agrupamento respondem as duas.
+function ordenarOrdens(campo) {
+  const o = state.ordOrdem;
+  if (o.campo === campo) o.dir = o.dir === 'asc' ? 'desc' : 'asc';
+  else { o.campo = campo; o.dir = ['numero', 'valor', 'itens'].includes(campo) ? 'desc' : 'asc'; }
+  renderOrdens();
+}
+
+function chaveOrdenacao(o, campo) {
+  switch (campo) {
+    case 'fornecedor': return (o.fornecedores?.nome || '').toLowerCase();
+    case 'itens':      return itensAtivos(o);
+    case 'valor':      return parseFloat(o.valor_total) || 0;
+    case 'entrega':    return o.data_entrega_prevista || '9999-12-31';
+    case 'status':     return STATUS_PO[o.status] || o.status;
+    default:           return o.numero;
+  }
+}
+
+// Segunda-feira da semana de entrega — o corte que a doca usa
+function semanaDe(iso) {
+  if (!iso) return { chave: 'zzz', rotulo: 'Sem data de entrega' };
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const fim = new Date(d); fim.setDate(fim.getDate() + 6);
+  return { chave: isoDate(d), rotulo: 'Semana de ' + ptDate(isoDate(d)) + ' a ' + ptDate(isoDate(fim)) };
+}
+
+function grupoDaOrdem(o) {
+  if (state.ordAgrupar === 'fornecedor') {
+    const n = o.fornecedores?.nome || '—';
+    return { chave: n.toLowerCase(), rotulo: n };
+  }
+  if (state.ordAgrupar === 'status') {
+    return { chave: o.status, rotulo: STATUS_PO[o.status] || o.status };
+  }
+  return semanaDe(o.data_entrega_prevista);
+}
+
+function setAgruparOrdens(v) { state.ordAgrupar = v; renderOrdens(); }
+function alternarAtraso() { state.ordAtraso = !state.ordAtraso; renderOrdens(); }
+
 function renderOrdens() {
   const busca = (document.getElementById('o-busca').value || '').toLowerCase();
   let lista = state.ordens;
   if (busca) lista = lista.filter(o =>
     fmtPO(o.numero).toLowerCase().includes(busca) ||
     (o.fornecedores?.nome || '').toLowerCase().includes(busca));
+  if (state.ordAtraso) lista = lista.filter(o => diasAtraso(o) > 0
+    && ['enviada','confirmada','recebida_parcial'].includes(o.status));
+
+  const { campo, dir } = state.ordOrdem;
+  const sinal = dir === 'asc' ? 1 : -1;
+  lista = [...lista].sort((a, b) => {
+    const x = chaveOrdenacao(a, campo), y = chaveOrdenacao(b, campo);
+    return (x > y ? 1 : x < y ? -1 : 0) * sinal;
+  });
 
   document.getElementById('oCount').textContent = lista.length;
+  document.getElementById('btnAtraso').classList.toggle('btn-gold', state.ordAtraso);
   const cont = document.getElementById('ordensContainer');
-  if (!lista.length) { cont.innerHTML = '<div class="empty-text">Nenhuma ordem de compra.</div>'; return; }
+  if (!lista.length) {
+    cont.innerHTML = `<div class="empty-text">Nenhuma ordem de compra${
+      state.ordAtraso ? ' em atraso' : ''}.</div>`;
+    return;
+  }
 
-  const statusLabel = {
-    rascunho:'Rascunho', enviada:'Enviada', confirmada:'Confirmada',
-    recebida_parcial:'Recebida parcial', recebida:'Recebida', cancelada:'Cancelada',
-  };
+  const th = (rot, cp, cls = '') =>
+    `<th class="th-ord ${cls}" onclick="ordenarOrdens('${cp}')">${rot}${
+      campo === cp ? ` <span class="seta">${dir === 'asc' ? '▲' : '▼'}</span>` : ''}</th>`;
 
-  cont.innerHTML = `<table class="data-table tabela-cards">
+  const tabela = itens => `<table class="data-table tabela-cards">
     <thead><tr>
-      <th>PO</th><th>Fornecedor</th><th class="center">Itens</th>
-      <th class="num right">Valor</th><th>Entrega</th><th>Status</th><th class="center">Ações</th>
+      ${th('Fornecedor', 'fornecedor')}${th('Nº da ordem', 'numero')}
+      ${th('Itens', 'itens', 'center')}${th('Valor', 'valor', 'num right')}
+      ${th('Entrega', 'entrega')}${th('Status', 'status')}
+      <th class="center">Ações</th>
     </tr></thead>
-    <tbody>${lista.map(o => `
+    <tbody>${itens.map(o => `
       <tr class="clicavel" onclick="verOrdem('${o.id}')">
         <td class="td-titulo">${escapeHtml(o.fornecedores?.nome || '—')}</td>
         <td class="po-num" data-label="Nº da ordem">${fmtPO(o.numero)}</td>
-        <td class="center" data-label="Itens">${(o.ordem_compra_itens || []).length}</td>
-        <td class="num right" data-label="Valor">${fmtMoeda(o.valor_total)}</td>
+        <td class="center" data-label="Itens">${itensAtivos(o)}</td>
+        <td class="num right nowrap" data-label="Valor">${fmtMoeda(o.valor_total)}</td>
         <td data-label="Entrega">${o.data_entrega_prevista ? ptDate(o.data_entrega_prevista) : '—'} ${pillPrazo(o)}</td>
-        <td data-label="Status"><span class="badge">${statusLabel[o.status] || o.status}</span></td>
+        <td data-label="Status"><span class="badge">${STATUS_PO[o.status] || o.status}</span></td>
         <td class="td-acoes">
           <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();abrirEmail('${o.id}')">Abrir</button>
+          ${o.status === 'enviada'
+            ? `<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();marcarConfirmada('${o.id}', ${o.numero})"
+                    title="O fornecedor respondeu confirmando">Confirmou</button>` : ''}
           ${['rascunho','enviada','confirmada'].includes(o.status)
-            ? `<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();cancelarOrdem('${o.id}', ${o.numero})">Cancelar</button>` : ''}
+            ? `<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();abrirCancelarOrdem('${o.id}', ${o.numero}, '${o.status}')">Cancelar</button>` : ''}
         </td>
       </tr>`).join('')}
     </tbody></table>`;
+
+  if (!state.ordAgrupar) { cont.innerHTML = tabela(lista); return; }
+
+  const grupos = {};
+  lista.forEach(o => {
+    const g = grupoDaOrdem(o);
+    (grupos[g.chave] ||= { rotulo: g.rotulo, itens: [] }).itens.push(o);
+  });
+
+  cont.innerHTML = Object.keys(grupos).sort().map(k => {
+    const g = grupos[k];
+    const total = g.itens.reduce((s, o) => s + (parseFloat(o.valor_total) || 0), 0);
+    return `
+      <div class="grupo-po">
+        <span class="titulo">${escapeHtml(g.rotulo)}</span>
+        <span class="sub">${g.itens.length} ordem(ns) · ${fmtMoeda(total)}</span>
+      </div>
+      ${tabela(g.itens)}`;
+  }).join('');
 }
 
 // =====================================================================
@@ -2422,13 +2930,18 @@ async function verOrdem(id) {
     recebida_parcial:'Recebida parcial', recebida:'Recebida', cancelada:'Cancelada',
   };
 
+  // Cancelar linha só faz sentido antes de a mercadoria chegar
+  const podeCancelar = ['rascunho', 'enviada', 'confirmada'].includes(o.status);
+
   const linhas = itens.map(i => {
     const r = recebidoDe[i.id];
     const falta = r ? (+i.quantidade) - (+r.quantidade_recebida || 0) : 0;
     const un = escapeHtml(i.item_unidade || '');
-    return `<tr>
+    return `<tr class="${i.cancelada ? 'linha-cancelada' : ''}">
       <td class="td-titulo">${escapeHtml(i.item_nome)}
-        ${i.origem_pdvs ? `<br><span class="linha-origem">${escapeHtml(i.origem_pdvs)}</span>` : ''}</td>
+        ${i.origem_pdvs ? `<br><span class="linha-origem">${escapeHtml(i.origem_pdvs)}</span>` : ''}
+        ${i.cancelada ? `<br><span class="motivo-tag">cancelado — ${
+          escapeHtml(i.motivo_cancelamento || rotuloCancel(i.motivo_cancelamento_codigo))}</span>` : ''}</td>
       ${temCodigo ? `<td data-label="Código">${escapeHtml(i.codigo_fornecedor || '—')}</td>` : ''}
       <td class="num" data-label="Pedido">${fmtQtd(i.quantidade)} ${un}</td>
       <td class="num" data-label="Recebido">${r
@@ -2440,8 +2953,14 @@ async function verOrdem(id) {
       ${rec ? `<td data-label="Ocorrência">${r?.motivo_divergencia
         ? '<span class="text-error">' + escapeHtml(r.motivo_divergencia) + '</span>'
         : '<span class="text-muted">—</span>'}</td>` : ''}
+      ${podeCancelar ? `<td class="td-acoes">${i.cancelada ? '' :
+        `<button class="btn btn-sm btn-secondary" onclick="abrirCancelarLinha('${o.id}','${i.id}',${
+          i.item_id ? `'${i.item_id}'` : 'null'},'${escapeAttr(i.item_nome)}',${o.numero},'${o.status}')"
+          title="Tira este item do pedido e devolve à fila">Cancelar</button>`}</td>` : ''}
     </tr>`;
   }).join('');
+
+  const ativas = itens.filter(i => !i.cancelada).length;
 
   const f = o.fornecedores;
   const blocoRec = rec ? `
@@ -2465,37 +2984,218 @@ async function verOrdem(id) {
     <div class="email-campo"><b>Valor</b><span>${fmtMoeda(o.valor_total)}${
       f?.condicao_pagamento ? ' · ' + escapeHtml(f.condicao_pagamento) : ''}</span></div>
     ${o.enviada_em ? `<div class="email-campo"><b>Enviada</b><span>${ptDateTime(o.enviada_em)}</span></div>` : ''}
+    ${o.confirmada_em ? `<div class="email-campo"><b>Confirmada</b><span>${
+      ptDateTime(o.confirmada_em)} — o fornecedor acusou o pedido</span></div>` : ''}
     ${f?.contato_nome || f?.telefone ? `<div class="email-campo"><b>Contato</b><span>${
       escapeHtml([f.contato_nome, f.telefone, f.email].filter(Boolean).join(' · '))}</span></div>` : ''}
     ${o.observacao ? `<div class="obs-box mt-2">${escapeHtml(o.observacao)}</div>` : ''}
-    ${o.motivo_cancelamento ? `<div class="aviso aviso-warn mt-2">Cancelada — ${
-      escapeHtml(o.motivo_cancelamento)}</div>` : ''}
+    ${o.status === 'cancelada' ? `<div class="aviso aviso-warn mt-2">Cancelada${
+      o.motivo_cancelamento_codigo ? ' — ' + escapeHtml(rotuloCancel(o.motivo_cancelamento_codigo)) : ''}${
+      o.motivo_cancelamento ? '<br><span class="text-muted">' + escapeHtml(o.motivo_cancelamento) + '</span>' : ''}
+      ${o.cancelada_em ? '<br><span class="text-muted">' + ptDateTime(o.cancelada_em) + '</span>' : ''}</div>` : ''}
 
-    <div class="section-title mt-3"><span>Itens do pedido (${itens.length})</span></div>
+    <div class="form-actions mt-3" style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-secondary" onclick="abrirEmail('${o.id}')">Abrir o pedido</button>
+      ${o.status === 'enviada' ? `<button class="btn btn-sm btn-gold"
+        onclick="marcarConfirmada('${o.id}', ${o.numero})"
+        title="O fornecedor respondeu confirmando o pedido">Fornecedor confirmou</button>` : ''}
+      ${podeCancelar ? `<button class="btn btn-sm btn-outline"
+        onclick="abrirCancelarOrdem('${o.id}', ${o.numero}, '${o.status}')">Cancelar a ordem</button>` : ''}
+    </div>
+
+    <div class="section-title mt-3"><span>Itens do pedido (${
+      ativas < itens.length ? ativas + ' ativo(s) de ' + itens.length : itens.length})</span></div>
     <table class="data-table tabela-cards">
       <thead><tr><th>Item</th>${temCodigo ? '<th>Código</th>' : ''}
         <th class="num">Pedido</th><th class="num">Recebido</th>
         <th class="num">Preço un.</th><th class="num right">Total</th>
-        ${rec ? '<th>Ocorrência</th>' : ''}</tr></thead>
+        ${rec ? '<th>Ocorrência</th>' : ''}
+        ${podeCancelar ? '<th class="center">Ações</th>' : ''}</tr></thead>
       <tbody>${linhas}</tbody>
     </table>
     ${blocoRec}`);
 }
 
-async function cancelarOrdem(id, numero) {
-  const motivo = prompt('Motivo do cancelamento da ' + fmtPO(numero) + ':');
-  if (motivo === null) return;
-  if (!motivo.trim()) { showToast('Informe o motivo.', 'error'); return; }
+// =====================================================================
+// `confirmada` DEIXA DE SER STATUS MORTO
+// =====================================================================
+// Ele existe no banco desde a migration 18 e nenhuma linha de código
+// gravava — nenhuma ordem conseguia chegar nele. No mercado `confirmed` é
+// o fornecedor acusando o pedido, por portal ou EDI; não temos nem um nem
+// outro, então quem marca é a compradora, quando a resposta chega no
+// e-mail dela. É informação real que hoje morre na caixa de entrada.
+async function marcarConfirmada(id, numero) {
+  const { data, error } = await sb.from('ordens_compra').update({
+    status: 'confirmada',
+    confirmada_em: new Date().toISOString(),
+    confirmada_por: state.perfil.id,
+  }).eq('id', id).select('id').maybeSingle();
 
-  const { error } = await sb.from('ordens_compra')
-    .update({ status: 'cancelada', motivo_cancelamento: motivo.trim() }).eq('id', id);
-  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  if (error) {
+    if (error.code === 'PGRST204' || error.code === '42703') {
+      showToast('Marcar confirmação exige a migration 68.', 'error'); return;
+    }
+    showToast('Erro: ' + error.message, 'error'); return;
+  }
+  if (!data) { showToast('Nada mudou — sem permissão para alterar esta ordem.', 'error'); return; }
+
+  showToast(fmtPO(numero) + ' confirmada pelo fornecedor.', 'success');
+  fecharDetalhe();
+  await carregarOrdens();
+}
+
+// =====================================================================
+// CANCELAMENTO — por linha ou por ordem, com motivo de lista fixa
+// =====================================================================
+// Motivo em texto livre não se soma nem se compara: no fim do trimestre
+// ninguém consegue responder "quantas ordens caíram por falta de estoque
+// do fornecedor?". Com código, responde. `outro` continua existindo para
+// não empurrar um motivo errado quando nenhum serve — e aí a descrição
+// passa a ser obrigatória.
+const MOTIVOS_CANCELAMENTO = [
+  ['sem_estoque',      'Fornecedor sem estoque'],
+  ['preco_acima',      'Preço acima do acordado'],
+  ['prazo',            'Prazo não atende'],
+  ['duplicidade',      'Pedido em duplicidade'],
+  ['cozinha_cancelou', 'Cozinha cancelou'],
+  ['erro_digitacao',   'Erro de digitação'],
+  ['outro',            'Outro (descrever)'],
+];
+const rotuloCancel = cod => (MOTIVOS_CANCELAMENTO.find(m => m[0] === cod) || [, cod])[1];
+
+function abrirCancelarOrdem(id, numero, status) {
+  state.cancelCtx = { tipo: 'ordem', id, numero, status };
+  renderCancelModal();
+}
+
+function abrirCancelarLinha(ordemId, linhaId, itemId, nome, numero, status) {
+  state.cancelCtx = { tipo: 'linha', ordemId, linhaId, itemId, nome, numero, status };
+  renderCancelModal();
+}
+
+function renderCancelModal() {
+  const c = state.cancelCtx;
+  const enviada = ['enviada', 'confirmada'].includes(c.status);
+
+  document.getElementById('cancelModalTitle').textContent = c.tipo === 'ordem'
+    ? 'Cancelar ' + fmtPO(c.numero)
+    : 'Cancelar item de ' + fmtPO(c.numero);
+
+  document.getElementById('cancelModalBody').innerHTML = `
+    ${c.tipo === 'linha' ? `<div class="email-campo"><b>Item</b><span>${escapeHtml(c.nome)}</span></div>` : ''}
+    ${enviada ? `<div class="aviso aviso-warn">
+      Esta ordem já foi enviada — o fornecedor tem uma versão na mão.
+      Avise-o da alteração; o sistema não manda nada.</div>` : ''}
+    <div class="aviso aviso-info">
+      ${c.tipo === 'ordem'
+        ? 'Os itens voltam para a fila e entram no próximo pedido.'
+        : 'Este item volta para a fila. Os demais seguem no pedido.'}
+    </div>
+    <label class="field-label">Motivo</label>
+    <select class="select" id="cc-motivo" style="width:100%" onchange="renderCancelObs()">
+      <option value="">— escolha —</option>
+      ${MOTIVOS_CANCELAMENTO.map(([cod, rot]) =>
+        `<option value="${cod}">${escapeHtml(rot)}</option>`).join('')}
+    </select>
+    <div id="cc-obs-box" class="mt-2">
+      <label class="field-label">Detalhe <span class="text-muted">(opcional)</span></label>
+      <input class="input" id="cc-obs" placeholder="o que aconteceu">
+    </div>`;
+  abrirModal('cancelModal');
+}
+
+function renderCancelObs() {
+  const outro = document.getElementById('cc-motivo').value === 'outro';
+  document.querySelector('#cc-obs-box .field-label').innerHTML =
+    outro ? 'Descreva o motivo' : 'Detalhe <span class="text-muted">(opcional)</span>';
+}
+
+async function confirmarCancelamento() {
+  const c = state.cancelCtx;
+  if (!c) return;
+  const codigo = document.getElementById('cc-motivo').value;
+  const texto = document.getElementById('cc-obs').value.trim();
+  if (!codigo) { showToast('Escolha o motivo.', 'error'); return; }
+  if (codigo === 'outro' && !texto) { showToast('Descreva o motivo.', 'error'); return; }
+
+  const btn = document.getElementById('btnConfirmarCancel');
+  btn.disabled = true; btn.textContent = 'Cancelando...';
+  try {
+    const ok = c.tipo === 'ordem'
+      ? await cancelarOrdem(c.id, c.numero, codigo, texto)
+      : await cancelarLinhaOrdem(c, codigo, texto);
+    if (!ok) return;
+    fecharModal('cancelModal');
+    fecharDetalhe();
+    await carregarOrdens();
+    await carregarFila();
+  } finally {
+    btn.disabled = false; btn.textContent = 'Cancelar';
+  }
+}
+
+async function cancelarOrdem(id, numero, codigo, texto) {
+  const { data, error } = await sb.from('ordens_compra').update({
+    status: 'cancelada',
+    motivo_cancelamento_codigo: codigo,
+    motivo_cancelamento: texto || rotuloCancel(codigo),
+    cancelada_em: new Date().toISOString(),
+    cancelada_por: state.perfil.id,
+  }).eq('id', id).select('id').maybeSingle();
+
+  if (error) { showToast('Erro: ' + error.message, 'error'); return false; }
+  if (!data)  { showToast('Nada foi cancelado — sem permissão para alterar esta ordem.', 'error'); return false; }
 
   // Devolve os itens para a fila
   await sb.from('solicitacao_compra_itens').update({ ordem_compra_id: null }).eq('ordem_compra_id', id);
   showToast(fmtPO(numero) + ' cancelada — itens voltaram para a fila.', 'success');
-  await carregarOrdens();
-  await carregarFila();
+  return true;
+}
+
+// A linha NÃO é apagada: fica na ordem marcada como cancelada. O fornecedor
+// recebeu uma versão do pedido que a continha, e sumir com ela apagaria
+// justamente o registro de que houve mudança depois do envio.
+async function cancelarLinhaOrdem(c, codigo, texto) {
+  const { data, error } = await sb.from('ordem_compra_itens').update({
+    cancelada: true,
+    motivo_cancelamento_codigo: codigo,
+    motivo_cancelamento: texto || rotuloCancel(codigo),
+    cancelada_em: new Date().toISOString(),
+    cancelada_por: state.perfil.id,
+  }).eq('id', c.linhaId).select('id').maybeSingle();
+
+  if (error) {
+    if (error.code === 'PGRST204' || error.code === '42703') {
+      showToast('Cancelar item exige a migration 68.', 'error'); return false;
+    }
+    showToast('Erro: ' + error.message, 'error'); return false;
+  }
+  if (!data) { showToast('Nada foi cancelado — sem permissão para alterar esta linha.', 'error'); return false; }
+
+  // A solicitação do PDV volta para a fila. Filtro pela ordem E pelo item:
+  // é exatamente o conjunto de linhas de PDV que esta linha da PO consolidou.
+  if (c.itemId) {
+    await sb.from('solicitacao_compra_itens')
+      .update({ ordem_compra_id: null })
+      .eq('ordem_compra_id', c.ordemId).eq('item_id', c.itemId);
+  }
+
+  // O total da ordem passa a valer só as linhas vivas
+  const { data: restantes } = await sb.from('ordem_compra_itens')
+    .select('valor_linha, cancelada').eq('ordem_id', c.ordemId);
+  const vivas = (restantes || []).filter(r => !r.cancelada);
+  const total = vivas.reduce((s, r) => s + (parseFloat(r.valor_linha) || 0), 0);
+  await sb.from('ordens_compra').update({ valor_total: total }).eq('id', c.ordemId);
+
+  if (!vivas.length) {
+    await cancelarOrdem(c.ordemId, c.numero, codigo, texto);
+    showToast('Era o último item — ' + fmtPO(c.numero) + ' foi cancelada inteira.', 'info', 6000);
+    return true;
+  }
+
+  showToast(c.nome + ' cancelado — voltou para a fila. ' + fmtPO(c.numero)
+    + ' segue com ' + vivas.length + ' item(ns).', 'success', 6000);
+  return true;
 }
 
 // =====================================================================
@@ -3129,13 +3829,19 @@ function goTab(tab, el) {
 
 async function carregarCotacoes() {
   const cont = document.getElementById('cotacoesContainer');
-  const { data, error } = await sb.from('cotacoes')
-    .select(`id, numero, item_id, quantidade, status, prazo_resposta, observacao, created_at,
-             itens(nome, unidade),
+
+  // ordem_compra_id é da migration 68 — sem ela o select inteiro falharia e a
+  // aba diria "rode a migration 38", que seria a mensagem errada.
+  const consulta = extra => sb.from('cotacoes')
+    .select(`id, numero, item_id, quantidade, status, prazo_resposta, observacao, created_at${extra},
+             itens(nome, unidade, categoria),
              cotacao_fornecedores(id, fornecedor_id, enviada_em, respondida_em, preco_unitario,
                                   prazo_entrega_dias, quantidade_minima, validade_proposta,
                                   observacao, escolhida, situacao)`)
     .order('created_at', { ascending: false });
+
+  let { data, error } = await consulta(', ordem_compra_id');
+  if (error) ({ data, error } = await consulta(''));
 
   if (error) {
     state.cotacoesOk = false;
@@ -3193,6 +3899,7 @@ function renderCotacoes() {
         <div class="cot-forn ${estado}">
           <div>${escapeHtml(nomeF(f.fornecedor_id))}
             ${venceu ? '<span class="opc-tag">escolhido</span>' : ''}
+            ${!venceu && ehMenor && comPreco.length > 1 ? '<span class="opc-tag" style="color:var(--green)">menor preço</span>' : ''}
             <div class="linha-origem">${
               f.respondida_em ? 'respondeu ' + ptDate(String(f.respondida_em).slice(0,10))
               : f.enviada_em  ? 'enviada ' + ptDate(String(f.enviada_em).slice(0,10))
@@ -3220,8 +3927,8 @@ function renderCotacoes() {
                         title="Registrar que este fornecedor não respondeu">sem retorno</button>
                    <button class="cot-btn-recusa" onclick="marcarSituacaoCotacao('${f.id}','sem_estoque')"
                         title="Registrar que ele não tem o item">sem estoque</button>`}
-              ${p != null ? `<button class="btn btn-sm btn-gold" onclick="escolherFornecedorCotacao('${c.id}','${f.id}')"
-                      title="Fecha a cotação e grava este preço na matriz">Escolher</button>` : ''}`}
+              ${p != null ? `<button class="btn btn-sm btn-gold" onclick="abrirAdjudicacao('${c.id}','${f.id}')"
+                      title="Concede a cotação a este fornecedor e decide o que fazer em seguida">Adjudicar</button>` : ''}`}
           </div>
         </div>`;
       }).join('');
@@ -3248,6 +3955,10 @@ function renderCotacoes() {
         <div class="cot-body ${c.status !== 'fechada' && c.status !== 'cancelada' ? 'open' : ''}" id="bodyC-${i}">
           ${c.prazo_resposta ? `<div style="padding:8px 16px;font-size:11px;color:var(--muted)">
             Prazo para responder: ${ptDate(c.prazo_resposta)}${c.observacao ? ' · ' + escapeHtml(c.observacao) : ''}</div>` : ''}
+          ${c.ordem_compra_id ? `<div style="padding:8px 16px;font-size:11.5px">
+            <span class="opc-tag">adjudicada</span>
+            <a href="#" onclick="event.preventDefault();verOrdem('${c.ordem_compra_id}')"
+               style="color:var(--gold)">ver a ordem que nasceu desta cotação</a></div>` : ''}
           <div class="cot-forn" style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">
             <div>Fornecedor</div><div>Preço</div><div>Prazo</div><div>Validade da proposta</div><div></div>
           </div>
@@ -3504,15 +4215,146 @@ async function marcarCotacaoEnviada() {
   await carregarCotacoes();
 }
 
-// ── O passo que faz a cotação valer: o preço volta para a matriz ────
-async function escolherFornecedorCotacao(cotId, linhaId) {
+// =====================================================================
+// ADJUDICAR — a cotação deixa de morrer no preço
+// =====================================================================
+// Até aqui, fechar a cotação gravava o preço na matriz e acabava: a
+// compradora escolhia o fornecedor e tinha de ir à fila, achar o item e
+// torcer para o preço novo já estar valendo. No Dynamics e no Oracle,
+// aceitar uma proposta GERA o documento de compra — o `award` tem
+// consequência. É o que estes três caminhos fazem.
+function abrirAdjudicacao(cotId, linhaId) {
   const cot = state.cotacoes.find(c => c.id === cotId);
   const linha = (cot?.cotacao_fornecedores || []).find(f => f.id === linhaId);
   if (!cot || !linha) return;
   const forn = state.fornecedores.find(x => x.id === linha.fornecedor_id);
-  if (!confirm(`Fechar a cotação de "${cot.itens?.nome}" com ${forn?.nome} a `
-    + `${fmtMoeda(linha.preco_unitario)}?\n\nO preço e a data de hoje vão para a matriz `
-    + `Item × Fornecedor e passam a valer nos próximos pedidos.`)) return;
+  if (!forn) { showToast('Fornecedor desta proposta não está mais no cadastro.', 'error'); return; }
+
+  state.adjCtx = { cot, linha, forn };
+  document.getElementById('adjModalTitle').textContent = 'Adjudicar — ' + (cot.itens?.nome || '');
+  document.getElementById('adjModalBody').innerHTML = `
+    <div class="email-campo"><b>Item</b><span>${escapeHtml(cot.itens?.nome || '—')}</span></div>
+    <div class="email-campo"><b>Fornecedor</b><span>${escapeHtml(forn?.nome || '—')}</span></div>
+    <div class="email-campo"><b>Proposta</b><span>${fmtMoeda(linha.preco_unitario)} por
+      ${escapeHtml(cot.itens?.unidade || 'unidade')}${
+      linha.prazo_entrega_dias != null ? ' · entrega em ' + linha.prazo_entrega_dias + 'd' : ''}${
+      linha.validade_proposta ? ' · vale até ' + ptDate(linha.validade_proposta) : ''}</span></div>
+
+    <div class="aviso aviso-info mt-2">
+      O preço e a data de hoje vão para a matriz Item × Fornecedor nos três casos.
+      A escolha abaixo é o que acontece <strong>depois</strong>.
+    </div>
+
+    <label class="field-label mt-2">O que fazer agora</label>
+    <label class="radio-linha" style="display:block;padding:7px 0">
+      <input type="radio" name="adj-destino" value="po" checked onchange="renderAdjQtd()">
+      <strong>Gerar a ordem de compra agora</strong>
+      <div class="text-muted" style="font-size:11.5px;margin-left:22px">
+        Abre a revisão do pedido com este item, já neste fornecedor.</div>
+    </label>
+    <label class="radio-linha" style="display:block;padding:7px 0">
+      <input type="radio" name="adj-destino" value="fila" onchange="renderAdjQtd()">
+      <strong>Mandar para a fila com este fornecedor</strong>
+      <div class="text-muted" style="font-size:11.5px;margin-left:22px">
+        Torna-o o fornecedor padrão do item; quando o item aparecer na fila, já vem por ele.</div>
+    </label>
+    <label class="radio-linha" style="display:block;padding:7px 0">
+      <input type="radio" name="adj-destino" value="preco" onchange="renderAdjQtd()">
+      <strong>Só registrar o preço</strong>
+      <div class="text-muted" style="font-size:11.5px;margin-left:22px">
+        Quando a cotação serviu para formar preço e não para comprar.</div>
+    </label>
+
+    <div id="adj-qtd-box" class="mt-2">
+      <label class="field-label">Quantidade do pedido</label>
+      <input class="input" id="adj-qtd" type="text" inputmode="decimal"
+             value="${cot.quantidade ?? ''}" style="max-width:180px"
+             placeholder="${escapeAttr(cot.itens?.unidade || 'qtd')}">
+    </div>`;
+  abrirModal('adjModal');
+}
+
+function renderAdjQtd() {
+  const destino = document.querySelector('input[name="adj-destino"]:checked')?.value;
+  document.getElementById('adj-qtd-box').hidden = destino !== 'po';
+}
+
+async function adjudicarCotacao() {
+  const ctx = state.adjCtx;
+  if (!ctx) return;
+  const destino = document.querySelector('input[name="adj-destino"]:checked')?.value || 'preco';
+  const qtd = destino === 'po' ? numBR(document.getElementById('adj-qtd').value) : null;
+  if (destino === 'po' && !(qtd > 0)) { showToast('Informe a quantidade do pedido.', 'error'); return; }
+
+  const btn = document.getElementById('btnAdjudicar');
+  btn.disabled = true; btn.textContent = 'Adjudicando...';
+  try {
+    const ok = await escolherFornecedorCotacao(ctx.cot.id, ctx.linha.id, destino);
+    if (!ok) return;
+    fecharModal('adjModal');
+
+    if (destino === 'po')  await abrirPOdaCotacao(ctx, qtd);
+    if (destino === 'fila') await mandarParaFila(ctx);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Adjudicar';
+  }
+}
+
+// Caminho 1: vira pedido na hora, na mesma tela de revisão dos outros
+async function abrirPOdaCotacao(ctx, qtd) {
+  const { cot, linha, forn } = ctx;
+  await carregarMatriz();   // a opção recém-gravada precisa existir na matriz
+  const alternativas = opcoesDe(cot.item_id);
+  const opcao = alternativas.find(o => o.fornecedor_id === linha.fornecedor_id) || null;
+
+  state.poAtual = {
+    fornecedorNome: forn?.nome || '—',
+    fornecedor: forn || null,
+    cotacaoId: cot.id,
+    linhas: [{
+      item_id: cot.item_id, nome: cot.itens?.nome || '—',
+      categoria: cot.itens?.categoria || null, unidade: cot.itens?.unidade || null,
+      qtd, preco: parseFloat(linha.preco_unitario) || 0,
+      opcao, alternativas, maisBarata: alternativaComparavel(opcao, alternativas),
+      moq: linha.quantidade_minima != null ? parseFloat(linha.quantidade_minima) : (opcao?.moq ?? null),
+      codigo: opcao?.codigo ?? null,
+      pdvs: [], itemIds: [], qtdPedida: qtd, cortada: false, incluir: true,
+    }],
+    pendencias: pendenciasDoFornecedor(forn?.nome, forn),
+    avulsa: true,
+  };
+  document.getElementById('poModalTitle').textContent =
+    'Pedido da cotação — ' + (forn?.nome || '');
+  renderPOEdit();
+  abrirModal('poModal');
+}
+
+// Caminho 2: não vira pedido agora, mas a decisão fica valendo na fila
+async function mandarParaFila(ctx) {
+  const { cot, linha, forn } = ctx;
+  const ops = opcoesDe(cot.item_id);
+  const alvo = ops.find(o => o.fornecedor_id === linha.fornecedor_id);
+  if (alvo) {
+    await sb.from('item_fornecedores').update({ preferencia: 2 })
+      .in('id', ops.map(o => o.id));
+    const { error } = await sb.from('item_fornecedores').update({
+      preferencia: 1, atualizado_em: new Date().toISOString(), atualizado_por: state.perfil.id,
+    }).eq('id', alvo.id);
+    if (error) { showToast('Preço gravado, mas o padrão não mudou: ' + error.message, 'error'); return; }
+    delete overrideFornecedor[cot.item_id];
+  }
+  await carregarMatriz();
+  await carregarFila();
+  showToast((forn?.nome || 'O fornecedor') + ' agora é o padrão de '
+    + (cot.itens?.nome || 'item') + ' — a fila já sai por ele.', 'success', 6000);
+}
+
+// ── O passo que faz a cotação valer: o preço volta para a matriz ────
+async function escolherFornecedorCotacao(cotId, linhaId, destino) {
+  const cot = state.cotacoes.find(c => c.id === cotId);
+  const linha = (cot?.cotacao_fornecedores || []).find(f => f.id === linhaId);
+  if (!cot || !linha) return false;
+  const forn = state.fornecedores.find(x => x.id === linha.fornecedor_id);
 
   try {
     // 1. marca a vencedora (o índice único garante uma só por cotação)
@@ -3548,11 +4390,15 @@ async function escolherFornecedorCotacao(cotId, linhaId) {
       .update({ status: 'fechada', fechada_em: hoje }).eq('id', cotId);
     if (e3) throw e3;
 
-    showToast(`Cotação fechada com ${forn?.nome}. O preço já está na matriz.`, 'success');
+    showToast(destino === 'preco'
+      ? `Cotação adjudicada a ${forn?.nome}. O preço já está na matriz.`
+      : `Cotação adjudicada a ${forn?.nome}.`, 'success');
     await Promise.all([carregarCotacoes(), carregarMatriz(), carregarUltimoPreco()]);
     renderMatriz();
+    return true;
   } catch (err) {
-    showToast('Erro ao fechar: ' + err.message, 'error');
+    showToast('Erro ao adjudicar: ' + err.message, 'error');
+    return false;
   }
 }
 

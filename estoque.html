@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609101455">
+<link rel="stylesheet" href="style.css?v=202609151104">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609101455"></script>
+<script src="config.js?v=202609151104"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -791,6 +791,7 @@
     </div>
 
     <div class="nav-item" data-proc="compra" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
+    <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">▤</span> Fichas Técnicas</div>
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
   </div>
   <div class="sidebar-foot">
@@ -1227,6 +1228,13 @@
     <div id="invRoot"></div>
   </div>
 
+  <!-- ========================================================== -->
+  <!-- ABA FICHAS — as receitas da Comissaria                      -->
+  <!-- ========================================================== -->
+  <div class="tab-content" id="tab-fichas">
+    <div id="ftRoot"></div>
+  </div>
+
   </div>
 </div>
 
@@ -1414,6 +1422,7 @@ const tabTitles = {
   divergencias: ['Divergências de Estoque', ''],
   relatorios:   ['Relatórios', ''],
   inventario:   ['Inventário do Mês', 'Contagem da câmara da Comissaria'],
+  fichas:       ['Fichas Técnicas', 'Receitas da Comissaria'],
 };
 
 function toggleNavGroup(headEl) {
@@ -1462,6 +1471,7 @@ function goTab(aba, el) {
   if (aba === 'niveis') carregarNiveis();
   if (aba === 'divergencias') carregarDivergencias();
   if (aba === 'inventario') abrirTelaInventario();
+  if (aba === 'fichas') abrirTelaFichas();
   openParentGroup(el);
   document.getElementById('chkSaveBar').classList.toggle('visible',
     aba === 'checklist' && Object.keys(state.chk.dirty).length > 0);
@@ -1486,6 +1496,18 @@ async function abrirTelaInventario() {
   }
   await montarInventario('#invRoot',
     { pdvId: state.pdvComissariaId, pdvNome: 'Comissaria' });
+}
+
+// Mesma tela de fichas das cozinhas (config.js), apontada para a Comissaria.
+// É onde moram os embutidos e curados: quando um PDV pede um desses
+// produtos, os ingredientes desta ficha entram na requisição dele.
+async function abrirTelaFichas() {
+  if (!state.pdvComissariaId) {
+    document.getElementById('ftRoot').innerHTML =
+      '<div class="empty-text">PDV "Comissaria" não encontrado no banco.</div>';
+    return;
+  }
+  await montarFichas('#ftRoot', { pdvId: state.pdvComissariaId, pdvNome: 'Comissaria' });
 }
 
 // =====================================================================

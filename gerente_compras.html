@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609101455">
+<link rel="stylesheet" href="style.css?v=202609151104">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609101455"></script>
+<script src="config.js?v=202609151104"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -863,10 +863,15 @@ window.addEventListener('load', async () => {
   instalarAvisoConexao();   // barra vermelha fixa quando a internet cai
   const { data: { user } } = await sb.auth.getUser();
   if (!user) { window.location.href = 'index.html'; return; }
-  const { data: perfil } = await sb.from('usuarios').select('id, perfil, nome').eq('auth_uid', user.id).single();
+  // gerencia_catalogo é da migration 71; sem ela o select inteiro falharia e
+  // o gerente seria mandado de volta ao login.
+  let { data: perfil, error: ePerfil } = await sb.from('usuarios')
+    .select('id, perfil, nome, gerencia_catalogo').eq('auth_uid', user.id).single();
+  if (ePerfil) ({ data: perfil } = await sb.from('usuarios').select('id, perfil, nome').eq('auth_uid', user.id).single());
   if (!perfil || perfil.perfil !== 'gerente_compras') { window.location.href = 'index.html'; return; }
   state.user = user; state.perfil = perfil;
   document.getElementById('userName').textContent = perfil.nome || '';
+  aplicarTravaCatalogo();
 
   document.getElementById('dateBadge').textContent = new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
 
@@ -952,7 +957,26 @@ async function carregarCatalogoEPrecos() {
   (precos || []).forEach(p => { state.precosMap[p.item_id] = p; });
 }
 
+// Gerente de compras sem gestão de catálogo (o David): vê a lista e passa à
+// compradora, mas não edita item nem resolve item pendente. A trava de
+// verdade é no banco (pode_gerir_catalogo, migration 71); aqui as duas abas
+// só deixam de aparecer.
+const ABAS_DE_CATALOGO = ['catalogo', 'pendentes'];
+const semCatalogo = () => state.perfil && state.perfil.gerencia_catalogo === false;
+
+function aplicarTravaCatalogo() {
+  if (!semCatalogo()) return;
+  document.querySelectorAll('.nav-item').forEach(n => {
+    const oc = n.getAttribute('onclick') || '';
+    if (ABAS_DE_CATALOGO.some(a => oc.includes(`goTab('${a}'`))) n.hidden = true;
+  });
+}
+
 function goTab(tab, el) {
+  if (semCatalogo() && ABAS_DE_CATALOGO.includes(tab)) {
+    tab = 'dashboard';
+    el = document.querySelector('.nav-item[onclick*="goTab(\'dashboard\'"]');
+  }
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
@@ -1660,7 +1684,7 @@ async function gerarRelatorio() {
 
   if (fonte === 'ambos' || fonte === 'req') {
     let q = sb.from('requisicao_itens')
-      .select('item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, pacotes_entregues, pedido_por, peso_medio_pacote, requisicoes!inner(data_competencia, pdv_id, status, pdvs(nome), entregue_em)')
+      .select('id, item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, pacotes_entregues, pedido_por, peso_medio_pacote, requisicoes!inner(data_competencia, pdv_id, status, pdvs(nome), entregue_em)')
       .eq('requisicoes.status', 'entregue')
       .gte('requisicoes.data_competencia', de)
       .lte('requisicoes.data_competencia', ate);
@@ -1668,6 +1692,9 @@ async function gerarRelatorio() {
     if (cat) q = q.eq('item_categoria', cat);
     const { data, error } = await q;
     if (error) { showToast('Erro (requisições): ' + error.message, 'error'); cont.innerHTML = ''; return; }
+    // Produto da Comissaria com ficha: custo pelos ingredientes (migration 69),
+    // pedido ao banco já somado (migration 71).
+    const custos = await custosPelaFicha(sb, (data || []).map(it => it.id));
     // Item de pacote entra em PESO, nunca em número de pacotes — este
     // relatório alimenta o inventário. Ver qtdInventario() em config.js.
     (data || []).forEach(it => {
@@ -1682,6 +1709,7 @@ async function gerarRelatorio() {
         unidade: inv.unidade,
         qtd: inv.qtd,
         semPeso: inv.semPeso,
+        ficha: custos[it.id],
       });
     });
   }
@@ -1710,14 +1738,26 @@ async function gerarRelatorio() {
     if (!totaisItem[key]) {
       const preco = r.itemId ? (state.precosMap[r.itemId]?.preco_unitario || 0) : 0;
       totaisItem[key] = { categoria: r.categoria, item: r.item, itemId: r.itemId, unidade: r.unidade,
-                          preco: parseFloat(preco) || 0, buckets: {}, total: 0 };
+                          preco: parseFloat(preco) || 0, buckets: {}, total: 0,
+                          qtdFicha: 0, valorFicha: 0, fichaParcial: 0 };
     }
     totaisItem[key].buckets[b] = (totaisItem[key].buckets[b] || 0) + r.qtd;
     totaisItem[key].total += r.qtd;
+    if (r.ficha?.temFicha) {
+      totaisItem[key].qtdFicha += r.qtd;
+      totaisItem[key].valorFicha += r.ficha.valor;
+      totaisItem[key].fichaParcial += r.ficha.semPreco + r.ficha.abertos;
+    }
     totaisPdv[r.pdv] = (totaisPdv[r.pdv] || 0) + r.qtd;
     totaisCat[r.categoria] = (totaisCat[r.categoria] || 0) + r.qtd;
   }
-  Object.values(totaisItem).forEach(x => { x.valorTotal = x.preco * x.total; });
+  // O que veio pela ficha soma o custo dos ingredientes; o resto continua
+  // preço vigente × quantidade.
+  Object.values(totaisItem).forEach(x => {
+    x.valorTotal = x.preco * (x.total - x.qtdFicha) + x.valorFicha;
+    x.porFicha = x.qtdFicha > 0;
+    if (x.porFicha && x.total > 0) x.preco = x.valorTotal / x.total;
+  });
   const bucketsOrd = [...buckets].sort();
   relatorioDados = { rows, totaisItem, totaisPdv, totaisCat, buckets: bucketsOrd, fonte, granul };
 
@@ -1747,7 +1787,8 @@ function renderRelatorioKPIs() {
     <div class="stat-card">
       <div class="stat-label">Valor total estimado</div>
       <div class="stat-val green">${fmtBRL(valorTotal)}</div>
-      <div class="stat-sub">preço vigente × qtd</div>
+      <div class="stat-sub">preço vigente × qtd${
+        itensArr.some(x => x.porFicha) ? ' · produtos da Comissaria pela ficha' : ''}</div>
     </div>
   `;
 }
@@ -1798,8 +1839,11 @@ function renderRelatorio() {
         <td class="text-muted" data-label="Unidade">${it.unidade}</td>
         ${buckets.map(b => `<td class="center num" data-label="${escapeHtml(b)}">${fmtQtyRel(it.buckets[b]||0)}</td>`).join('')}
         <td class="center num text-gold" style="font-weight:500" data-label="Total">${fmtQtyRel(it.total)}</td>
-        <td class="num text-muted" data-label="Preço un.">${it.preco > 0 ? fmtBRL(it.preco) : '—'}</td>
-        <td class="num" style="font-weight:500" data-label="Valor total">${it.preco > 0 ? fmtBRL(it.valorTotal) : '—'}</td>
+        <td class="num text-muted" data-label="Preço un.">${it.preco > 0 ? fmtBRL(it.preco) : '—'}${
+          it.porFicha ? `<br><span class="ficha-tag${it.fichaParcial ? ' parcial' : ''}" title="${
+            it.fichaParcial ? it.fichaParcial + ' ingrediente(s) sem preço ou em aberto' : 'Custo dos ingredientes da ficha técnica'}">${
+            it.fichaParcial ? 'pela ficha · parcial' : 'pela ficha'}</span>` : ''}</td>
+        <td class="num" style="font-weight:500" data-label="Valor total">${it.valorTotal > 0 ? fmtBRL(it.valorTotal) : '—'}</td>
       </tr>`).join('')}
       </tbody>
     </table>
@@ -2483,9 +2527,9 @@ function renderCatalogoTable() {
   // deixa de ser invisivel.
   if (rf === 'sem_subgrupo')  lista = lista.filter(i => !i.subcategoria);
   if (rf === 'sem_inv_nome')  lista = lista.filter(i => i.inventario && !i.nome_inventario);
-  if (rf === 'transf_sem_origem') lista = lista.filter(i => !ehCompravel(i) && !i.item_origem_id);
+  if (rf === 'transf_sem_origem') lista = lista.filter(i => nasceNaCozinha(i) && !i.item_origem_id);
   if (rf === 'inv_sem_volta') lista = lista.filter(i =>
-    i.inventario && !ehCompravel(i) && (!i.item_origem_id || !i.aproveitamento_pct));
+    i.inventario && nasceNaCozinha(i) && (!i.item_origem_id || !i.aproveitamento_pct));
   if (rf === 'sem_forn')      lista = lista.filter(i =>
     !(i.fornecedor_principal || '').trim() && !(state.precosMap && state.precosMap[i.id]));
   if (rf === 'repetido') {
@@ -2686,9 +2730,9 @@ function renderContadoresCatalogo() {
     ['no_inv', 'no inventário', ativos.filter(i => i.inventario).length, ''],
     ['sem_subgrupo', 'sem subgrupo', ativos.filter(i => !i.subcategoria).length, 'falta'],
     ['transf_sem_origem', 'transformado sem origem',
-      ativos.filter(i => !ehCompravel(i) && !i.item_origem_id).length, 'falta'],
+      ativos.filter(i => nasceNaCozinha(i) && !i.item_origem_id).length, 'falta'],
     ['inv_sem_volta', 'no inventário sem voltar ao comprado',
-      ativos.filter(i => i.inventario && !ehCompravel(i) && (!i.item_origem_id || !i.aproveitamento_pct)).length, 'falta'],
+      ativos.filter(i => i.inventario && nasceNaCozinha(i) && (!i.item_origem_id || !i.aproveitamento_pct)).length, 'falta'],
     ['repetido', 'nome repetido',
       ativos.filter(i => conta[_catChave(i.nome)] > 1).length, 'falta'],
   ];
@@ -2705,6 +2749,14 @@ function filtrarPorContador(f) {
   const sel = document.getElementById('cat-req-filtro');
   sel.value = sel.value === f ? '' : f;
   renderCatalogoTable();
+}
+
+// Fora da compra por nascer na cozinha — o que precisa de item de origem e
+// aproveitamento. Item 'externo' (seco comprado por outra equipe, migration
+// 70) também fica fora da compra, mas não é transformação e não entra nesses
+// contadores de pendência.
+function nasceNaCozinha(i) {
+  return !ehCompravel(i) && i.tipo_aquisicao !== 'externo';
 }
 
 // ── ação em massa ────────────────────────────────────────────────
