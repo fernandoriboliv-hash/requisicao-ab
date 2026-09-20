@@ -1802,3 +1802,117 @@ body[data-processo] #execCartBtn:disabled { background: var(--muted2); color: va
 
 /* --- sub-abas que escolhem o processo (executivo) --- */
 .tab[data-proc].active { color: var(--proc); border-bottom-color: var(--proc); }
+
+/* =====================================================================
+   FICHAS TÉCNICAS — etapa 4 (fluxo da GENERAL-09, importação, PDF)
+   ===================================================================== */
+.ft-status {
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase; padding: 2px 8px;
+  border: 1px solid currentColor; white-space: nowrap;
+}
+.st-rascunho   { color: var(--muted); }
+.st-degustacao { color: var(--orange); background: rgba(224,140,62,.08); }
+.st-validacao  { color: #6FA8DC; background: rgba(37,99,168,.12); }
+.st-publicada  { color: var(--green); background: rgba(76,175,125,.08); }
+.st-reprovada  { color: var(--error); background: rgba(224,82,82,.08); }
+.ft-tag-prato  { color: var(--gold); border-color: rgba(184,150,62,.5); }
+.ft-tag-alerg  { color: var(--error); border-color: rgba(224,82,82,.45); }
+.text-success  { color: var(--green); }
+.ft-pdv { min-width: 180px; }
+.ft-espera { font-size: 12px; align-self: center; }
+.ft-situacao { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ft-motivo { margin-top: 10px; }
+.ft-motivo label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+.ft-hist-evento { background: transparent; }
+
+/* A caixa de entrada do aprovador */
+.ft-fila { border: 1px solid rgba(224,140,62,.35); background: rgba(224,140,62,.05); padding: 12px 14px; margin-bottom: 16px; }
+.ft-fila-titulo { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--orange); margin-bottom: 8px; }
+.ft-fila-item {
+  display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; width: 100%;
+  background: var(--panel); border: 1px solid var(--border-subtle); color: var(--text);
+  padding: 8px 10px; margin-top: 4px; cursor: pointer; text-align: left; font: inherit; font-size: 13px;
+}
+.ft-fila-item:hover { border-color: var(--gold); }
+.ft-fila-nome { flex: 1; min-width: 160px; }
+
+/* Vincular linha em aberto */
+.ft-vincular {
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+  color: var(--orange); background: rgba(224,140,62,.08); border: 1px dashed var(--orange); padding: 2px 8px;
+}
+.ft-vinc-caixa { flex-basis: 100%; }
+.ft-vinc-caixa .input { margin-top: 6px; }
+
+/* Preço, CMV e margem */
+.ft-gerencial { margin-top: 14px; border: 1px solid var(--border); padding: 12px 14px; background: var(--panel); }
+.ft-gerencial-titulo { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); margin-bottom: 10px; }
+.ft-gerencial-grade { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; }
+.ft-gerencial-grade label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.ft-gerencial-grade .ft-mini { width: 130px; text-align: right; }
+.ft-gerencial-kpis { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+.ft-gerencial-kpis strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* SharePoint */
+.ft-sp { margin-top: 18px; border: 1px solid var(--border-subtle); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.ft-sp-titulo { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.ft-sp-arquivo { font-family: ui-monospace, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.ft-sp-pasta { font-size: 11.5px; }
+.ft-sp .btn { align-self: flex-start; margin-top: 4px; }
+
+/* Importação */
+.ft-imp-arquivo {
+  display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 18px;
+  border: 1px dashed var(--border); cursor: pointer; background: var(--panel);
+}
+.ft-imp-arquivo input { max-width: 100%; }
+.ft-imp-resumo { margin: 16px 0 10px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.ft-imp-lista { display: flex; flex-direction: column; gap: 2px; }
+.ft-imp-ficha { background: var(--panel); border: 1px solid var(--border-subtle); }
+.ft-imp-ficha summary { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 9px 12px; cursor: pointer; font-size: 13px; }
+.ft-imp-nome { font-weight: 500; }
+.ft-imp-det { padding: 4px 14px 12px; font-size: 12.5px; }
+.ft-imp-det ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.ft-imp-ign { font-size: 12.5px; color: var(--muted); }
+
+/* A folha impressa: fundo branco, tinta preta, independente do tema da tela */
+#ft-print { display: none; }
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  html, body.imprimindo-ficha { background: #fff !important; }
+  body.imprimindo-ficha > *:not(#ft-print) { display: none !important; }
+  body.imprimindo-ficha #ft-print { display: block; color: #111; font-family: Calibri, Arial, sans-serif; font-size: 10.5pt; }
+  #ft-print .fp-cab { display: flex; justify-content: space-between; gap: 12px; border-bottom: 2px solid #B8963E; padding-bottom: 8px; margin-bottom: 10px; }
+  #ft-print .fp-hotel { font-size: 9pt; letter-spacing: 1px; text-transform: uppercase; color: #6b5a2a; }
+  #ft-print .fp-titulo { font-family: Cambria, Georgia, serif; font-size: 20pt; line-height: 1.15; }
+  #ft-print .fp-sub { font-size: 9.5pt; color: #444; }
+  #ft-print .fp-cod { font-family: Consolas, monospace; font-size: 8pt; color: #444; text-align: right; max-width: 45%; overflow-wrap: anywhere; }
+  #ft-print table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; }
+  #ft-print .fp-meta td { border: 1px solid #ccc; padding: 4px 6px; vertical-align: top; font-size: 9.5pt; }
+  #ft-print .fp-meta b { display: block; font-size: 7.5pt; letter-spacing: .5px; text-transform: uppercase; color: #6b5a2a; font-weight: 600; }
+  #ft-print .fp-ing th { background: #f3efe4; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .5px; text-align: left; border-bottom: 1px solid #999; padding: 4px 6px; }
+  #ft-print .fp-ing td { border-bottom: 1px solid #ddd; padding: 4px 6px; }
+  #ft-print .fp-ing td:not(:first-child), #ft-print .fp-ing th:not(:first-child) { text-align: right; white-space: nowrap; }
+  #ft-print .fp-obs { font-size: 8.5pt; color: #555; font-style: italic; }
+  #ft-print h3 { font-family: Cambria, Georgia, serif; font-size: 12pt; margin: 12px 0 4px; color: #333; }
+  #ft-print .fp-texto { white-space: normal; line-height: 1.45; }
+  #ft-print .fp-alerg td { border: 1px solid #ccc; padding: 3px 6px; font-size: 9pt; width: 33%; }
+  #ft-print .fp-alerg td b { float: right; font-size: 8.5pt; }
+  #ft-print .fp-alerg td.sim { background: #fde8e6; font-weight: 600; }
+  #ft-print .fp-alerg td.sim b { color: #b3261e; }
+  #ft-print .fp-rodape { margin-top: 14px; border-top: 1px solid #ccc; padding-top: 6px; font-size: 8pt; color: #555; }
+}
+
+/* Foto do prato — o espaço existe desde 20/09; guardar a imagem espera o
+   plano pago do banco (decisão do Fernando). */
+.ft-foto-vazia {
+  border: 1px dashed var(--border); background: var(--panel);
+  padding: 26px 14px; text-align: center; font-size: 12px; color: var(--muted);
+}
+@media print {
+  #ft-print .fp-foto { display: flex; gap: 10px; }
+  #ft-print .fp-foto span {
+    flex: 1; border: 1px dashed #bbb; height: 45mm; display: flex;
+    align-items: flex-end; justify-content: center; padding: 4px; font-size: 8pt; color: #777;
+  }
+}

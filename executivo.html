@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609151104">
+<link rel="stylesheet" href="style.css?v=202609201318">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609151104"></script>
+<script src="config.js?v=202609201318"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -523,16 +523,19 @@ function toggleSidebar() {
 // O chef executivo do hotel não tem PDV: escolhe de qual cozinha quer
 // ver as fichas, igual ao inventário. Chef de cozinha cai direto na dele.
 async function abrirTelaFichas() {
+  // Chef sem cozinha fixa escolhe a cozinha na própria tela de fichas.
+  const pdvs = state.perfil.pdv_id ? null
+    : (state.pdvs || []).map(p => ({ id: p.id, nome: p.nome }));
   const pdvId = state.perfil.pdv_id
-    || document.getElementById('inv-pdv')?.value
-    || (state.pdvs || [])[0]?.id;
+    || (_FT.pdvId && (pdvs || []).some(p => p.id === _FT.pdvId) ? _FT.pdvId : null)
+    || (pdvs || [])[0]?.id;
   const pdv = (state.pdvs || []).find(p => p.id === pdvId);
   if (!pdvId) {
     document.getElementById('ftRoot').innerHTML =
-      '<div class="empty-text">Escolha uma cozinha no Inventário primeiro.</div>';
+      '<div class="empty-text">Nenhuma cozinha disponível.</div>';
     return;
   }
-  await montarFichas('#ftRoot', { pdvId, pdvNome: pdv?.nome || '' });
+  await montarFichas('#ftRoot', { pdvId, pdvNome: pdv?.nome || '', pdvs });
 }
 
 async function abrirTelaInventario(pdvId) {

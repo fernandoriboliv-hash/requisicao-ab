@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609151104">
+<link rel="stylesheet" href="style.css?v=202609201318">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609151104"></script>
+<script src="config.js?v=202609201318"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -176,6 +176,23 @@
     padding: 6px 10px;
     outline: none;
   }
+
+  /* "Você quis dizer?" — H3 */
+  .livre-sugestao:not(:empty) {
+    margin-top: 10px; border: 1px dashed var(--gold); padding: 10px 12px;
+    background: rgba(184,150,62,0.06); display: flex; flex-direction: column; gap: 4px;
+  }
+  .sug-titulo { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); margin-bottom: 4px; }
+  .sug-item {
+    display: flex; justify-content: space-between; gap: 10px; text-align: left; font: inherit; font-size: 13px;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border-subtle); padding: 8px 10px; cursor: pointer;
+  }
+  .sug-item:hover { border-color: var(--gold); }
+  .sug-outro {
+    margin-top: 4px; font: inherit; font-size: 12px; background: none; border: none;
+    color: var(--muted); text-decoration: underline; cursor: pointer; text-align: left; padding: 4px 0;
+  }
+  .sug-outro:hover { color: var(--text); }
 
   /* Item livre */
   .livre-section {
@@ -547,6 +564,7 @@
         </select>
         <button class="btn btn-outline" onclick="addLivre('compra')">+ Adicionar</button>
       </div>
+      <div class="livre-sugestao" id="compra-livre-sugestao"></div>
       <div class="livre-list" id="compra-livre-list"></div>
     </div>
 
@@ -619,6 +637,7 @@
         </select>
         <button class="btn btn-outline" onclick="addLivre('req')">+ Adicionar</button>
       </div>
+      <div class="livre-sugestao" id="req-livre-sugestao"></div>
       <div class="livre-list" id="req-livre-list"></div>
     </div>
 
@@ -1245,7 +1264,11 @@ function setComentario(aba, itemId, val) {
 // =====================================================================
 // ITEM LIVRE
 // =====================================================================
-function addLivre(aba) {
+// H3 (19/09/2026): antes de nascer um item livre — que vira item pendente
+// na fila do gerente — a tela mostra o que já existe com nome parecido.
+// A causa da fila não é má vontade: é não achar na busca e cadastrar de
+// novo o que já está no catálogo.
+function addLivre(aba, forcar) {
   const nome = document.getElementById(`${aba}-livre-nome`).value.trim();
   const qtd  = parseFloat(document.getElementById(`${aba}-livre-qtd`).value);
   const unid = document.getElementById(`${aba}-livre-unid`).value;
@@ -1258,12 +1281,61 @@ function addLivre(aba) {
     return;
   }
   if (!cat) { showToast('Escolha a categoria do item.', 'error'); return; }
+
+  if (!forcar) {
+    const daAba = state.catalogo.filter(i =>
+      (aba !== 'req' || ehDeRequisicao(i)) && (aba !== 'compra' || ehCompravel(i)));
+    const parecidos = itensParecidos(nome, daAba);
+    if (parecidos.length) { mostrarParecidos(aba, nome, qtd, parecidos); return; }
+  }
+  limparSugestao(aba);
   state.livres[aba].push({ nome, qtd, unidade: unid, categoria: cat, comentario: '' });
   document.getElementById(`${aba}-livre-nome`).value = '';
   document.getElementById(`${aba}-livre-qtd`).value = '';
   document.getElementById(`${aba}-livre-cat`).value = '';
   renderLivres(aba);
   atualizarCarrinho();
+}
+
+function limparSugestao(aba) {
+  const cx = document.getElementById(`${aba}-livre-sugestao`);
+  if (cx) cx.innerHTML = '';
+}
+
+function mostrarParecidos(aba, nome, qtd, parecidos) {
+  const cx = document.getElementById(`${aba}-livre-sugestao`);
+  if (!cx) return;
+  cx.innerHTML = `
+    <div class="sug-titulo">Já existe no catálogo. Você quis dizer:</div>
+    ${parecidos.map(p => `
+      <button class="sug-item" onclick="usarParecido('${aba}','${p.item.id}',${qtd})">
+        <span>${escapeHtml(nomeExibicao(p.item))}</span>
+        <span class="text-muted">${escapeHtml(p.item.unidade || '')}${
+          ehPacote(p.item) ? ' · por ' + escapeHtml(rotuloPacote(p.item)) : ''}</span>
+      </button>`).join('')}
+    <button class="sug-outro" onclick="addLivre('${aba}', true)">
+      Não é nenhum desses — pedir "${escapeHtml(nome)}" assim mesmo</button>`;
+  cx.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Escolheu o item que já existia: entra no pedido com a quantidade que a
+// pessoa tinha digitado, e a busca abre nele para ela conferir.
+function usarParecido(aba, itemId, qtd) {
+  const item = state.catalogo.find(i => i.id === itemId);
+  if (!item) return;
+  const comoPedido = ehPacote(item) ? rotuloPacote(item) : (item.unidade || '');
+  state.selecionados[aba][itemId] = { item, qty: qtd, comentario: '' };
+  ['nome', 'qtd', 'cat'].forEach(c => {
+    const el = document.getElementById(`${aba}-livre-${c}`);
+    if (el) el.value = '';
+  });
+  limparSugestao(aba);
+  // Leva a lista até o item escolhido: ele está marcado e com a quantidade.
+  const busca = document.getElementById(`${aba}-search`);
+  if (busca) { busca.value = nomeExibicao(item); aoBuscar(aba, busca.value); }
+  renderItens(aba);
+  atualizarCarrinho();
+  showToast(`${nomeExibicao(item)} entrou no pedido com ${qtd} ${comoPedido}. Confira a quantidade.`, 'success', 5000);
 }
 
 function renderLivres(aba) {

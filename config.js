@@ -29,12 +29,14 @@ const REDIRECT_POR_PERFIL = {
 };
 
 // Rótulo de cada perfil na interface. Fonte única — evita divergência entre telas.
+// Os termos são os das SOPs do hotel (19/09/2026): o sistema fala a língua da
+// cozinha. Só o rótulo muda; o código do perfil continua o mesmo no banco.
 const LABEL_PERFIL = {
   master_sistema:  'Master de Sistema',
   gerente_compras: 'Gerente de Compras',
   executivo:       'Chef',
-  pdv:             'PDV',
-  estoque:         'Estoque',
+  pdv:             'Cozinheiro',
+  estoque:         'Comissária',
   comprador:       'Comprador',
   recebimento:     'Recebimento',
 };
@@ -86,6 +88,52 @@ function itemAtendeBusca(item, termo) {
   if (!termo) return true;
   return itemCasaBusca(item.nome, termo)
       || itemCasaBusca(item.fornecedor_principal || '', termo);
+}
+
+// =====================================================================
+// "VOCÊ QUIS DIZER?" — antes de nascer um item pendente
+// =====================================================================
+// DECISOES H3 (19/09/2026): o item livre nasce quando a pessoa não acha o
+// item na busca e digita o que já existe ("file mignon limpo" para o FILE
+// MIGNON LIMPO PORCIONADO). O mesmo casamento aproximado da market list
+// acerta esses nomes com folga: palavras em comum e, para erro de
+// digitação, a distância entre os textos. Item que não nasce não entra na
+// fila do gerente.
+function _levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let p = Array.from({ length: n + 1 }, (_, i) => i), c = new Array(n + 1);
+  for (let i = 1; i <= m; i++) {
+    c[0] = i;
+    for (let j = 1; j <= n; j++) c[j] = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    [p, c] = [c, p];
+  }
+  return p[n];
+}
+
+function itensParecidos(nome, lista, max = 4) {
+  const alvo = normalizarBusca(nome).split(' ').filter(t => t.length >= 3 && !_ehTokenEmbalagem(t));
+  if (!alvo.length) return [];
+  const alvoTxt = alvo.join(' ');
+  const nota = texto => {
+    const t = normalizarBusca(texto);
+    if (!t) return 0;
+    const palavras = t.split(' ');
+    // palavra digitada que casa com alguma do item, aceitando erro de uma
+    // letra em palavra comprida ("mignom" = "mignon")
+    const casa = alvo.filter(a => palavras.some(p => p === a || (p.startsWith(a) && a.length >= 4)
+      || (a.length >= 5 && Math.abs(p.length - a.length) <= 1 && _levenshtein(p, a) <= 1))).length;
+    const cobertura = casa / alvo.length;
+    const semEmb = palavras.filter(p => p.length >= 3 && !_ehTokenEmbalagem(p)).join(' ');
+    const l = Math.max(semEmb.length, alvoTxt.length);
+    const prox = l ? 1 - _levenshtein(semEmb, alvoTxt) / l : 0;
+    return Math.max(cobertura, prox);
+  };
+  return (lista || [])
+    .map(i => ({ item: i, nota: Math.max(nota(i.nome), nota(i.nome_curto || ''), nota(i.nome_inventario || '')) }))
+    .filter(x => x.nota >= 0.6)
+    .sort((a, b) => b.nota - a.nota || a.item.nome.localeCompare(b.item.nome))
+    .slice(0, max);
 }
 
 // =====================================================================
@@ -1047,7 +1095,16 @@ function pesoAbsurdo(item, entrega) {
 
 // "≈ 4,4 kg". Devolve vazio quando ninguém informou nem pesou ainda —
 // é melhor não mostrar estimativa nenhuma do que mostrar uma inventada.
+//
+// DESLIGADA em 19/09/2026, decisão do Fernando (DECISOES_PENDENTES G2):
+// agosto, o primeiro mês de operação, teve muitas pesagens erradas, e a
+// média aprendida com elas não é confiável. O sistema continua aprendendo
+// (registrar_peso_pacote) e as pesagens brutas ficam em requisicao_itens;
+// para religar, recalcular a média só a partir de setembro e trocar
+// MOSTRAR_ESTIMATIVA_PESO para true. Lembrete agendado para dezembro.
+const MOSTRAR_ESTIMATIVA_PESO = false;
 function estimativaPeso(qtd, pesoMedio, unidade) {
+  if (!MOSTRAR_ESTIMATIVA_PESO) return '';
   const p = parseFloat(pesoMedio), q = parseFloat(qtd);
   if (!p || !(q > 0)) return '';
   const total = q * p;
@@ -1352,7 +1409,7 @@ function nomeAutor(usuarioId) {
 
 // "Fulano" ou "Fulano (Chef)" — o perfil separa o pedido do cozinheiro do que
 // o Chef ou a Comissaria lançou em nome do PDV
-const _ROTULO_PERFIL = { executivo: 'Chef', gerente_compras: 'Gerente', estoque: 'Comissaria' };
+const _ROTULO_PERFIL = { executivo: 'Chef', gerente_compras: 'Gerente', estoque: 'Comissária', pdv: 'Cozinheiro' };
 
 function autorComPerfil(usuarioId) {
   const u = _autores?.get(usuarioId);
@@ -1571,7 +1628,12 @@ async function verRequisicaoInterna(sb, id) {
          const est = estimativaPeso(i.quantidade_solicitada, i.peso_medio_pacote, unidadePeso(i));
          return `<tr class="linha-item-detalhe" onclick="abrirTimelineItem(sb,'req','${i.id}',this)">
            <td class="td-titulo">${_esc(i.item_nome)}${pct ? ` <span class="pct-badge">por ${rot}</span>` : ''}${
-             i.comentario ? `<span class="item-obs">${_esc(i.comentario)}</span>` : ''}</td>
+             i.comentario ? `<span class="item-obs">${_esc(i.comentario)}</span>` : ''}${
+             // A Comissaria trocou o item (migration 74): quem pediu vê o que
+             // pediu, quem trocou e por quê.
+             i.trocado_em ? `<span class="item-obs" style="color:var(--orange)">pediu ${_esc(i.item_nome_original || 'item livre')}${
+               i.quantidade_original != null ? ' ' + _qtd(i.quantidade_original) + ' ' + _esc(i.unidade_original || '') : ''} · trocado${
+               autorComPerfil(i.trocado_por) ? ' por ' + _esc(autorComPerfil(i.trocado_por)) : ''} · ${_esc(i.motivo_troca || '')}</span>` : ''}</td>
            <td data-label="Categoria">${_esc(i.item_categoria || '—')}</td>
            <td class="num" data-label="Pedido">${_qtd(i.quantidade_solicitada)} ${pct ? rot : un}${
              pct && est ? `<br><span class="est-peso">${est}</span>` : ''}</td>
@@ -2182,9 +2244,15 @@ async function _invApagarLivre(id) {
 // Ver migration 66.
 
 const _FT = {
-  raiz: null, pdvId: null, pdvNome: null,
-  lista: [], catalogo: [], categoria: null, busca: '',
-  aberta: null, linhas: [], usada: [], salvando: false,
+  raiz: null, pdvId: null, pdvNome: null, pdvCodigo: '', pdvs: null,
+  lista: [], catalogo: [], categoria: null, busca: '', filtroStatus: null,
+  revisoes: {},        // ficha_id -> alteração aberta (ficha publicada em revisão)
+  fila: [],            // o que espera o aprovador, em todas as cozinhas
+  ficha: null,         // a ficha como está no banco (a publicada, se houver)
+  rev: null,           // a alteração aberta dela
+  vendo: 'ficha',      // ficha | revisao | versao
+  aberta: null, linhas: [], linhasFicha: [], usada: [], eventos: [], salvando: false,
+  original: null, publicadaEstado: null, custo: null, gerencial: null,
   precos: null,        // item_id -> preço vigente; só carrega para quem vê preço
 };
 
@@ -2253,11 +2321,42 @@ function custoPelaFicha(insumos, precoDe) {
   return { valor, semPreco, abertos, temFicha: (insumos || []).length > 0 };
 }
 
+// A mesma lista da RWSPO-KIT-GENERAL-09 e da RDC 26/2015, com cada castanha
+// em separado: hóspede alérgico a pistache não é alérgico a toda castanha, e
+// "castanhas" genérico obrigava o salão a recusar o prato inteiro. A ordem é
+// a da SOP. "Castanhas (outras)" existe para não invalidar ficha antiga.
 const _FT_ALERGENOS = [
-  ['gluten', 'Glúten'], ['crustaceos', 'Crustáceos'], ['ovos', 'Ovos'],
-  ['peixes', 'Peixes'], ['amendoim', 'Amendoim'], ['soja', 'Soja'],
-  ['leite', 'Leite'], ['castanhas', 'Castanhas'], ['gergelim', 'Gergelim'],
-  ['sulfitos', 'Sulfitos'],
+  ['gluten', 'Glúten (trigo, centeio, cevada, aveia)'], ['crustaceos', 'Crustáceos'],
+  ['ovos', 'Ovos'], ['peixes', 'Peixes'], ['amendoim', 'Amendoim'], ['soja', 'Soja'],
+  ['leite', 'Leite (todas as espécies)'], ['lactose', 'Lactose'],
+  ['amendoa', 'Amêndoa'], ['avela', 'Avelã'], ['castanha_caju', 'Castanha-de-caju'],
+  ['castanha_para', 'Castanha-do-pará'], ['macadamia', 'Macadâmia'], ['nozes', 'Nozes'],
+  ['peca', 'Pecã'], ['pistache', 'Pistache'], ['pinoli', 'Pinoli'],
+  ['castanhas', 'Castanhas (outras)'],
+  ['latex', 'Látex natural'], ['gergelim', 'Gergelim'], ['sulfitos', 'Sulfitos'],
+];
+
+// Motivos de desperdício — lista única das SOPs (GENERAL-03, 10 e 11, LJ-04,
+// LJ-06 e Manual LJ). Antes eram três listas diferentes e duas SOPs mandavam
+// descartar por um motivo que nenhuma lista tinha. O grupo é o que o relatório
+// da Controladoria soma; o banco só aceita o código (migration 72).
+const _DESP_MOTIVOS = [
+  ['vencimento', 'Vencimento', 'Validade e identificação'],
+  ['sem_identificacao', 'Sem etiqueta ou etiqueta ilegível', 'Validade e identificação'],
+  ['temperatura', 'Fora do binômio tempo-temperatura', 'Segurança dos alimentos'],
+  ['contaminacao', 'Contaminação', 'Segurança dos alimentos'],
+  ['falha_equipamento', 'Falha de equipamento', 'Segurança dos alimentos'],
+  ['queima', 'Queimado', 'Execução'],
+  ['corte_incorreto', 'Corte incorreto', 'Execução'],
+  ['erro_preparo', 'Erro de preparo', 'Execução'],
+  ['qualidade_abaixo_padrao', 'Qualidade abaixo do padrão', 'Execução'],
+  ['quebra_queda', 'Quebra ou queda', 'Execução'],
+  ['excesso_producao', 'Excesso de produção', 'Planejamento'],
+  ['sobra_evento', 'Sobra de evento', 'Planejamento'],
+  ['devolucao_cliente', 'Devolução do cliente', 'Salão'],
+  ['erro_lancamento_salao', 'Erro de lançamento do salão', 'Salão'],
+  ['avaria_recebimento', 'Avaria no recebimento', 'Recebimento'],
+  ['outro', 'Outro', 'Outro'],
 ];
 const _FT_UNIDADES = ['g', 'kg', 'ml', 'L', 'un'];
 
@@ -2276,16 +2375,71 @@ const _ftNorm = s => String(s || '').toUpperCase().normalize('NFD')
   .replace(/[̀-ͯ]/g, '');
 
 // ---------------------------------------------------------------------
+// O FLUXO DA FICHA — RWSPO-KIT-GENERAL-09 (migration 73)
+// ---------------------------------------------------------------------
+// rascunho → em degustação → validação de custo → publicada (ou reprovada).
+// Quem elabora: quem responde pela cozinha (a regra da contagem,
+// pode_contar_pdv). Quem aprova: o gerente de compras, no papel de
+// Executive Chef e de Cost Controller (decisão do Fernando, 18/09). O
+// banco confere tudo de novo — os botões aqui só evitam oferecer o que vai
+// dar "sem permissão".
+//
+// Ficha publicada que é alterada NÃO sai do ar: a alteração vai para
+// ficha_revisoes e a publicada continua valendo — custo da requisição,
+// produção e PDF — até a nova ser aprovada.
+
+const _FT_STATUS = {
+  rascunho:        { rot: 'Rascunho',           cls: 'st-rascunho' },
+  degustacao:      { rot: 'Em degustação',      cls: 'st-degustacao' },
+  validacao_custo: { rot: 'Validação de custo', cls: 'st-validacao' },
+  publicada:       { rot: 'Publicada',          cls: 'st-publicada' },
+  reprovada:       { rot: 'Reprovada',          cls: 'st-reprovada' },
+};
+const _FT_EVENTOS = {
+  criada: 'criou a ficha', importada: 'importou da planilha',
+  alteracao_iniciada: 'começou uma alteração', reaberta: 'voltou para rascunho',
+  enviar_degustacao: 'enviou para degustação', aprovar_degustacao: 'aprovou a degustação',
+  publicar: 'publicou', devolver: 'devolveu para ajustes', reprovar: 'reprovou',
+  descartar: 'descartou a alteração', sharepoint: 'salvou o PDF no SharePoint',
+};
+const _FT_ABERTAS = ['rascunho', 'degustacao', 'validacao_custo'];
+
+function _ftStatusPill(st, prefixo) {
+  const s = _FT_STATUS[st];
+  return s ? `<span class="ft-status ${s.cls}">${prefixo ? escapeHtml(prefixo) + ' ' : ''}${s.rot}</span>` : '';
+}
+// Onde a ficha está no fluxo: a alteração aberta manda, se houver.
+function _ftEtapa(f) { return (_FT.revisoes[f.id] || {}).status || f.status; }
+// O custo da ficha — o "CMV do prato" que o Fernando liberou em 19/09 para
+// chef e cozinheiro. A Comissária continua sem ver valor: é a decisão de
+// 10/09, e a ficha dela é a produção da casa, não um prato de cardápio.
+function _ftVeCusto() {
+  const p = window.state && window.state.perfil && window.state.perfil.perfil;
+  return perfilVePreco() || p === 'pdv';
+}
+
+// Preço de venda, CMV % e margem: só compras e master (RLS da migration 73).
+function _ftVeGerencial() {
+  const p = window.state && window.state.perfil && window.state.perfil.perfil;
+  return p === 'gerente_compras' || p === 'master_sistema';
+}
+const _ftFmtR = v => v == null || !isFinite(v) ? '—'
+  : 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const _ftDataBR = d => d ? new Date(String(d).length <= 10 ? d + 'T12:00:00' : d).toLocaleDateString('pt-BR') : '';
+const _ftTexto = t => escapeHtml(t || '').replace(/\n/g, '<br>');
+
+// ---------------------------------------------------------------------
 async function montarFichas(seletor, opts) {
   const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
   if (!raiz) return;
   _FT.raiz = raiz;
+  if (opts.pdvs) _FT.pdvs = opts.pdvs;
   _FT.pdvId = opts.pdvId;
-  _FT.pdvNome = opts.pdvNome || '';
+  _FT.pdvNome = opts.pdvNome || (_FT.pdvs || []).find(p => p.id === opts.pdvId)?.nome || '';
   raiz.innerHTML = '<div class="loading-text">Carregando fichas...</div>';
 
   const { data, error } = await sb.from('fichas_tecnicas')
-    .select('id, nome, categoria, rendimento, rendimento_un, porcoes, versao, atualizada_em, item_id, criada_em')
+    .select('id, nome, categoria, tipo, status, rendimento, rendimento_un, porcoes, versao, atualizada_em, item_id, criada_em, sharepoint_versao')
     .eq('pdv_id', _FT.pdvId).eq('ativa', true).order('categoria').order('nome');
   if (error) {
     raiz.innerHTML = '<div class="empty-text">Não consegui carregar as fichas.</div>'
@@ -2294,32 +2448,79 @@ async function montarFichas(seletor, opts) {
     return;
   }
   _FT.lista = data || [];
+  _FT.revisoes = {};
+  const ids = _FT.lista.map(f => f.id);
+  for (let i = 0; i < ids.length; i += 150) {
+    const { data: rv } = await sb.from('ficha_revisoes').select('id, ficha_id, status, atualizada_em')
+      .in('ficha_id', ids.slice(i, i + 150)).in('status', _FT_ABERTAS);
+    (rv || []).forEach(r => { _FT.revisoes[r.ficha_id] = r; });
+  }
   _FT.aberta = null;
+
   // Ver é de quem é do PDV; editar é de quem responde por ele (a mesma regra
-  // da contagem). O banco confere de novo ao gravar — aqui é só para não
-  // mostrar um botão que vai dar "sem permissão".
-  const { data: pode } = await sb.rpc('pode_contar_pdv', { p_pdv: _FT.pdvId });
-  _FT.podeEditar = pode === true;
+  // da contagem); aprovar é do gerente de compras.
+  const [pode, aprova, pdv] = await Promise.all([
+    sb.rpc('pode_contar_pdv', { p_pdv: _FT.pdvId }),
+    sb.rpc('pode_aprovar_fichas'),
+    sb.from('pdvs').select('nome, codigo').eq('id', _FT.pdvId).maybeSingle(),
+  ]);
+  _FT.podeEditar = pode.data === true;
+  _FT.aprova = aprova.data === true;
+  _FT.pdvCodigo = pdv.data?.codigo || '';
+  if (pdv.data?.nome) _FT.pdvNome = pdv.data.nome;
   if (!_FT.catalogo.length) await _ftCarregarCatalogo();
   if (perfilVePreco() && !_FT.precos) {
     const { data: pr } = await sb.from('precos').select('item_id, preco_unitario').eq('vigente', true);
     _FT.precos = Object.fromEntries((pr || []).map(p => [p.item_id, parseFloat(p.preco_unitario) || 0]));
   }
+  _FT.fila = _FT.aprova ? await _ftCarregarFila() : [];
   _ftRenderLista();
 }
 
 // O catálogo inteiro de uma vez: são centenas de itens e a busca tem que
-// responder enquanto se digita, sem ida ao servidor por tecla.
+// responder enquanto se digita, sem ida ao servidor por tecla. Os nomes
+// alternativos entram porque é por eles que a planilha da cozinha chama o
+// item ("Pastrami", e não "PASTRAMI DA CASA").
 async function _ftCarregarCatalogo() {
   let todos = [];
   for (let i = 0; ; i += 1000) {
     const { data } = await sb.from('itens')
-      .select('id, nome, unidade, categoria').eq('ativo', true)
+      .select('id, nome, nome_curto, nome_inventario, unidade, categoria').eq('ativo', true)
       .order('nome').range(i, i + 999);
     todos = todos.concat(data || []);
     if (!data || data.length < 1000) break;
   }
   _FT.catalogo = todos;
+}
+
+function _ftTrocarPdv(id) {
+  const p = (_FT.pdvs || []).find(x => x.id === id);
+  _FT.categoria = null; _FT.busca = ''; _FT.filtroStatus = null;
+  montarFichas(_FT.raiz, { pdvId: id, pdvNome: p?.nome || '' });
+}
+
+// O que espera o aprovador em TODAS as cozinhas — é a caixa de entrada dele.
+async function _ftCarregarFila() {
+  const [a, b] = await Promise.all([
+    sb.from('fichas_tecnicas').select('id, nome, status, pdv_id, atualizada_em, pdvs(nome)')
+      .eq('ativa', true).in('status', ['degustacao', 'validacao_custo']),
+    sb.from('ficha_revisoes').select('ficha_id, status, atualizada_em, fichas_tecnicas!inner(nome, pdv_id, ativa, pdvs(nome))')
+      .in('status', ['degustacao', 'validacao_custo']),
+  ]);
+  const fila = (a.data || []).map(f => ({ id: f.id, nome: f.nome, etapa: f.status, pdvId: f.pdv_id,
+    pdvNome: f.pdvs?.nome || '', quando: f.atualizada_em, alteracao: false }));
+  (b.data || []).filter(r => r.fichas_tecnicas?.ativa).forEach(r => fila.push({
+    id: r.ficha_id, nome: r.fichas_tecnicas.nome, etapa: r.status, pdvId: r.fichas_tecnicas.pdv_id,
+    pdvNome: r.fichas_tecnicas.pdvs?.nome || '', quando: r.atualizada_em, alteracao: true }));
+  return fila.sort((x, y) => String(x.quando).localeCompare(String(y.quando)));
+}
+
+async function _ftAbrirDaFila(pdvId, fichaId, alteracao) {
+  if (pdvId !== _FT.pdvId) {
+    const p = (_FT.pdvs || []).find(x => x.id === pdvId);
+    await montarFichas(_FT.raiz, { pdvId, pdvNome: p?.nome || '' });
+  }
+  await _ftAbrir(fichaId, { revisao: alteracao });
 }
 
 // ---------------------------------------------------------------------
@@ -2328,40 +2529,81 @@ async function _ftCarregarCatalogo() {
 function _ftRenderLista() {
   const cats = [...new Set(_FT.lista.map(f => f.categoria).filter(Boolean))].sort();
   const q = _ftNorm(_FT.busca);
+  const emAprovacao = f => ['degustacao', 'validacao_custo'].includes(_ftEtapa(f));
+  const passaStatus = f => {
+    switch (_FT.filtroStatus) {
+      case 'aprovacao': return emAprovacao(f);
+      case 'rascunho':  return _ftEtapa(f) === 'rascunho';
+      case 'publicada': return f.status === 'publicada';
+      case 'reprovada': return f.status === 'reprovada';
+      default: return true;
+    }
+  };
   const vis = _FT.lista.filter(f =>
-    (!_FT.categoria || f.categoria === _FT.categoria) &&
+    (!_FT.categoria || f.categoria === _FT.categoria) && passaStatus(f) &&
     (!q || _ftNorm(f.nome).includes(q)));
 
-  const chip = (rot, val, n) => `<button class="filter-chip${
-    _FT.categoria === val ? ' active' : ''}" onclick="_ftFiltrar(${
-    val === null ? 'null' : "'" + String(val).replace(/'/g, "\\'") + "'"})"
+  const chip = (rot, val, n, fn) => `<button class="filter-chip${
+    (fn === '_ftFiltrarStatus' ? _FT.filtroStatus : _FT.categoria) === val ? ' active' : ''}"
+    onclick="${fn}(${val === null ? 'null' : "'" + String(val).replace(/'/g, "\\'") + "'"})"
     >${escapeHtml(rot)}${n != null ? ` <span class="text-muted">${n}</span>` : ''}</button>`;
+  const conta = fn => _FT.lista.filter(fn).length;
+  const nAprov = conta(emAprovacao), nRasc = conta(f => _ftEtapa(f) === 'rascunho'),
+        nRepr = conta(f => f.status === 'reprovada');
 
+  const fila = (_FT.fila || []);
   _FT.raiz.innerHTML = `
+    ${fila.length ? `<div class="ft-fila">
+      <div class="ft-fila-titulo">Aguardando sua aprovação <span class="text-muted">${fila.length}</span></div>
+      ${fila.map(x => `<button class="ft-fila-item" onclick="_ftAbrirDaFila('${x.pdvId}','${x.id}',${x.alteracao})">
+        <span class="ft-fila-nome">${escapeHtml(x.nome)}${x.alteracao ? ' <span class="ft-tag">alteração</span>' : ''}</span>
+        <span class="text-muted">${escapeHtml(x.pdvNome)}</span>
+        ${_ftStatusPill(x.etapa)}
+      </button>`).join('')}
+    </div>` : ''}
     <div class="ft-topo">
-      ${_FT.podeEditar ? '<button class="btn btn-primary" onclick="_ftNova()">+ Nova ficha</button>' : ''}
+      ${_FT.pdvs && _FT.pdvs.length > 1 ? `<select class="select ft-pdv" onchange="_ftTrocarPdv(this.value)">
+        ${_FT.pdvs.map(p => `<option value="${p.id}"${p.id === _FT.pdvId ? ' selected' : ''}>${escapeHtml(p.nome)}</option>`).join('')}
+      </select>` : ''}
+      ${_FT.podeEditar ? `<button class="btn btn-primary" onclick="_ftNova()">+ Nova ficha</button>
+        <button class="btn btn-outline" onclick="_ftImportar()">Importar planilha</button>` : ''}
       <input class="input ft-busca" id="ft-busca" placeholder="Buscar receita pelo nome"
              value="${escapeHtml(_FT.busca)}" oninput="_ftBuscar(this.value)" autocomplete="off">
     </div>
+    ${nAprov || nRasc || nRepr ? `<div class="ft-chips">
+      ${chip('Todas as situações', null, null, '_ftFiltrarStatus')}
+      ${nAprov ? chip('Em aprovação', 'aprovacao', nAprov, '_ftFiltrarStatus') : ''}
+      ${nRasc ? chip('Rascunho', 'rascunho', nRasc, '_ftFiltrarStatus') : ''}
+      ${chip('Publicadas', 'publicada', conta(f => f.status === 'publicada'), '_ftFiltrarStatus')}
+      ${nRepr ? chip('Reprovadas', 'reprovada', nRepr, '_ftFiltrarStatus') : ''}
+    </div>` : ''}
     <div class="ft-chips">
-      ${chip('Todas', null, _FT.lista.length)}
-      ${cats.map(c => chip(c, c, _FT.lista.filter(f => f.categoria === c).length)).join('')}
+      ${chip('Todas', null, _FT.lista.length, '_ftFiltrar')}
+      ${cats.map(c => chip(c, c, _FT.lista.filter(f => f.categoria === c).length, '_ftFiltrar')).join('')}
     </div>
-    ${vis.length ? `<div class="ft-lista">${vis.map(f => `
+    ${vis.length ? `<div class="ft-lista">${vis.map(f => {
+      const rev = _FT.revisoes[f.id];
+      const pdfVelho = f.status === 'publicada' && f.sharepoint_versao != null && f.sharepoint_versao !== f.versao;
+      return `
       <div class="ft-card" onclick="_ftAbrir('${f.id}')">
         <div class="ft-card-nome">${escapeHtml(f.nome)}</div>
         <div class="ft-card-meta">
+          ${f.status !== 'publicada' ? _ftStatusPill(f.status) : ''}
+          ${rev ? _ftStatusPill(rev.status, 'alteração:') : ''}
+          ${f.tipo === 'prato' ? '<span class="ft-tag ft-tag-prato">prato</span>' : ''}
           ${f.categoria ? `<span class="ft-tag">${escapeHtml(f.categoria)}</span>` : ''}
           ${f.rendimento ? `<span>rende ${_ftFmt(f.rendimento)} ${escapeHtml(f.rendimento_un)}</span>` : ''}
           ${f.porcoes ? `<span>${f.porcoes} porç.</span>` : ''}
+          ${pdfVelho ? '<span class="ft-tag ft-tag-aberto">PDF desatualizado</span>' : ''}
         </div>
-      </div>`).join('')}</div>`
+      </div>`; }).join('')}</div>`
       : `<div class="empty-text">${_FT.lista.length
           ? 'Nenhuma receita com esse filtro.'
-          : (_FT.podeEditar ? 'Nenhuma ficha cadastrada ainda. Comece por "Nova ficha".' : 'Nenhuma ficha cadastrada para esta cozinha.')}</div>`}`;
+          : (_FT.podeEditar ? 'Nenhuma ficha cadastrada ainda. Comece por "Nova ficha" ou "Importar planilha".' : 'Nenhuma ficha cadastrada para esta cozinha.')}</div>`}`;
 }
 
 function _ftFiltrar(cat) { _FT.categoria = cat; _ftRenderLista(); }
+function _ftFiltrarStatus(st) { _FT.filtroStatus = st; _ftRenderLista(); }
 function _ftBuscar(v) {
   _FT.busca = v;
   const el = document.getElementById('ft-busca');
@@ -2372,90 +2614,172 @@ function _ftBuscar(v) {
 }
 
 // ---------------------------------------------------------------------
-// O EDITOR
+// ABRIR
 // ---------------------------------------------------------------------
 function _ftNova() {
-  _FT.aberta = { id: null, nome: '', categoria: '', rendimento: null,
-                 rendimento_un: 'kg', porcoes: null, modo_preparo: '',
-                 alergenos: [], versao: 0, item_id: null, observacao: '' };
+  _FT.ficha = null;
+  _FT.rev = null;
+  _FT.vendo = 'ficha';
+  _FT.aberta = { id: null, nome: '', categoria: '', tipo: 'base', rendimento: null,
+                 rendimento_un: 'kg', porcoes: null, modo_preparo: '', historia: '',
+                 validade_secundaria: '', alergenos: [], versao: 0, item_id: null,
+                 observacao: '', status: 'rascunho' };
   _FT.linhas = [];
   _FT.usada = [];
   _FT.original = null;
+  _FT.publicadaEstado = null;
   _ftRenderEditor();
+}
+
+// Linhas a partir do banco (ficha_itens com join) ou de um retrato (versão
+// antiga, alteração pendente). O retrato traz os nomes que guardou — o item
+// pode ter mudado de nome desde então.
+function _ftLinhasDe(rows, doRetrato) {
+  return (rows || []).map(l => ({
+    id: l.id || null, item_id: l.item_id || null, sub_ficha_id: l.sub_ficha_id || null,
+    descricao: l.descricao || null, observacao: l.observacao || null,
+    nome: l.item_id ? ((doRetrato ? l.item_nome : l.itens?.nome) || l.descricao || '?')
+        : l.sub_ficha_id ? ((doRetrato ? l.sub_ficha_nome : l.fichas_tecnicas?.nome) || l.descricao || '?')
+        : (l.descricao || 'Linha em aberto'),
+    // Quantidade NULL = valor ainda não confirmado. Number(null) daria 0 e
+    // gravaria um zero que a tabela recusa.
+    quantidade: l.quantidade == null ? null : Number(l.quantidade), unidade: l.unidade || 'g',
+    fator_correcao: Number(l.fator_correcao || 1),
+  }));
+}
+
+async function _ftAbrir(id, opcoes = {}) {
+  _FT.raiz.innerHTML = '<div class="loading-text">Abrindo...</div>';
+  const { data: f } = await sb.from('fichas_tecnicas').select('*').eq('id', id).maybeSingle();
+  if (!f) { showToast('Ficha não encontrada.', 'error'); return montarFichas(_FT.raiz, _FT); }
+  const [{ data: linhas }, { data: usada }, { data: rev }, { data: ev }] = await Promise.all([
+    sb.from('ficha_itens')
+      .select('id, item_id, sub_ficha_id, descricao, observacao, quantidade, unidade, fator_correcao, ordem, itens(nome, unidade), fichas_tecnicas!ficha_itens_sub_ficha_id_fkey(nome)')
+      .eq('ficha_id', id).order('ordem'),
+    // Onde esta receita é usada — é o que avisa do impacto antes de mexer.
+    sb.rpc('fichas_que_usam', { p_ficha_id: id }),
+    sb.from('ficha_revisoes').select('*').eq('ficha_id', id).in('status', _FT_ABERTAS).maybeSingle(),
+    sb.from('ficha_eventos').select('evento, de_status, para_status, motivo, usuario_id, criado_em, revisao_id')
+      .eq('ficha_id', id).order('criado_em', { ascending: false }).limit(20),
+  ]);
+  await carregarAutores(sb);
+
+  _FT.ficha = f;
+  _FT.rev = rev || null;
+  _FT.eventos = ev || [];
+  _FT.usada = usada || [];
+  _FT.linhasFicha = _ftLinhasDe(linhas, false);
+  _FT.publicadaEstado = _ftEstadoDe(f, _FT.linhasFicha);
+  _FT.original = null;
+  _FT.custo = null;
+
+  if (opcoes.revisao && rev) {
+    _FT.vendo = 'revisao';
+    _FT.aberta = { ...f, ...rev.dados, id: f.id, versao: f.versao, status: rev.status,
+                   pdv_id: f.pdv_id, atualizada_em: rev.atualizada_em };
+    _FT.linhas = _ftLinhasDe(rev.dados.linhas, true);
+  } else {
+    _FT.vendo = 'ficha';
+    _FT.aberta = f;
+    _FT.linhas = _FT.linhasFicha.map(l => ({ ...l }));
+  }
+  _ftRenderVisualizar();
+  window.scrollTo({ top: 0 });
+  _ftCarregarCusto();
+  if (_ftVeGerencial()) _ftCarregarGerencial();
 }
 
 // =====================================================================
 // VER A FICHA — sem nada que altere
 // =====================================================================
-// Pedido do Fernando em 15/09: abrir a ficha tem de ser só olhar. Um toque
-// errado, ou o celular no bolso, alterava quantidade e ingrediente, porque a
-// ficha abria direto no editor. Editar agora é um botão, e cada gravação
-// guarda a versão anterior (ficha_versoes, migration 71).
+// Pedido do Fernando em 15/09: abrir a ficha tem de ser só olhar. Editar é
+// um botão, e cada gravação guarda a versão anterior.
 function _ftRenderVisualizar(versaoAntiga) {
   const f = _FT.aberta;
-  const vePreco = perfilVePreco() && _FT.precos;
+  const vendoRev = _FT.vendo === 'revisao';
   const produto = f.item_id ? _FT.catalogo.find(i => i.id === f.item_id) : null;
   const alerg = _FT_ALERGENOS.filter(([v]) => (f.alergenos || []).includes(v)).map(([, r]) => r);
-  const dataFmt = d => d ? new Date(d).toLocaleDateString('pt-BR') : '';
-  const texto = t => escapeHtml(t || '').replace(/\n/g, '<br>');
+  const vePreco = perfilVePreco();
+  const temFc = _FT.linhas.some(l => l.fator_correcao && l.fator_correcao !== 1);
+  const fcy = _ftFcy(f, _FT.linhas);
+  const voltar = versaoAntiga || vendoRev ? `_ftAbrir('${f.id}')` : '_ftVoltar()';
 
   _FT.raiz.innerHTML = `
     <div class="ft-editor ft-leitura">
       <div class="ft-editor-topo">
-        <button class="btn btn-secondary btn-sm" onclick="${
-          versaoAntiga ? `_ftAbrir('${f.id}')` : '_ftVoltar()'}">← ${versaoAntiga ? 'Versão atual' : 'Voltar'}</button>
-        <span class="text-muted" style="font-size:12px">versão ${f.versao}${
-          f.atualizada_em ? ' · ' + dataFmt(f.atualizada_em) : ''}</span>
+        <button class="btn btn-secondary btn-sm" onclick="${voltar}">← ${
+          versaoAntiga ? 'Versão atual' : vendoRev ? 'Versão publicada' : 'Voltar'}</button>
+        <span class="text-muted" style="font-size:12px">REV ${String(f.versao).padStart(2, '0')}${
+          f.atualizada_em ? ' · ' + _ftDataBR(f.atualizada_em) : ''}</span>
       </div>
 
       ${versaoAntiga ? `<div class="aviso aviso-warn">
-        Você está vendo a <strong>versão ${f.versao}</strong>, salva em ${dataFmt(versaoAntiga.criada_em)}${
+        Você está vendo a <strong>versão ${f.versao}</strong>, salva em ${_ftDataBR(versaoAntiga.criada_em)}${
           versaoAntiga.autor ? ' por ' + escapeHtml(versaoAntiga.autor) : ''}. Ela não vale mais.</div>` : ''}
+      ${vendoRev ? `<div class="aviso aviso-info">
+        Alteração em aprovação. A versão publicada continua valendo até esta ser aprovada.</div>` : ''}
 
       <div class="ft-ver-titulo">${escapeHtml(f.nome)}</div>
       <div class="ft-ver-meta">
-        ${f.categoria ? `<span class="ft-tag">${escapeHtml(f.categoria)}</span>` : ''}
+        ${versaoAntiga ? '' : _ftStatusPill(vendoRev ? _FT.rev.status : f.status)}
+        ${f.tipo === 'prato' ? '<span class="ft-tag ft-tag-prato">prato</span>' : ''}
+        ${f.categoria ? `<span class="ft-tag" title="Categoria de Menu">${escapeHtml(f.categoria)}</span>` : ''}
         <span>${f.rendimento != null
           ? `rende <strong>${_ftFmt(f.rendimento)} ${escapeHtml(f.rendimento_un || '')}</strong>`
           : '<span class="ft-tag ft-tag-aberto">rendimento em aberto</span>'}</span>
-        ${f.porcoes ? `<span>${f.porcoes} porções</span>` : ''}
-        ${produto || versaoAntiga?.produto_nome ? `<span>produz <strong>${
-          escapeHtml(produto?.nome || versaoAntiga.produto_nome)}</strong></span>` : ''}
+        ${f.porcoes ? `<span><strong>${f.porcoes}</strong> ${f.porcoes === 1 ? 'porção' : 'porções'}</span>` : ''}
+        ${fcy ? `<span title="FCy — Fator de Cocção: peso pronto ÷ peso líquido cru">FCy <strong>${_ftFmt(fcy)}</strong></span>` : ''}
+        ${f.validade_secundaria ? `<span>validade <strong>${escapeHtml(f.validade_secundaria)}</strong></span>` : ''}
+        ${produto || versaoAntiga?.produto_nome || f.produto_nome ? `<span>produz <strong>${
+          escapeHtml(produto?.nome || versaoAntiga?.produto_nome || f.produto_nome)}</strong></span>` : ''}
       </div>
 
-      ${versaoAntiga ? '' : `<div class="ft-ver-acoes">
-        ${_FT.podeEditar ? '<button class="btn btn-primary btn-sm" onclick="_ftEditar()">Editar ficha</button>' : ''}
-        <button class="btn btn-outline btn-sm" onclick="_ftProduzir()">Calcular produção</button>
-        <button class="btn btn-secondary btn-sm" onclick="_ftHistorico()">Histórico de versões</button>
-      </div>`}
-
-      ${f.observacao ? `<div class="section-title mt-3"><span>Observações e rendimento</span></div>
-        <div class="ft-ver-texto">${texto(f.observacao)}</div>` : ''}
+      ${versaoAntiga ? '' : _ftSituacaoHtml()}
+      ${versaoAntiga ? '' : `<div class="ft-ver-acoes" id="ft-acoes">${_ftAcoesHtml()}</div>`}
+      <div id="ft-motivo"></div>
 
       <div class="section-title mt-3"><span>Ingredientes (${_FT.linhas.length})</span></div>
-      <table class="data-table tabela-cards ft-ver-tabela">
-        <thead><tr><th>Ingrediente</th><th class="num">Quantidade</th>
-          ${_FT.linhas.some(l => l.fator_correcao && l.fator_correcao !== 1) ? '<th class="num">Fator</th>' : ''}</tr></thead>
-        <tbody>${_FT.linhas.map(l => `<tr class="${!l.item_id && !l.sub_ficha_id ? 'ft-linha-aberta' : ''}">
+      <div class="table-wrap"><table class="data-table tabela-cards ft-ver-tabela">
+        <thead><tr><th>Ingrediente</th>
+          <th class="num" title="Peso Líquido — pronto para uso">PL</th>
+          ${temFc ? '<th class="num" title="FC — Fator de Correção: PB ÷ PL">FC</th><th class="num" title="Peso Bruto — como sai da câmara">PB</th>' : ''}
+          ${vePreco && !versaoAntiga ? '<th class="num">Custo</th>' : ''}</tr></thead>
+        <tbody>${_FT.linhas.map((l, i) => `<tr class="${!l.item_id && !l.sub_ficha_id ? 'ft-linha-aberta' : ''}">
           <td class="td-titulo">${escapeHtml(l.nome)}
-            ${l.sub_ficha_id ? '<span class="ft-tag ft-tag-rec">receita</span>' : ''}
-            ${!l.item_id && !l.sub_ficha_id ? '<span class="ft-tag ft-tag-aberto">em aberto</span>' : ''}
-            ${vePreco && l.item_id && !(_FT.precos[l.item_id] > 0) ? '<span class="ft-tag">sem preço</span>' : ''}
+            ${l.sub_ficha_id ? '<span class="ft-tag ft-tag-rec">sub-receita</span>' : ''}
+            ${!l.item_id && !l.sub_ficha_id ? '<span class="ft-tag ft-tag-aberto">a vincular</span>' : ''}
             ${l.observacao ? `<div class="ft-linha-obs">${escapeHtml(l.observacao)}</div>` : ''}</td>
-          <td class="num" data-label="Quantidade">${l.quantidade == null
-            ? '<span class="ft-tag ft-tag-aberto">sem quantidade</span>'
+          <td class="num" data-label="PL">${l.quantidade == null
+            ? '<span class="ft-tag ft-tag-aberto">a completar</span>'
             : _ftFmt(l.quantidade) + ' ' + escapeHtml(l.unidade || '')}</td>
-          ${_FT.linhas.some(x => x.fator_correcao && x.fator_correcao !== 1)
-            ? `<td class="num" data-label="Fator">${_ftFmt(l.fator_correcao)}</td>` : ''}
+          ${temFc ? `<td class="num" data-label="FC">${_ftFmt(l.fator_correcao)}</td>
+            <td class="num" data-label="PB">${l.quantidade == null ? '—'
+              : _ftFmt(l.quantidade * (l.fator_correcao || 1)) + ' ' + escapeHtml(l.unidade || '')}</td>` : ''}
+          ${vePreco && !versaoAntiga ? `<td class="num" data-label="Custo" id="ft-cl-${i}">…</td>` : ''}
         </tr>`).join('')}</tbody>
-      </table>
-      ${versaoAntiga ? '' : `<div id="ft-custo">${_ftCustoHtml()}</div>`}
+      </table></div>
+      ${versaoAntiga || !_ftVeCusto() ? '' : '<div id="ft-custo"><div class="ft-custo"><span class="text-muted">Calculando o custo...</span></div></div>'}
+      ${versaoAntiga || !_ftVeGerencial() || f.tipo !== 'prato' ? '' : '<div id="ft-gerencial"></div>'}
 
-      ${f.modo_preparo ? `<div class="section-title mt-3"><span>Modo de preparo</span></div>
-        <div class="ft-ver-texto">${texto(f.modo_preparo)}</div>` : ''}
+      ${versaoAntiga || f.tipo !== 'prato' ? '' : `<div class="section-title mt-3"><span>Foto do prato</span></div>
+        <div class="ft-foto-vazia">
+          <span>Espaço reservado para as duas fotos da GENERAL-09 — vista superior e 45°.</span>
+        </div>`}
 
-      ${alerg.length ? `<div class="section-title mt-3"><span>Alérgenos</span></div>
-        <div class="ft-ver-meta">${alerg.map(a => `<span class="ft-tag">${escapeHtml(a)}</span>`).join('')}</div>` : ''}
+      ${f.modo_preparo ? `<div class="section-title mt-3"><span>Modo de Preparo</span></div>
+        <div class="ft-ver-texto">${_ftTexto(f.modo_preparo)}</div>` : ''}
+
+      <div class="section-title mt-3"><span>Alergênicos</span></div>
+      <div class="ft-ver-meta">${alerg.length
+        ? alerg.map(a => `<span class="ft-tag ft-tag-alerg">${escapeHtml(a)}</span>`).join('')
+        : '<span class="text-muted">nenhum marcado</span>'}</div>
+
+      ${f.observacao ? `<div class="section-title mt-3"><span>Observações</span></div>
+        <div class="ft-ver-texto">${_ftTexto(f.observacao)}</div>` : ''}
+      ${f.historia ? `<div class="section-title mt-3"><span>História do prato</span></div>
+        <div class="ft-ver-texto">${_ftTexto(f.historia)}</div>` : ''}
+
+      ${!versaoAntiga && !vendoRev && f.status === 'publicada' ? `<div id="ft-sharepoint">${_ftSharepointHtml()}</div>` : ''}
 
       ${!versaoAntiga && _FT.usada.length ? `<div class="aviso aviso-info mt-3">
         Esta receita é usada em: ${_FT.usada.map(u =>
@@ -2465,9 +2789,215 @@ function _ftRenderVisualizar(versaoAntiga) {
     </div>`;
 }
 
+// FCy — Fator de Cocção (GENERAL-09, Passo 5): peso pronto ÷ peso líquido
+// cru. Só existe quando dá para somar tudo em peso: basta uma linha em ml,
+// em unidade ou sem quantidade para a conta não ter sentido.
+function _ftFcy(f, linhas) {
+  const rend = converterUnidade(f.rendimento, f.rendimento_un, 'g');
+  if (!rend || !linhas.length) return null;
+  let cru = 0;
+  for (const l of linhas) {
+    const g = l.quantidade == null ? null : converterUnidade(l.quantidade, l.unidade, 'g');
+    if (g == null || !['g', 'kg'].includes(String(l.unidade).toLowerCase())) return null;
+    cru += g;
+  }
+  return cru > 0 ? Math.round(rend / cru * 100) / 100 : null;
+}
+
+// Onde a ficha está e por quê — o motivo da última devolução ou reprovação
+// fica à vista de quem vai corrigir.
+function _ftSituacaoHtml() {
+  const f = _FT.ficha || _FT.aberta;
+  const rev = _FT.rev;
+  const partes = [];
+  if (_FT.vendo === 'ficha' && f.status === 'publicada' && rev) {
+    partes.push(`<div class="aviso aviso-warn ft-situacao">
+      Há uma alteração desta ficha em <strong>${_FT_STATUS[rev.status].rot.toLowerCase()}</strong>.
+      A versão abaixo é a publicada e continua valendo.
+      <button class="btn btn-sm btn-outline" onclick="_ftAbrir('${f.id}',{revisao:true})">Ver a alteração</button></div>`);
+  }
+  const alvoRev = _FT.vendo === 'revisao' ? rev?.id : null;
+  const ult = (_FT.eventos || []).find(e => ['devolver', 'reprovar'].includes(e.evento)
+    && (alvoRev ? e.revisao_id === alvoRev : !e.revisao_id));
+  const etapa = _FT.vendo === 'revisao' ? rev?.status : f.status;
+  if (ult && ['rascunho', 'reprovada'].includes(etapa)) {
+    partes.push(`<div class="aviso ${ult.evento === 'reprovar' ? 'aviso-error' : 'aviso-warn'} ft-situacao">
+      ${ult.evento === 'reprovar' ? 'Reprovada' : 'Devolvida para ajustes'} em ${_ftDataBR(ult.criado_em)}${
+        autorComPerfil(ult.usuario_id) ? ' por ' + escapeHtml(autorComPerfil(ult.usuario_id)) : ''}:
+      <strong>${escapeHtml(ult.motivo || '')}</strong></div>`);
+  }
+  return partes.join('');
+}
+
+function _ftAcoesHtml() {
+  const f = _FT.ficha || _FT.aberta;
+  const rev = _FT.rev;
+  const vendoRev = _FT.vendo === 'revisao';
+  const etapa = vendoRev ? rev.status : f.status;
+  const b = [];
+  const botao = (rot, fn, cls = 'btn-outline') => `<button class="btn ${cls} btn-sm" onclick="${fn}">${rot}</button>`;
+
+  if (_FT.podeEditar && !(etapa === 'publicada' && rev)) {
+    b.push(botao(vendoRev ? 'Editar alteração' : 'Editar ficha', '_ftEditar()', 'btn-primary'));
+  }
+  if (etapa === 'rascunho' && _FT.podeEditar) b.push(botao('Enviar para degustação', "_ftAvancar('enviar_degustacao')", 'btn-gold'));
+  if (etapa === 'degustacao' && _FT.aprova) {
+    b.push(botao('Aprovar degustação', "_ftAvancar('aprovar_degustacao')", 'btn-gold'));
+    b.push(botao('Devolver para ajustes', "_ftPedirMotivo('devolver')"));
+    b.push(botao('Reprovar', "_ftPedirMotivo('reprovar')"));
+  }
+  if (etapa === 'validacao_custo' && _FT.aprova) {
+    b.push(botao('Publicar', "_ftAvancar('publicar')", 'btn-gold'));
+    b.push(botao('Devolver para ajustes', "_ftPedirMotivo('devolver')"));
+    b.push(botao('Reprovar', "_ftPedirMotivo('reprovar')"));
+  }
+  if (vendoRev && etapa === 'rascunho' && (_FT.podeEditar || _FT.aprova)) {
+    b.push(botao('Descartar alteração', "_ftAvancar('descartar')", 'btn-secondary'));
+  }
+  if (!vendoRev && etapa === 'publicada') {
+    b.push(botao('Calcular produção', '_ftProduzir()'));
+    b.push(botao('Imprimir PDF', '_ftImprimir(false)'));
+    if (_ftVeGerencial()) b.push(botao('PDF gerencial', '_ftImprimir(true)'));
+  }
+  b.push(botao('Histórico', '_ftHistorico()', 'btn-secondary'));
+
+  const espera = etapa === 'degustacao' && !_FT.aprova ? 'Aguardando a degustação com o Executive Chef.'
+    : etapa === 'validacao_custo' && !_FT.aprova ? 'Aguardando a validação de custo.' : '';
+  return b.join('') + (espera ? `<span class="text-muted ft-espera">${espera}</span>` : '');
+}
+
+// ── Custo da receita e da porção ──────────────────────────────────
+// Pelo banco (custo_receita), porque é lá que as sub-receitas descem:
+// o pastel custa o recheio, que custa o mix de cogumelos. Quem vê a ficha
+// vê o custo — é o "CMV do prato" que o Fernando liberou para chefs e
+// cozinheiros. O custo linha a linha fica com quem já via preço.
+function _ftLinhasParaCusto(linhas) {
+  return linhas.map(l => ({ item_id: l.item_id, sub_ficha_id: l.sub_ficha_id,
+    quantidade: l.quantidade, unidade: l.unidade, fator_correcao: l.fator_correcao }));
+}
+
+async function _ftCarregarCusto() {
+  if (!_ftVeCusto()) return;
+  const pdv = (_FT.ficha && _FT.ficha.pdv_id) || _FT.pdvId;
+  const { data, error } = await sb.rpc('custo_receita', { p_pdv: pdv, p_linhas: _ftLinhasParaCusto(_FT.linhas) });
+  const cx = document.getElementById('ft-custo');
+  if (error) { if (cx) cx.innerHTML = `<div class="ft-custo"><span class="text-muted">Custo indisponível: ${escapeHtml(error.message)}</span></div>`; return; }
+  _FT.custo = data;
+  (data.linhas || []).forEach(x => {
+    const td = document.getElementById('ft-cl-' + x.i);
+    if (td) td.innerHTML = x.custo != null ? _ftFmtR(x.custo)
+      + (x.motivo === 'base_parcial' ? ' <span class="ft-tag ft-tag-aberto" title="a base tem ingrediente sem preço">parcial</span>' : '')
+      : `<span class="text-muted">${_FT_MOTIVO_CUSTO[x.motivo] || '—'}</span>`;
+  });
+  if (cx) cx.innerHTML = _ftCustoResumoHtml(_FT.aberta, data);
+  _ftRenderGerencial();
+}
+
+const _FT_MOTIVO_CUSTO = {
+  aberta: 'a vincular', sem_quantidade: 'a completar', unidade: 'unidade não converte',
+  sem_preco: 'sem preço', base_sem_rendimento: 'base sem rendimento', base_parcial: 'parcial',
+};
+
+function _ftCustoResumoHtml(f, custo) {
+  const faltas = (custo.linhas || []).filter(x => x.motivo);
+  const rendKg = converterUnidade(f.rendimento, f.rendimento_un, 'kg');
+  const porcao = f.porcoes ? custo.total / f.porcoes : null;
+  const conta = {};
+  faltas.forEach(x => { const r = _FT_MOTIVO_CUSTO[x.motivo] || x.motivo; conta[r] = (conta[r] || 0) + 1; });
+  const falta = Object.entries(conta).map(([r, n]) => `${n} ${r}`).join(' · ');
+  // Nenhuma linha com custo: "R$ 0,00" pareceria uma receita de graça.
+  if (!(custo.total > 0) && faltas.length) {
+    return `<div class="ft-custo"><span class="text-muted">Custo ainda sem base para calcular</span>
+      <span class="ft-custo-falta">${falta}</span></div>`;
+  }
+  return `<div class="ft-custo">
+    <span>Custo da receita <strong>${_ftFmtR(custo.total)}</strong>${
+      porcao != null ? ` · Custo da Porção <strong>${_ftFmtR(porcao)}</strong>`
+      : f.tipo === 'prato' ? ' · <span class="text-muted">Custo da Porção: falta o rendimento em porções</span>' : ''}${
+      !porcao && rendKg ? ` · <strong>${_ftFmtR(custo.total / rendKg)}</strong> por kg pronto` : ''}</span>
+    ${falta ? `<span class="ft-custo-falta">parcial — ${falta}</span>` : ''}
+  </div>`;
+}
+
+// ── Preço de venda, CMV % e margem (só compras e master) ──────────
+async function _ftCarregarGerencial() {
+  const f = _FT.ficha || _FT.aberta;
+  const [{ data: pv }, { data: meta }] = await Promise.all([
+    sb.from('ficha_precos_venda').select('preco_venda').eq('ficha_id', f.id).maybeSingle(),
+    sb.from('pdv_metas_cmv').select('meta_cmv_pct').eq('pdv_id', f.pdv_id).maybeSingle(),
+  ]);
+  _FT.gerencial = { preco: pv ? Number(pv.preco_venda) : null, meta: meta ? Number(meta.meta_cmv_pct) : null };
+  _ftRenderGerencial();
+}
+
+function _ftIndicadores() {
+  const f = _FT.aberta;
+  const g = _FT.gerencial || {};
+  const porcao = _FT.custo && f.porcoes ? _FT.custo.total / f.porcoes : null;
+  const cmv = porcao != null && g.preco ? porcao / g.preco * 100 : null;
+  return { porcao, preco: g.preco, meta: g.meta, cmv,
+           margem: porcao != null && g.preco ? g.preco - porcao : null,
+           acima: cmv != null && g.meta != null && cmv > g.meta };
+}
+
+function _ftRenderGerencial() {
+  const cx = document.getElementById('ft-gerencial');
+  if (!cx || !_FT.gerencial) return;
+  const k = _ftIndicadores();
+  const pct = v => v == null ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
+  cx.innerHTML = `<div class="ft-gerencial">
+    <div class="ft-gerencial-titulo">Cost Controller de A&amp;B <span class="text-muted">— só compras e master veem</span></div>
+    <div class="ft-gerencial-grade">
+      <label>Preço de venda líquido<input class="input ft-mini" id="ft-pv" inputmode="decimal"
+        value="${k.preco != null ? _ftFmt(k.preco) : ''}" placeholder="R$"></label>
+      <label>Meta de CMV da cozinha<input class="input ft-mini" id="ft-meta" inputmode="decimal"
+        value="${k.meta != null ? _ftFmt(k.meta) : ''}" placeholder="%"></label>
+      <button class="btn btn-sm btn-outline" onclick="_ftSalvarGerencial()">Salvar</button>
+    </div>
+    <div class="ft-gerencial-kpis">
+      <span>Custo da Porção <strong>${_ftFmtR(k.porcao)}</strong></span>
+      <span>CMV <strong class="${k.acima ? 'text-error' : ''}">${pct(k.cmv)}</strong></span>
+      <span>Margem de contribuição <strong>${_ftFmtR(k.margem)}</strong></span>
+    </div>
+    ${k.acima ? `<div class="aviso aviso-warn mt-2">CMV acima da meta de ${pct(k.meta)}. A GENERAL-09 manda rever
+      porcionamento ou guarnição antes da aprovação final.</div>` : ''}
+  </div>`;
+}
+
+async function _ftSalvarGerencial() {
+  const f = _FT.ficha || _FT.aberta;
+  const pv = _ftNum(document.getElementById('ft-pv')?.value);
+  const meta = _ftNum(document.getElementById('ft-meta')?.value);
+  const eu = window.state?.perfil?.id || null;
+  const erros = [];
+  if (pv != null) {
+    const { error } = await sb.from('ficha_precos_venda').upsert({ ficha_id: f.id, preco_venda: pv,
+      atualizado_em: new Date().toISOString(), atualizado_por: eu });
+    if (error) erros.push(error.message);
+  }
+  if (meta != null) {
+    if (meta >= 100) erros.push('A meta de CMV é um percentual abaixo de 100.');
+    else {
+      const { error } = await sb.from('pdv_metas_cmv').upsert({ pdv_id: f.pdv_id, meta_cmv_pct: meta,
+        atualizado_em: new Date().toISOString(), atualizado_por: eu });
+      if (error) erros.push(error.message);
+    }
+  }
+  if (erros.length) { showToast('Não gravou: ' + erros.join(' · '), 'error'); return; }
+  showToast('Salvo.', 'success');
+  await _ftCarregarGerencial();
+}
+
+
+// =====================================================================
+// EDITAR
+// =====================================================================
 function _ftEditar() {
-  // O retrato de antes da edição: é contra ele que o resumo da versão é
-  // escrito, e é ele que diz se há algo a perder ao cancelar.
+  const etapa = _FT.vendo === 'revisao' ? _FT.rev?.status : _FT.aberta.status;
+  if (['degustacao', 'validacao_custo'].includes(etapa)
+      && !confirm('Esta ficha está em aprovação. Alterar agora faz ela voltar para rascunho. Continuar?')) return;
+  // Ficha publicada sem alteração aberta: a edição parte da publicada e vira
+  // uma alteração — a publicada não muda até ser aprovada.
   _FT.original = _ftEstadoDe(_FT.aberta, _FT.linhas);
   _ftRenderEditor();
 }
@@ -2475,165 +3005,23 @@ function _ftEditar() {
 async function _ftCancelarEdicao() {
   if (_FT.original && JSON.stringify(_ftColetarEdicao()) !== JSON.stringify(_FT.original)
       && !confirm('Descartar as alterações desta ficha?')) return;
-  if (_FT.aberta.id) await _ftAbrir(_FT.aberta.id);
+  if (_FT.aberta.id) await _ftAbrir(_FT.aberta.id, { revisao: _FT.vendo === 'revisao' });
   else _ftVoltar();
-}
-
-// ── O estado comparável de uma ficha ──────────────────────────────
-function _ftEstadoDe(f, linhas) {
-  const n = v => (v === '' || v === undefined) ? null : v;
-  return {
-    nome: String(f.nome || '').trim(), categoria: n(f.categoria),
-    rendimento: f.rendimento == null ? null : Number(f.rendimento),
-    rendimento_un: f.rendimento_un || 'kg', porcoes: f.porcoes ? Number(f.porcoes) : null,
-    modo_preparo: n(f.modo_preparo), observacao: n(f.observacao),
-    item_id: n(f.item_id), alergenos: [...(f.alergenos || [])].sort(),
-    linhas: linhas.map(l => ({
-      item_id: n(l.item_id), sub_ficha_id: n(l.sub_ficha_id),
-      descricao: n(l.descricao), observacao: n(l.observacao), nome: l.nome,
-      quantidade: l.quantidade == null ? null : Number(l.quantidade),
-      unidade: l.unidade, fator_correcao: Number(l.fator_correcao || 1),
-    })),
-  };
-}
-
-function _ftColetarEdicao() {
-  const val = id => (document.getElementById(id)?.value || '').trim();
-  return _ftEstadoDe({
-    nome: val('ft-nome'), categoria: val('ft-cat'),
-    rendimento: _ftNum(val('ft-rend')), rendimento_un: val('ft-rend-un') || 'kg',
-    porcoes: val('ft-porcoes') ? parseInt(val('ft-porcoes'), 10) : null,
-    modo_preparo: val('ft-modo'), observacao: val('ft-obs'),
-    item_id: _FT.aberta.item_id,
-    alergenos: [...document.querySelectorAll('.ft-alerg input:checked')].map(x => x.value),
-  }, _FT.linhas);
-}
-
-// O "logzinho" da versão: o que mudou, em português, sem precisar abrir as
-// duas versões lado a lado.
-function _ftResumoMudancas(antes, depois) {
-  if (!antes) return 'Ficha criada';
-  const m = [];
-  const rot = { nome: 'nome', categoria: 'categoria', rendimento: 'rendimento',
-                rendimento_un: 'unidade do rendimento', porcoes: 'porções' };
-  Object.keys(rot).forEach(k => {
-    if (String(antes[k] ?? '') !== String(depois[k] ?? '')) {
-      m.push(`${rot[k]}: ${antes[k] ?? '—'} → ${depois[k] ?? '—'}`);
-    }
-  });
-  if (antes.item_id !== depois.item_id) {
-    const nome = id => _FT.catalogo.find(i => i.id === id)?.nome || '—';
-    m.push(`produto: ${antes.item_id ? nome(antes.item_id) : '—'} → ${depois.item_id ? nome(depois.item_id) : '—'}`);
-  }
-  if (antes.observacao !== depois.observacao) m.push('observações alteradas');
-  if (antes.modo_preparo !== depois.modo_preparo) m.push('modo de preparo alterado');
-  if (antes.alergenos.join() !== depois.alergenos.join()) m.push('alérgenos alterados');
-
-  const chave = l => l.item_id || l.sub_ficha_id || ('aberto:' + l.descricao);
-  const qtd = l => l.quantidade == null ? 'sem quantidade' : _ftFmt(l.quantidade) + ' ' + l.unidade;
-  const ant = Object.fromEntries(antes.linhas.map(l => [chave(l), l]));
-  const dep = Object.fromEntries(depois.linhas.map(l => [chave(l), l]));
-  depois.linhas.forEach(l => { if (!ant[chave(l)]) m.push(`entrou ${l.nome} (${qtd(l)})`); });
-  antes.linhas.forEach(l => { if (!dep[chave(l)]) m.push(`saiu ${l.nome}`); });
-  depois.linhas.forEach(l => {
-    const a = ant[chave(l)];
-    if (!a) return;
-    if (qtd(a) !== qtd(l)) m.push(`${l.nome}: ${qtd(a)} → ${qtd(l)}`);
-    if (a.fator_correcao !== l.fator_correcao) m.push(`${l.nome}: fator ${_ftFmt(a.fator_correcao)} → ${_ftFmt(l.fator_correcao)}`);
-    if ((a.observacao || '') !== (l.observacao || '')) m.push(`${l.nome}: observação alterada`);
-  });
-  return m.join('; ');
-}
-
-// ── Histórico ─────────────────────────────────────────────────────
-async function _ftHistorico() {
-  const cx = document.getElementById('ft-producao');
-  if (!cx) return;
-  cx.innerHTML = '<div class="loading-text">Carregando histórico...</div>';
-  const { data, error } = await sb.from('ficha_versoes')
-    .select('versao, resumo, usuario_id, criada_em')
-    .eq('ficha_id', _FT.aberta.id).order('versao', { ascending: false });
-  if (error) { cx.innerHTML = '<div class="empty-text">' + escapeHtml(error.message) + '</div>'; return; }
-  await carregarAutores(sb);
-  const atual = _FT.aberta.versao;
-  cx.innerHTML = `
-    <div class="form-panel ft-prod" style="display:block">
-      <div class="section-title" style="margin-top:0"><span>Histórico de versões</span></div>
-      ${(data || []).length ? `<div class="ft-hist">${data.map(v => `
-        <div class="ft-hist-linha">
-          <div class="ft-hist-cab">
-            <strong>versão ${v.versao}</strong>${v.versao === atual ? ' <span class="ft-tag">atual</span>' : ''}
-            <span class="text-muted">${new Date(v.criada_em).toLocaleString('pt-BR')}${
-              autorComPerfil(v.usuario_id) ? ' · ' + escapeHtml(autorComPerfil(v.usuario_id)) : ''}</span>
-            ${v.versao !== atual ? `<button class="btn btn-sm btn-secondary" onclick="_ftVerVersao(${v.versao})">Ver</button>` : ''}
-          </div>
-          <div class="ft-hist-resumo">${escapeHtml(v.resumo || 'sem descrição')}</div>
-        </div>`).join('')}</div>`
-        : '<div class="empty-text">Nenhuma versão registrada.</div>'}
-    </div>`;
-  cx.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-async function _ftVerVersao(versao) {
-  const { data: v, error } = await sb.from('ficha_versoes')
-    .select('versao, dados, usuario_id, criada_em')
-    .eq('ficha_id', _FT.aberta.id).eq('versao', versao).maybeSingle();
-  if (error || !v) { showToast('Versão não encontrada.', 'error'); return; }
-  await carregarAutores(sb);
-  const d = v.dados || {};
-  const id = _FT.aberta.id;
-  // A versão antiga desenha na mesma tela de leitura, com os nomes que ela
-  // guardou — o item pode ter mudado de nome desde então.
-  _FT.aberta = { ...d, id, versao: v.versao, atualizada_em: v.criada_em };
-  _FT.linhas = (d.linhas || []).map(l => ({
-    ...l,
-    nome: l.item_id ? (l.item_nome || '?') : l.sub_ficha_id ? (l.sub_ficha_nome || '?') : (l.descricao || 'Linha em aberto'),
-    quantidade: l.quantidade == null ? null : Number(l.quantidade),
-    fator_correcao: Number(l.fator_correcao || 1),
-  }));
-  _FT.usada = [];
-  _ftRenderVisualizar({ criada_em: v.criada_em, autor: autorComPerfil(v.usuario_id), produto_nome: d.produto_nome });
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-async function _ftAbrir(id) {
-  _FT.raiz.innerHTML = '<div class="loading-text">Abrindo...</div>';
-  const { data: f } = await sb.from('fichas_tecnicas').select('*').eq('id', id).maybeSingle();
-  if (!f) { showToast('Ficha não encontrada.', 'error'); return montarFichas(_FT.raiz, _FT); }
-  const { data: linhas } = await sb.from('ficha_itens')
-    .select('id, item_id, sub_ficha_id, descricao, observacao, quantidade, unidade, fator_correcao, ordem, itens(nome, unidade), fichas_tecnicas!ficha_itens_sub_ficha_id_fkey(nome)')
-    .eq('ficha_id', id).order('ordem');
-  // Onde esta receita é usada — é o que avisa do impacto antes de mexer.
-  const { data: usada } = await sb.rpc('fichas_que_usam', { p_ficha_id: id });
-
-  _FT.aberta = f;
-  _FT.linhas = (linhas || []).map(l => ({
-    id: l.id, item_id: l.item_id, sub_ficha_id: l.sub_ficha_id,
-    descricao: l.descricao || null, observacao: l.observacao || null,
-    nome: l.item_id ? (l.itens?.nome || '?')
-        : l.sub_ficha_id ? (l.fichas_tecnicas?.nome || '?')
-        : (l.descricao || 'Linha em aberto'),
-    // Quantidade NULL = valor ainda não confirmado. Number(null) daria 0 e
-    // gravaria um zero que a tabela recusa.
-    quantidade: l.quantidade == null ? null : Number(l.quantidade), unidade: l.unidade,
-    fator_correcao: Number(l.fator_correcao),
-  }));
-  _FT.usada = usada || [];
-  _FT.original = null;
-  _ftRenderVisualizar();
-  window.scrollTo({ top: 0 });
 }
 
 function _ftRenderEditor() {
   const f = _FT.aberta;
   const novo = !f.id;
+  const publicada = !novo && _FT.ficha && _FT.ficha.status === 'publicada';
   const cats = [...new Set(_FT.lista.map(x => x.categoria).filter(Boolean))].sort();
 
   _FT.raiz.innerHTML = `
     <div class="ft-editor">
       <div class="ft-editor-topo">
         <button class="btn btn-secondary btn-sm" onclick="_ftCancelarEdicao()">← Cancelar</button>
-        <span class="ft-modo-edicao">${novo ? 'nova ficha' : `editando · versão ${f.versao} → ${f.versao + 1}`}</span>
+        <span class="ft-modo-edicao">${novo ? 'nova ficha'
+          : publicada ? `alteração da REV ${String(f.versao).padStart(2, '0')} · vai para aprovação`
+          : `editando rascunho · versão ${f.versao} → ${f.versao + 1}`}</span>
       </div>
 
       <div class="form-row col2">
@@ -2642,55 +3030,63 @@ function _ftRenderEditor() {
           <input class="input" id="ft-nome" value="${escapeHtml(f.nome)}" autocomplete="off">
         </div>
         <div class="form-group">
-          <label>Categoria</label>
+          <label>Categoria de Menu</label>
           <input class="input" id="ft-cat" value="${escapeHtml(f.categoria || '')}"
-                 list="ft-cats" autocomplete="off" placeholder="Entrada, Molho, Sobremesa...">
+                 list="ft-cats" autocomplete="off" placeholder="Entrada, Principal, Sobremesa...">
           <datalist id="ft-cats">${cats.map(c => `<option value="${escapeHtml(c)}">`).join('')}</datalist>
         </div>
       </div>
 
       <div class="form-row col3">
         <div class="form-group">
-          <label>Rendimento</label>
-          <input class="input" id="ft-rend" inputmode="decimal" autocomplete="off"
-                 value="${f.rendimento == null ? '' : _ftFmt(f.rendimento)}"
-                 placeholder="quanto sai pronto" onchange="_ftRedesenharLinhas()">
-        </div>
-        <div class="form-group">
-          <label>Unidade</label>
-          <select class="select" id="ft-rend-un" onchange="_ftRedesenharLinhas()">
-            ${_FT_UNIDADES.map(u => `<option value="${u}"${
-              f.rendimento_un === u ? ' selected' : ''}>${u}</option>`).join('')}
+          <label>Tipo</label>
+          <select class="select" id="ft-tipo">
+            <option value="prato"${f.tipo === 'prato' ? ' selected' : ''}>Prato vendável</option>
+            <option value="base"${f.tipo !== 'prato' ? ' selected' : ''}>Base / sub-receita</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Porções</label>
+          <label>Rendimento</label>
+          <div style="display:flex;gap:6px">
+            <input class="input" id="ft-rend" inputmode="decimal" autocomplete="off" style="flex:1"
+                   value="${f.rendimento == null ? '' : _ftFmt(f.rendimento)}"
+                   placeholder="quanto sai pronto" onchange="_ftRedesenharLinhas()">
+            <select class="select" id="ft-rend-un" style="width:74px" onchange="_ftRedesenharLinhas()">
+              ${_FT_UNIDADES.map(u => `<option value="${u}"${
+                f.rendimento_un === u ? ' selected' : ''}>${u}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Rendimento em porções</label>
           <input class="input" id="ft-porcoes" inputmode="numeric" autocomplete="off"
-                 value="${f.porcoes || ''}">
+                 value="${f.porcoes || ''}" onchange="_ftRedesenharLinhas()">
         </div>
       </div>
 
-      <div class="form-group">
-        <label>Produto que esta ficha produz</label>
-        <div id="ft-produto">${_ftProdutoHtml()}</div>
-      </div>
-
-      <div class="form-group">
-        <label>Observações e rendimento</label>
-        <textarea class="input" id="ft-obs" rows="4"></textarea>
+      <div class="form-row col2">
+        <div class="form-group">
+          <label>Validade Secundária</label>
+          <input class="input" id="ft-validade" autocomplete="off" value="${escapeHtml(f.validade_secundaria || '')}"
+                 placeholder="ex.: 3 dias refrigerado (≤ 4 °C)">
+        </div>
+        <div class="form-group">
+          <label>Produto que esta ficha produz</label>
+          <div id="ft-produto">${_ftProdutoHtml()}</div>
+        </div>
       </div>
 
       <div class="section-title"><span>Ingredientes</span></div>
       <div class="ft-ing-cabec">
-        <span>Ingrediente</span><span class="num">Qtd</span>
-        <span>Un</span><span class="num">Fator</span><span></span>
+        <span>Ingrediente</span><span class="num" title="Peso Líquido">PL</span>
+        <span>Un</span><span class="num" title="FC — Fator de Correção: PB ÷ PL">FC</span><span></span>
       </div>
       <div id="ft-linhas">${_ftLinhasHtml()}</div>
-      <div id="ft-custo">${_ftCustoHtml()}</div>
+      <div id="ft-custo"></div>
 
       <div class="ft-add">
         <input class="input" id="ft-add-busca" autocomplete="off"
-               placeholder="Digite para achar um item ou outra receita..."
+               placeholder="Digite para achar um item ou uma sub-receita..."
                oninput="_ftSugerir(this.value)">
         <div id="ft-sug" class="ft-sug"></div>
         <div class="ft-add-aberto">
@@ -2700,7 +3096,12 @@ function _ftRenderEditor() {
         </div>
       </div>
 
-      <div class="section-title mt-3"><span>Alérgenos</span></div>
+      <div class="form-group mt-3">
+        <label>Modo de Preparo</label>
+        <textarea class="input" id="ft-modo" rows="6"></textarea>
+      </div>
+
+      <div class="section-title mt-3"><span>Alergênicos</span></div>
       <div class="ft-alerg">${_FT_ALERGENOS.map(([v, r]) => `
         <label class="ft-alerg-item">
           <input type="checkbox" value="${v}"${
@@ -2708,8 +3109,12 @@ function _ftRenderEditor() {
         </label>`).join('')}</div>
 
       <div class="form-group mt-3">
-        <label>Modo de preparo</label>
-        <textarea class="input" id="ft-modo" rows="5"></textarea>
+        <label>Observações</label>
+        <textarea class="input" id="ft-obs" rows="3"></textarea>
+      </div>
+      <div class="form-group">
+        <label>História do prato</label>
+        <textarea class="input" id="ft-historia" rows="2"></textarea>
       </div>
 
       ${_FT.usada.length ? `
@@ -2721,9 +3126,9 @@ function _ftRenderEditor() {
 
       <div class="ft-rodape">
         <button class="btn btn-primary" onclick="_ftSalvar()">
-          ${novo ? 'Criar ficha' : 'Salvar nova versão'}</button>
+          ${novo ? 'Criar rascunho' : publicada ? 'Salvar alteração' : 'Salvar rascunho'}</button>
         <button class="btn btn-outline" onclick="_ftCancelarEdicao()">Cancelar</button>
-        ${novo ? '' : '<button class="btn btn-secondary" onclick="_ftArquivar()">Arquivar</button>'}
+        ${novo || _FT.vendo === 'revisao' ? '' : '<button class="btn btn-secondary" onclick="_ftArquivar()">Arquivar</button>'}
       </div>
       <div id="ft-producao"></div>
     </div>`;
@@ -2731,10 +3136,11 @@ function _ftRenderEditor() {
   // O textarea recebe o valor por .value, nunca por innerHTML: a primeira
   // quebra de linha é descartada na análise do HTML e o texto sobe uma
   // linha inteira. Já mordeu no bloco do fechamento.
-  const modo = document.getElementById('ft-modo');
-  if (modo) modo.value = f.modo_preparo || '';
-  const obs = document.getElementById('ft-obs');
-  if (obs) obs.value = f.observacao || '';
+  const setv = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  setv('ft-modo', f.modo_preparo);
+  setv('ft-obs', f.observacao);
+  setv('ft-historia', f.historia);
+  _ftAgendarCusto();
 }
 
 // ── Produto que a ficha produz ─────────────────────────────────────
@@ -2744,7 +3150,6 @@ function _ftProdutoHtml() {
   const f = _FT.aberta;
   const it = f.item_id ? _FT.catalogo.find(i => i.id === f.item_id) : null;
   // Duas fichas ativas para o mesmo produto: o banco usa a mais antiga.
-  // Dizer isso na tela evita que a Comissaria corrija a ficha errada.
   const irmas = f.item_id ? _FT.lista.filter(x => x.item_id === f.item_id && x.id !== f.id) : [];
   const todas = [..._FT.lista.filter(x => x.item_id === f.item_id)];
   if (f.id == null && f.item_id) todas.push({ id: null, nome: f.nome || 'esta ficha', criada_em: '9999' });
@@ -2760,7 +3165,7 @@ function _ftProdutoHtml() {
          O custo da requisição usa <strong>${escapeHtml(vale.nome)}</strong>, a mais antiga.
          Arquive a que não vale.</div>` : ''}`
     : `<input class="input" id="ft-prod-busca" autocomplete="off"
-              placeholder="Buscar o item do catálogo que o PDV pede"
+              placeholder="Item do catálogo que o PDV pede (opcional)"
               oninput="_ftSugerirProduto(this.value)">
        <div id="ft-prod-sug" class="ft-sug"></div>`;
 }
@@ -2782,31 +3187,24 @@ function _ftSetProduto(id) {
   if (el) el.innerHTML = _ftProdutoHtml();
 }
 
-// ── Custo estimado ────────────────────────────────────────────────
-// Só para quem vê preço. Parcial de propósito: diz quantos ingredientes
-// ficaram de fora em vez de mostrar um total que parece completo.
-function _ftCustoHtml() {
-  if (!perfilVePreco() || !_FT.precos) return '';
-  const rend = _ftNum(document.getElementById('ft-rend')?.value) ?? _FT.aberta.rendimento;
-  const rendKg = converterUnidade(rend, document.getElementById('ft-rend-un')?.value || _FT.aberta.rendimento_un, 'kg');
-  let total = 0, semPreco = 0, abertos = 0, subs = 0;
-  _FT.linhas.forEach(l => {
-    if (l.sub_ficha_id) { subs++; return; }
-    if (!l.item_id || l.quantidade == null) { abertos++; return; }
-    const it = _FT.catalogo.find(i => i.id === l.item_id);
-    const q = converterUnidade(l.quantidade * (l.fator_correcao || 1), l.unidade, it?.unidade);
-    const p = _FT.precos[l.item_id];
-    if (q == null || !(p > 0)) { semPreco++; return; }
-    total += q * p;
-  });
-  const fmtR = v => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const falta = [semPreco ? `${semPreco} sem preço` : '', abertos ? `${abertos} em aberto` : '',
-                 subs ? `${subs} sub-receita(s) não somada(s)` : ''].filter(Boolean).join(' · ');
-  return `<div class="ft-custo">
-    <span>Custo da receita: <strong>${fmtR(total)}</strong>${
-      rendKg ? ` · <strong>${fmtR(total / rendKg)}</strong> por kg pronto` : ''}</span>
-    ${falta ? `<span class="ft-custo-falta">parcial — ${falta}</span>` : ''}
-  </div>`;
+// O custo no editor acompanha o que se digita, sem ida ao banco por tecla.
+let _ftTimerCusto = null;
+function _ftAgendarCusto() {
+  clearTimeout(_ftTimerCusto);
+  _ftTimerCusto = setTimeout(async () => {
+    const cx = document.getElementById('ft-custo');
+    if (!cx || !_ftVeCusto()) return;
+    if (!_FT.linhas.length) { cx.innerHTML = ''; return; }
+    const { data, error } = await sb.rpc('custo_receita',
+      { p_pdv: _FT.pdvId, p_linhas: _ftLinhasParaCusto(_FT.linhas) });
+    if (error || !document.getElementById('ft-custo')) return;
+    const rend = _ftNum(document.getElementById('ft-rend')?.value);
+    const porc = parseInt(document.getElementById('ft-porcoes')?.value || '', 10);
+    const f = { ..._FT.aberta, rendimento: rend,
+                rendimento_un: document.getElementById('ft-rend-un')?.value || _FT.aberta.rendimento_un,
+                porcoes: porc > 0 ? porc : null, tipo: document.getElementById('ft-tipo')?.value };
+    document.getElementById('ft-custo').innerHTML = _ftCustoResumoHtml(f, data);
+  }, 400);
 }
 
 function _ftLinhasHtml() {
@@ -2818,20 +3216,22 @@ function _ftLinhasHtml() {
     <div class="ft-linha${!l.item_id && !l.sub_ficha_id ? ' ft-linha-aberta' : ''}">
       <div class="ft-linha-nome">
         ${escapeHtml(l.nome)}
-        ${l.sub_ficha_id ? '<span class="ft-tag ft-tag-rec">receita</span>' : ''}
-        ${!l.item_id && !l.sub_ficha_id ? '<span class="ft-tag ft-tag-aberto">em aberto</span>'
-          : l.quantidade == null ? '<span class="ft-tag ft-tag-aberto">sem quantidade</span>' : ''}
+        ${l.sub_ficha_id ? '<span class="ft-tag ft-tag-rec">sub-receita</span>' : ''}
+        ${!l.item_id && !l.sub_ficha_id
+          ? `<button class="ft-vincular" onclick="_ftVincular(${i})">vincular</button>`
+          : l.quantidade == null ? '<span class="ft-tag ft-tag-aberto">a completar</span>' : ''}
         ${vePreco && l.item_id && !(_FT.precos[l.item_id] > 0) ? '<span class="ft-tag">sem preço</span>' : ''}
         ${l.observacao ? `<div class="ft-linha-obs">${escapeHtml(l.observacao)}</div>` : ''}
+        <div class="ft-vinc-caixa" id="ft-vinc-${i}"></div>
       </div>
       <input class="input ft-mini" inputmode="decimal" value="${l.quantidade == null ? '' : _ftFmt(l.quantidade)}"
              placeholder="—" onchange="_ftSetQtd(${i}, this.value)" onclick="this.select()">
       <select class="select ft-mini" onchange="_ftSetUn(${i}, this.value)">
         ${_FT_UNIDADES.map(u => `<option value="${u}"${
-          l.unidade === u ? ' selected' : ''}>${u}</option>`).join('')}
+          String(l.unidade).toLowerCase() === u.toLowerCase() ? ' selected' : ''}>${u}</option>`).join('')}
       </select>
       <input class="input ft-mini" inputmode="decimal" value="${_ftFmt(l.fator_correcao)}"
-             title="Fator de correção: bruto ÷ líquido. 1 = não há perda no preparo."
+             title="FC — Fator de Correção: PB ÷ PL. 1 = não há perda no pré-preparo."
              onchange="_ftSetFator(${i}, this.value)" onclick="this.select()">
       <button class="ft-del" onclick="_ftRemover(${i})" title="Remover">×</button>
     </div>`).join('');
@@ -2840,13 +3240,12 @@ function _ftLinhasHtml() {
 function _ftRedesenharLinhas() {
   const el = document.getElementById('ft-linhas');
   if (el) el.innerHTML = _ftLinhasHtml();
-  const cx = document.getElementById('ft-custo');
-  if (cx) cx.innerHTML = _ftCustoHtml();
+  _ftAgendarCusto();
 }
 
 function _ftSetQtd(i, v) {
-  // Campo vazio é válido: a linha fica "sem quantidade" até alguém confirmar
-  // o valor — foi como o Fernando pediu o sal grosso do parma e a papada.
+  // Campo vazio é válido: a linha fica "a completar" até alguém confirmar o
+  // valor — foi como o Fernando pediu o sal grosso do parma e a papada.
   if (String(v || '').trim() === '') { _FT.linhas[i].quantidade = null; _ftRedesenharLinhas(); return; }
   const n = _ftNum(v);
   if (n === null) { showToast('Quantidade inválida.', 'error'); _ftRedesenharLinhas(); return; }
@@ -2859,22 +3258,73 @@ function _ftAdicionarAberto() {
   const txt = (el?.value || '').trim();
   if (!txt) { showToast('Descreva o que falta definir.', 'error'); return; }
   _FT.linhas.push({ id: null, item_id: null, sub_ficha_id: null, descricao: txt,
-                    observacao: null, nome: txt, quantidade: null, unidade: 'kg', fator_correcao: 1 });
+                    observacao: null, nome: txt, quantidade: null, unidade: 'g', fator_correcao: 1 });
   el.value = '';
   _ftRedesenharLinhas();
 }
-function _ftSetUn(i, v) { _FT.linhas[i].unidade = v; }
+function _ftSetUn(i, v) { _FT.linhas[i].unidade = v; _ftAgendarCusto(); }
 function _ftSetFator(i, v) {
   const n = _ftNum(v);
-  // Fator é bruto ÷ líquido: nunca menor que 1. Aceitar 0,8 aqui seria
-  // gravar um número que subavalia o estoque sem ninguém perceber.
+  // FC é bruto ÷ líquido: nunca menor que 1. Aceitar 0,8 aqui seria gravar
+  // um número que subavalia o estoque sem ninguém perceber.
   if (n === null || n < 1) {
-    showToast('O fator vai de 1 para cima (bruto ÷ líquido).', 'error');
+    showToast('O FC vai de 1 para cima (PB ÷ PL).', 'error');
     _ftRedesenharLinhas(); return;
   }
   _FT.linhas[i].fator_correcao = n;
+  _ftAgendarCusto();
 }
 function _ftRemover(i) { _FT.linhas.splice(i, 1); _ftRedesenharLinhas(); }
+
+// ── Vincular uma linha em aberto ───────────────────────────────────
+// A linha que veio da planilha sem par no catálogo ("Azeite de Ervas")
+// ganha o item ou a sub-receita, mantendo quantidade e unidade. O nome da
+// planilha fica guardado na linha: é por ele que a próxima importação
+// reconhece o vínculo e não pede de novo.
+function _ftVincular(i) {
+  const cx = document.getElementById('ft-vinc-' + i);
+  if (!cx) return;
+  if (cx.innerHTML) { cx.innerHTML = ''; return; }
+  cx.innerHTML = `<input class="input" id="ft-vinc-in-${i}" autocomplete="off"
+      value="${escapeHtml(_FT.linhas[i].descricao || '')}" oninput="_ftVincularSugerir(${i}, this.value)">
+    <div class="ft-sug" id="ft-vinc-sug-${i}"></div>`;
+  const inp = document.getElementById('ft-vinc-in-' + i);
+  inp.focus(); inp.select();
+  _ftVincularSugerir(i, inp.value);
+}
+
+function _ftCandidatos(v, excluir) {
+  const palavras = _ftNorm(v).split(/\s+/).filter(p => p.length >= 3);
+  if (!palavras.length) return [];
+  const nota = nome => { const n = _ftNorm(nome); return palavras.filter(p => n.includes(p)).length; };
+  const recs = _FT.lista.filter(f => f.id !== (_FT.aberta && _FT.aberta.id) && !excluir.has(f.id))
+    .map(f => ({ tipo: 'rec', id: f.id, nome: f.nome, n: nota(f.nome) }));
+  const itens = _FT.catalogo.filter(i => !excluir.has(i.id))
+    .map(i => ({ tipo: 'item', id: i.id, nome: i.nome,
+                 n: Math.max(nota(i.nome), nota(i.nome_curto || ''), nota(i.nome_inventario || '')) }));
+  return [...recs, ...itens].filter(x => x.n > 0)
+    .sort((a, b) => b.n - a.n || (a.tipo === 'rec' ? -1 : 1) || a.nome.localeCompare(b.nome)).slice(0, 12);
+}
+
+function _ftVincularSugerir(i, v) {
+  const cx = document.getElementById('ft-vinc-sug-' + i);
+  if (!cx) return;
+  const todos = _ftCandidatos(v, new Set());
+  cx.innerHTML = todos.length
+    ? todos.map(x => `<button class="ft-sug-item" onclick="_ftVincularEscolher(${i},'${x.tipo}','${x.id}')">
+        ${escapeHtml(x.nome)}${x.tipo === 'rec' ? ' <span class="ft-tag ft-tag-rec">sub-receita</span>' : ''}</button>`).join('')
+    : '<div class="text-muted" style="font-size:12px;padding:8px">Nada encontrado. Se o item não existe no catálogo, avise o gerente de compras.</div>';
+}
+
+function _ftVincularEscolher(i, tipo, id) {
+  const o = tipo === 'rec' ? _FT.lista.find(f => f.id === id) : _FT.catalogo.find(x => x.id === id);
+  if (!o) return;
+  const l = _FT.linhas[i];
+  l.item_id = tipo === 'item' ? id : null;
+  l.sub_ficha_id = tipo === 'rec' ? id : null;
+  l.nome = o.nome;
+  _ftRedesenharLinhas();
+}
 
 // ---------------------------------------------------------------------
 // Busca de ingrediente: itens do catálogo E outras receitas do PDV
@@ -2890,18 +3340,18 @@ function _ftSugerir(v) {
     .filter(f => f.id !== (_FT.aberta && _FT.aberta.id) && !jaTem.has(f.id)
               && _ftNorm(f.nome).includes(q))
     .slice(0, 5)
-    .map(f => ({ tipo: 'rec', id: f.id, nome: f.nome, un: f.rendimento_un || 'g' }));
+    .map(f => ({ tipo: 'rec', id: f.id, nome: f.nome }));
   const itens = _FT.catalogo
     .filter(i => !jaTem.has(i.id) && _ftNorm(i.nome).includes(q))
     .slice(0, 12)
-    .map(i => ({ tipo: 'item', id: i.id, nome: i.nome, un: 'g' }));
+    .map(i => ({ tipo: 'item', id: i.id, nome: i.nome }));
 
   const todos = [...recs, ...itens];
   cx.innerHTML = todos.length
     ? todos.map(x => `
         <button class="ft-sug-item" onclick="_ftAdicionar('${x.tipo}','${x.id}')">
           ${escapeHtml(x.nome)}
-          ${x.tipo === 'rec' ? '<span class="ft-tag ft-tag-rec">receita</span>' : ''}
+          ${x.tipo === 'rec' ? '<span class="ft-tag ft-tag-rec">sub-receita</span>' : ''}
         </button>`).join('')
     : '<div class="text-muted" style="font-size:12px;padding:8px">'
       + 'Nada encontrado. Se o ingrediente não existe no catálogo, avise o gerente de compras.</div>';
@@ -2927,6 +3377,86 @@ function _ftAdicionar(tipo, id) {
   if (b) b.focus();
 }
 
+// ── O estado comparável de uma ficha ──────────────────────────────
+function _ftEstadoDe(f, linhas) {
+  const n = v => (v === '' || v === undefined) ? null : v;
+  return {
+    nome: String(f.nome || '').trim(), categoria: n(f.categoria), tipo: f.tipo || 'base',
+    rendimento: f.rendimento == null ? null : Number(f.rendimento),
+    rendimento_un: f.rendimento_un || 'kg', porcoes: f.porcoes ? Number(f.porcoes) : null,
+    validade_secundaria: n(f.validade_secundaria),
+    modo_preparo: n(f.modo_preparo), observacao: n(f.observacao), historia: n(f.historia),
+    item_id: n(f.item_id), alergenos: [...(f.alergenos || [])].sort(),
+    linhas: linhas.map(l => ({
+      item_id: n(l.item_id), sub_ficha_id: n(l.sub_ficha_id),
+      descricao: n(l.descricao), observacao: n(l.observacao), nome: l.nome,
+      quantidade: l.quantidade == null ? null : Number(l.quantidade),
+      unidade: l.unidade, fator_correcao: Number(l.fator_correcao || 1),
+    })),
+  };
+}
+
+function _ftColetarEdicao() {
+  const val = id => (document.getElementById(id)?.value || '').trim();
+  return _ftEstadoDe({
+    nome: val('ft-nome'), categoria: val('ft-cat'), tipo: val('ft-tipo') || 'base',
+    rendimento: _ftNum(val('ft-rend')), rendimento_un: val('ft-rend-un') || 'kg',
+    porcoes: val('ft-porcoes') ? parseInt(val('ft-porcoes'), 10) : null,
+    validade_secundaria: val('ft-validade'),
+    modo_preparo: val('ft-modo'), observacao: val('ft-obs'), historia: val('ft-historia'),
+    item_id: _FT.aberta.item_id,
+    alergenos: [...document.querySelectorAll('.ft-alerg input:checked')].map(x => x.value),
+  }, _FT.linhas);
+}
+
+// O "logzinho" da versão: o que mudou, em português, sem precisar abrir as
+// duas versões lado a lado.
+function _ftResumoMudancas(antes, depois) {
+  if (!antes) return 'Ficha criada';
+  const m = [];
+  const rot = { nome: 'nome', categoria: 'categoria de menu', tipo: 'tipo', rendimento: 'rendimento',
+                rendimento_un: 'unidade do rendimento', porcoes: 'porções',
+                validade_secundaria: 'validade secundária' };
+  Object.keys(rot).forEach(k => {
+    if (String(antes[k] ?? '') !== String(depois[k] ?? '')) {
+      m.push(`${rot[k]}: ${antes[k] ?? '—'} → ${depois[k] ?? '—'}`);
+    }
+  });
+  if (antes.item_id !== depois.item_id) {
+    const nome = id => _FT.catalogo.find(i => i.id === id)?.nome || '—';
+    m.push(`produto: ${antes.item_id ? nome(antes.item_id) : '—'} → ${depois.item_id ? nome(depois.item_id) : '—'}`);
+  }
+  if (antes.observacao !== depois.observacao) m.push('observações alteradas');
+  if (antes.modo_preparo !== depois.modo_preparo) m.push('modo de preparo alterado');
+  if (antes.historia !== depois.historia) m.push('história do prato alterada');
+  if (antes.alergenos.join() !== depois.alergenos.join()) m.push('alergênicos alterados');
+
+  const chave = l => l.item_id || l.sub_ficha_id || ('aberto:' + l.descricao);
+  const qtd = l => l.quantidade == null ? 'a completar' : _ftFmt(l.quantidade) + ' ' + l.unidade;
+  const ant = Object.fromEntries(antes.linhas.map(l => [chave(l), l]));
+  const dep = Object.fromEntries(depois.linhas.map(l => [chave(l), l]));
+  // Linha em aberto que ganhou vínculo não é "saiu X, entrou Y".
+  const vinculadas = new Set();
+  depois.linhas.forEach(l => {
+    if (!ant[chave(l)] && l.descricao && ant['aberto:' + l.descricao]) {
+      vinculadas.add('aberto:' + l.descricao);
+      m.push(`${l.descricao} vinculado a ${l.nome}`);
+    }
+  });
+  depois.linhas.forEach(l => {
+    if (!ant[chave(l)] && !(l.descricao && vinculadas.has('aberto:' + l.descricao))) m.push(`entrou ${l.nome} (${qtd(l)})`);
+  });
+  antes.linhas.forEach(l => { if (!dep[chave(l)] && !vinculadas.has(chave(l))) m.push(`saiu ${l.nome}`); });
+  depois.linhas.forEach(l => {
+    const a = ant[chave(l)] || (l.descricao && ant['aberto:' + l.descricao]);
+    if (!a) return;
+    if (qtd(a) !== qtd(l)) m.push(`${l.nome}: ${qtd(a)} → ${qtd(l)}`);
+    if (a.fator_correcao !== l.fator_correcao) m.push(`${l.nome}: FC ${_ftFmt(a.fator_correcao)} → ${_ftFmt(l.fator_correcao)}`);
+    if ((a.observacao || '') !== (l.observacao || '')) m.push(`${l.nome}: observação alterada`);
+  });
+  return m.join('; ');
+}
+
 // ---------------------------------------------------------------------
 // Gravar
 // ---------------------------------------------------------------------
@@ -2935,33 +3465,29 @@ async function _ftSalvar() {
   const estado = _ftColetarEdicao();
   if (!estado.nome) { showToast('Dê um nome à receita.', 'error'); return; }
   if (!estado.linhas.length) { showToast('Adicione ao menos um ingrediente.', 'error'); return; }
-  // Rendimento não é enfeite: sem ele a explosão não sabe quantas receitas
-  // são 6 kg de recheio, e a ficha não serve para o inventário nem para o
-  // custo da requisição.
-  if (estado.rendimento === null) {
-    showToast('Informe o rendimento — é ele que diz quanto sai pronto.', 'error');
-    document.getElementById('ft-rend').focus();
-    return;
-  }
 
-  const resumo = _ftResumoMudancas(_FT.original, estado);
-  if (_FT.aberta.id && !resumo) {
+  const publicada = _FT.aberta.id && _FT.ficha && _FT.ficha.status === 'publicada';
+  if (_FT.aberta.id && _FT.original && JSON.stringify(estado) === JSON.stringify(_FT.original)) {
     showToast('Nada mudou — nenhuma versão nova foi criada.', 'info');
-    return _ftAbrir(_FT.aberta.id);
+    return _ftAbrir(_FT.aberta.id, { revisao: _FT.vendo === 'revisao' });
   }
+  // A alteração de uma publicada se descreve contra a publicada, que é o
+  // que o aprovador vai comparar. O rascunho, contra o que estava salvo.
+  const resumo = _ftResumoMudancas(publicada ? _FT.publicadaEstado : _FT.original, estado)
+    || (publicada ? 'Sem diferença da versão publicada' : 'Sem mudanças');
 
   _FT.salvando = true;
   try {
-    // Uma chamada só, em transação: cabeçalho, linhas e a versão. Antes eram
-    // dois comandos soltos (apagar as linhas, inserir as novas) e uma falha
-    // no meio deixava a ficha sem ingrediente nenhum.
-    const { data: fichaId, error } = await sb.rpc('salvar_ficha', {
+    const { data, error } = await sb.rpc('salvar_ficha_rascunho', {
       p_ficha_id: _FT.aberta.id || null,
+      p_pdv: _FT.pdvId,
       p_cabecalho: {
-        pdv_id: _FT.pdvId, nome: estado.nome, categoria: estado.categoria,
+        nome: estado.nome, categoria: estado.categoria, tipo: estado.tipo,
         rendimento: estado.rendimento, rendimento_un: estado.rendimento_un,
-        porcoes: estado.porcoes, modo_preparo: estado.modo_preparo,
-        observacao: estado.observacao, item_id: estado.item_id, alergenos: estado.alergenos,
+        porcoes: estado.porcoes, validade_secundaria: estado.validade_secundaria,
+        modo_preparo: estado.modo_preparo, observacao: estado.observacao, historia: estado.historia,
+        data_referencia: _FT.aberta.data_referencia || null,
+        item_id: estado.item_id, alergenos: estado.alergenos,
       },
       p_linhas: estado.linhas.map(l => ({
         item_id: l.item_id, sub_ficha_id: l.sub_ficha_id, descricao: l.descricao,
@@ -2969,25 +3495,13 @@ async function _ftSalvar() {
         fator_correcao: l.fator_correcao,
       })),
       p_resumo: resumo,
+      p_origem: 'tela',
     });
     if (error) throw error;
-
-    // Ficha corrigida passa a valer no mês aberto: as requisições deste
-    // produto desde o dia 1 são remontadas pela receita nova. Meses
-    // anteriores ficam como estavam — já foram fechados com o outro número.
-    if (estado.item_id) {
-      const hoje = new Date();
-      const dia1 = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-      const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
-                     + '-' + String(d.getDate()).padStart(2, '0');
-      const { error: eR } = await sb.rpc('remontar_insumos_requisicoes',
-        { p_de: iso(dia1), p_ate: iso(hoje), p_ficha: fichaId });
-      if (eR) console.warn('[ficha] custo do mês não remontado:', eR.message);
-    }
-
-    showToast(_FT.aberta.id ? 'Nova versão salva.' : 'Ficha criada.', 'success');
+    showToast(publicada ? 'Alteração salva. A versão publicada continua valendo até a aprovação.'
+      : _FT.aberta.id ? 'Rascunho salvo.' : 'Rascunho criado.', 'success');
     await montarFichas(_FT.raiz, _FT);
-    await _ftAbrir(fichaId);
+    await _ftAbrir(data.ficha_id, { revisao: !!data.revisao_id });
   } catch (e) {
     showToast('Não gravou: ' + (e.message || e), 'error');
   } finally {
@@ -3005,6 +3519,278 @@ async function _ftArquivar() {
 }
 
 function _ftVoltar() { montarFichas(_FT.raiz, _FT); }
+
+// =====================================================================
+// ANDAR NO FLUXO
+// =====================================================================
+function _ftPedirMotivo(acao) {
+  const cx = document.getElementById('ft-motivo');
+  if (!cx) return;
+  cx.innerHTML = `<div class="form-panel ft-motivo" style="display:block">
+    <label>${acao === 'reprovar' ? 'Motivo da reprovação' : 'O que precisa ser ajustado'}</label>
+    <textarea class="input" id="ft-motivo-txt" rows="3"></textarea>
+    <div class="ft-rodape" style="margin-top:10px">
+      <button class="btn btn-primary btn-sm" onclick="_ftAvancar('${acao}')">${
+        acao === 'reprovar' ? 'Reprovar' : 'Devolver para ajustes'}</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('ft-motivo').innerHTML=''">Cancelar</button>
+    </div></div>`;
+  document.getElementById('ft-motivo-txt').focus();
+}
+
+async function _ftAvancar(acao) {
+  const f = _FT.ficha;
+  if (!f || _FT.avancando) return;
+  let motivo = null;
+  if (acao === 'devolver' || acao === 'reprovar') {
+    motivo = (document.getElementById('ft-motivo-txt')?.value || '').trim();
+    if (!motivo) { showToast('Escreva o motivo.', 'error'); return; }
+  }
+  if (acao === 'enviar_degustacao') {
+    const faltam = [];
+    if (_FT.aberta.rendimento == null) faltam.push('o rendimento');
+    const abertas = _FT.linhas.filter(l => !l.item_id && !l.sub_ficha_id).length;
+    const semQtd = _FT.linhas.filter(l => l.quantidade == null).length;
+    if (abertas) faltam.push(abertas + ' ingrediente(s) a vincular');
+    if (semQtd) faltam.push(semQtd + ' quantidade(s) a completar');
+    if (faltam.length && !confirm('Falta ' + faltam.join(', ') + '.\n\nEnviar para degustação assim mesmo?')) return;
+  }
+  if (acao === 'publicar') {
+    const k = _ftIndicadores();
+    if (k.acima && !confirm(`O CMV desta porção (${k.cmv.toFixed(1)}%) está acima da meta da cozinha (${k.meta}%). `
+        + 'A GENERAL-09 manda rever porcionamento ou guarnição antes da aprovação.\n\nPublicar assim mesmo?')) return;
+    if (_FT.custo && _FT.custo.faltas && !confirm(`O custo desta ficha está parcial (${_FT.custo.faltas} linha(s) fora da conta). Publicar assim mesmo?`)) return;
+  }
+  if (acao === 'descartar' && !confirm('Descartar esta alteração? A versão publicada continua como está.')) return;
+
+  _FT.avancando = true;
+  try {
+    const { data: para, error } = await sb.rpc('avancar_ficha', { p_ficha_id: f.id, p_acao: acao, p_motivo: motivo });
+    if (error) throw error;
+    // Ficha publicada passa a valer no mês aberto: as requisições deste
+    // produto desde o dia 1 são remontadas pela receita nova. Meses
+    // anteriores ficam como estavam — já foram fechados com o outro número.
+    if (para === 'publicada' && (f.item_id || _FT.aberta.item_id)) {
+      const hoje = new Date();
+      const dia1 = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+                     + '-' + String(d.getDate()).padStart(2, '0');
+      const { error: eR } = await sb.rpc('remontar_insumos_requisicoes',
+        { p_de: iso(dia1), p_ate: iso(hoje), p_ficha: f.id });
+      if (eR) console.warn('[ficha] custo do mês não remontado:', eR.message);
+    }
+    const msg = { degustacao: 'Enviada para degustação.', validacao_custo: 'Degustação aprovada — segue para validação de custo.',
+                  publicada: 'Ficha publicada.', rascunho: 'Devolvida para ajustes.', reprovada: 'Ficha reprovada.',
+                  descartada: 'Alteração descartada.' }[para] || 'Feito.';
+    showToast(msg, 'success');
+    await montarFichas(_FT.raiz, _FT);
+    await _ftAbrir(f.id, { revisao: _FT_ABERTAS.includes(para) && _FT.vendo === 'revisao' });
+  } catch (e) {
+    showToast('Não foi: ' + (e.message || e), 'error');
+  } finally {
+    _FT.avancando = false;
+  }
+}
+
+// ── Histórico: versões e aprovações, numa linha do tempo só ────────
+async function _ftHistorico() {
+  const cx = document.getElementById('ft-producao');
+  if (!cx) return;
+  cx.innerHTML = '<div class="loading-text">Carregando histórico...</div>';
+  const id = (_FT.ficha || _FT.aberta).id;
+  const [{ data: vs, error }, { data: ev }] = await Promise.all([
+    sb.from('ficha_versoes').select('versao, resumo, usuario_id, criada_em')
+      .eq('ficha_id', id).order('versao', { ascending: false }),
+    sb.from('ficha_eventos').select('evento, de_status, para_status, versao, motivo, usuario_id, criado_em, revisao_id')
+      .eq('ficha_id', id).order('criado_em', { ascending: false }),
+  ]);
+  if (error) { cx.innerHTML = '<div class="empty-text">' + escapeHtml(error.message) + '</div>'; return; }
+  await carregarAutores(sb);
+  const atual = (_FT.ficha || _FT.aberta).versao;
+  const itens = [
+    ...(vs || []).map(v => ({ quando: v.criada_em, tipo: 'versao', v })),
+    // A criação e a importação já aparecem como a versão 1; o evento repetiria.
+    ...(ev || []).filter(e => !(['criada', 'importada'].includes(e.evento) && !e.revisao_id && e.versao === 1))
+      .map(e => ({ quando: e.criado_em, tipo: 'evento', e })),
+  ].sort((a, b) => String(b.quando).localeCompare(String(a.quando)));
+  const autor = u => autorComPerfil(u) ? ' · ' + escapeHtml(autorComPerfil(u)) : '';
+  cx.innerHTML = `
+    <div class="form-panel ft-prod" style="display:block">
+      <div class="section-title" style="margin-top:0"><span>Histórico</span></div>
+      ${itens.length ? `<div class="ft-hist">${itens.map(x => x.tipo === 'versao' ? `
+        <div class="ft-hist-linha">
+          <div class="ft-hist-cab">
+            <strong>versão ${x.v.versao}</strong>${x.v.versao === atual ? ' <span class="ft-tag">atual</span>' : ''}
+            <span class="text-muted">${new Date(x.v.criada_em).toLocaleString('pt-BR')}${autor(x.v.usuario_id)}</span>
+            ${x.v.versao !== atual ? `<button class="btn btn-sm btn-secondary" onclick="_ftVerVersao(${x.v.versao})">Ver</button>` : ''}
+          </div>
+          <div class="ft-hist-resumo">${escapeHtml(x.v.resumo || 'sem descrição')}</div>
+        </div>` : `
+        <div class="ft-hist-linha ft-hist-evento">
+          <div class="ft-hist-cab">
+            ${_FT_STATUS[x.e.para_status] ? _ftStatusPill(x.e.para_status) : ''}
+            <span>${escapeHtml(_FT_EVENTOS[x.e.evento] || x.e.evento)}${x.e.revisao_id ? ' (alteração)' : ''}</span>
+            <span class="text-muted">${new Date(x.e.criado_em).toLocaleString('pt-BR')}${autor(x.e.usuario_id)}</span>
+          </div>
+          ${x.e.motivo ? `<div class="ft-hist-resumo">${escapeHtml(x.e.motivo)}</div>` : ''}
+        </div>`).join('')}</div>`
+        : '<div class="empty-text">Nenhum registro.</div>'}
+    </div>`;
+  cx.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function _ftVerVersao(versao) {
+  const id = (_FT.ficha || _FT.aberta).id;
+  const { data: v, error } = await sb.from('ficha_versoes')
+    .select('versao, dados, usuario_id, criada_em')
+    .eq('ficha_id', id).eq('versao', versao).maybeSingle();
+  if (error || !v) { showToast('Versão não encontrada.', 'error'); return; }
+  await carregarAutores(sb);
+  const d = v.dados || {};
+  _FT.vendo = 'versao';
+  _FT.aberta = { ...d, id, versao: v.versao, atualizada_em: v.criada_em };
+  _FT.linhas = _ftLinhasDe(d.linhas, true);
+  _FT.usada = [];
+  _ftRenderVisualizar({ criada_em: v.criada_em, autor: autorComPerfil(v.usuario_id), produto_nome: d.produto_nome });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+
+// =====================================================================
+// PDF E SHAREPOINT (GENERAL-09, Passos 12 e 13) — sem integração
+// =====================================================================
+// O sistema imprime; quem salva no SharePoint é a pessoa. O que o sistema
+// guarda é "a REV NN foi salva em DD/MM por X" e avisa quando a ficha mudou
+// depois disso, que é quando o PDF da praça fica velho.
+
+// [COD_UNIDADE]-[CATEGORIA]-[NOME_DO_PRATO]-REV[NN]-[DDMMAAAA]
+// Exemplo da SOP: RWSPO-LJ-PRIN-FILET_MIGNON_ROTI-REV02-27082026
+function _ftNomeArquivo(f, gerencial) {
+  const limpa = s => String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const cat = limpa(f.categoria).split('_')[0].slice(0, 4) || 'GERAL';
+  const d = new Date(f.atualizada_em || Date.now());
+  const data = String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear();
+  return ['RWSPO', limpa(_FT.pdvCodigo || _FT.pdvNome), cat, limpa(f.nome),
+          'REV' + String(f.versao).padStart(2, '0'), data].filter(Boolean).join('-')
+    + (gerencial ? '-GERENCIAL' : '');
+}
+
+function _ftSharepointHtml() {
+  const f = _FT.ficha;
+  if (!f || f.status !== 'publicada') return '';
+  const podeMarcar = _FT.podeEditar || _FT.aprova;
+  const rev = n => 'REV ' + String(n).padStart(2, '0');
+  const estado = f.sharepoint_versao == null
+    ? '<span class="text-muted">Ainda não salva no SharePoint.</span>'
+    : f.sharepoint_versao === f.versao
+      ? `<span class="text-success">✓ ${rev(f.versao)} salva em ${_ftDataBR(f.sharepoint_em)}${
+          autorComPerfil(f.sharepoint_por) ? ' por ' + escapeHtml(autorComPerfil(f.sharepoint_por)) : ''}</span>`
+      : `<span class="text-error">A ficha mudou depois do PDF salvo (${rev(f.sharepoint_versao)}). Imprima a ${rev(f.versao)} e substitua o arquivo.</span>`;
+  return `<div class="ft-sp">
+    <div class="ft-sp-titulo">SharePoint</div>
+    <div>${estado}</div>
+    <div class="ft-sp-arquivo">${escapeHtml(_ftNomeArquivo(f, false))}.pdf</div>
+    <div class="text-muted ft-sp-pasta">Documents › Public › Culinary › Fichas_Tecnicas › ${
+      escapeHtml(_FT.pdvNome)} › ${escapeHtml(f.categoria || 'sem categoria')}</div>
+    ${podeMarcar && f.sharepoint_versao !== f.versao ? `<button class="btn btn-sm btn-outline" onclick="_ftMarcarSharepoint()">
+      Salvei a ${rev(f.versao)} no SharePoint</button>` : ''}
+  </div>`;
+}
+
+async function _ftMarcarSharepoint() {
+  const f = _FT.ficha;
+  if (!confirm(`Confirma que o PDF da REV ${String(f.versao).padStart(2, '0')} foi salvo no SharePoint?`)) return;
+  const { error } = await sb.rpc('marcar_ficha_sharepoint', { p_ficha_id: f.id });
+  if (error) { showToast('Não registrou: ' + error.message, 'error'); return; }
+  showToast('Registrado.', 'success');
+  await montarFichas(_FT.raiz, _FT);
+  await _ftAbrir(f.id);
+}
+
+// Imprime pela janela de impressão do navegador ("Salvar como PDF"). O
+// título da página vira o nome do arquivo sugerido — por isso ele é trocado
+// pelo nome da SOP durante a impressão e volta depois.
+//   operacional  a da praça: gramaturas, modo de preparo, alergênicos, sem custo
+//   gerencial    com custo por linha, custo da porção, preço, CMV e margem
+async function _ftImprimir(gerencial) {
+  const f = _FT.ficha;
+  if (!f) return;
+  if (!_FT.custo) await _ftCarregarCusto();
+  if (gerencial && !_FT.gerencial) await _ftCarregarGerencial();
+  const linhas = _FT.linhasFicha;
+  const custo = _FT.custo || { total: 0, linhas: [] };
+  const k = gerencial ? _ftIndicadores() : {};
+  const pct = v => v == null ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
+  const fcy = _ftFcy(f, linhas);
+  const nome = _ftNomeArquivo(f, gerencial);
+  const rev = 'REV ' + String(f.versao).padStart(2, '0');
+  const cl = i => (custo.linhas || []).find(x => x.i === i);
+
+  const html = `
+    <div class="fp-cab">
+      <div>
+        <div class="fp-hotel">Rosewood São Paulo · ${escapeHtml(_FT.pdvNome)}</div>
+        <div class="fp-titulo">${escapeHtml(f.nome)}</div>
+        <div class="fp-sub">Ficha Técnica ${gerencial ? 'Gerencial' : 'Operacional'} · ${rev} · publicada em ${_ftDataBR(f.atualizada_em)}</div>
+      </div>
+      <div class="fp-cod">${escapeHtml(nome)}</div>
+    </div>
+    <table class="fp-meta"><tr>
+      <td><b>Categoria de Menu</b>${escapeHtml(f.categoria || '—')}</td>
+      <td><b>Tipo</b>${f.tipo === 'prato' ? 'Prato vendável' : 'Base / sub-receita'}</td>
+      <td><b>Rendimento</b>${f.rendimento != null ? _ftFmt(f.rendimento) + ' ' + escapeHtml(f.rendimento_un) : '—'}</td>
+      <td><b>Rendimento em porções</b>${f.porcoes || '—'}</td>
+      <td><b>FCy</b>${fcy ? _ftFmt(fcy) : '—'}</td>
+      <td><b>Validade Secundária</b>${escapeHtml(f.validade_secundaria || '—')}</td>
+    </tr></table>
+    <table class="fp-ing">
+      <thead><tr><th>Ingrediente</th><th>PB</th><th>PL</th><th>FC</th>${gerencial ? '<th>Custo</th>' : ''}</tr></thead>
+      <tbody>${linhas.map((l, i) => `<tr>
+        <td>${escapeHtml(l.nome)}${l.sub_ficha_id ? ' <i>(sub-receita)</i>' : ''}${
+          l.observacao ? `<div class="fp-obs">${escapeHtml(l.observacao)}</div>` : ''}</td>
+        <td>${l.quantidade == null ? '—' : _ftFmt(l.quantidade * (l.fator_correcao || 1)) + ' ' + escapeHtml(l.unidade)}</td>
+        <td>${l.quantidade == null ? '—' : _ftFmt(l.quantidade) + ' ' + escapeHtml(l.unidade)}</td>
+        <td>${_ftFmt(l.fator_correcao || 1)}</td>
+        ${gerencial ? `<td>${cl(i)?.custo != null ? _ftFmtR(cl(i).custo) : (_FT_MOTIVO_CUSTO[cl(i)?.motivo] || '—')}</td>` : ''}
+      </tr>`).join('')}</tbody>
+    </table>
+    ${gerencial ? `<table class="fp-meta fp-kpi"><tr>
+      <td><b>Custo da receita</b>${_ftFmtR(custo.total)}${custo.faltas ? ' (parcial)' : ''}</td>
+      <td><b>Custo da Porção</b>${_ftFmtR(k.porcao)}</td>
+      <td><b>Preço de venda líquido</b>${_ftFmtR(k.preco)}</td>
+      <td><b>CMV</b>${pct(k.cmv)}</td>
+      <td><b>Meta de CMV</b>${pct(k.meta)}</td>
+      <td><b>Margem de contribuição</b>${_ftFmtR(k.margem)}</td>
+    </tr></table>` : ''}
+    ${gerencial || f.tipo !== 'prato' ? '' : '<h3>Foto do prato</h3><div class="fp-foto"><span>vista superior</span><span>vista 45°</span></div>'}
+    ${f.modo_preparo ? `<h3>Modo de Preparo</h3><div class="fp-texto">${_ftTexto(f.modo_preparo)}</div>` : ''}
+    <h3>Alergênicos</h3>
+    <table class="fp-alerg"><tbody>${(() => {
+      const l = _FT_ALERGENOS.map(([v, r]) => `<td class="${(f.alergenos || []).includes(v) ? 'sim' : ''}">${
+        escapeHtml(r)}<b>${(f.alergenos || []).includes(v) ? 'SIM' : 'NÃO'}</b></td>`);
+      const out = [];
+      for (let i = 0; i < l.length; i += 3) out.push('<tr>' + l.slice(i, i + 3).join('') + '</tr>');
+      return out.join('');
+    })()}</tbody></table>
+    ${f.historia ? `<h3>História do prato</h3><div class="fp-texto">${_ftTexto(f.historia)}</div>` : ''}
+    <div class="fp-rodape">Gerado pelo Sistema de Gestão de Cozinha em ${new Date().toLocaleString('pt-BR')} ·
+      versão vigente ${rev}. Cópia impressa sem este selo de versão não vale (GENERAL-09).</div>`;
+
+  let cx = document.getElementById('ft-print');
+  if (!cx) { cx = document.createElement('div'); cx.id = 'ft-print'; document.body.appendChild(cx); }
+  cx.innerHTML = html;
+  const tituloAntes = document.title;
+  document.title = nome;
+  document.body.classList.add('imprimindo-ficha');
+  const volta = () => {
+    document.title = tituloAntes;
+    document.body.classList.remove('imprimindo-ficha');
+    cx.innerHTML = '';
+    window.removeEventListener('afterprint', volta);
+  };
+  window.addEventListener('afterprint', volta);
+  setTimeout(() => window.print(), 50);
+}
 
 // ---------------------------------------------------------------------
 // "Quero produzir N" — e registrar o que foi produzido
@@ -3039,19 +3825,18 @@ async function _ftCalcular() {
 
   res.innerHTML = `
     <table class="data-table">
-      <thead><tr><th>Insumo</th><th class="num">Líquido</th>
-        <th class="num">Retirar da câmara</th><th>Un</th></tr></thead>
+      <thead><tr><th>Insumo</th><th class="num">PL</th>
+        <th class="num">PB — retirar da câmara</th><th>Un</th></tr></thead>
       <tbody>${data.map(x => `
         <tr>
           <td data-label="Insumo">${escapeHtml(x.nome)}</td>
-          <td class="num text-muted" data-label="Líquido">${_ftFmt(x.qtd_liquida)}</td>
-          <td class="num" style="font-weight:500" data-label="Retirar">${_ftFmt(x.qtd_bruta)}</td>
+          <td class="num text-muted" data-label="PL">${_ftFmt(x.qtd_liquida)}</td>
+          <td class="num" style="font-weight:500" data-label="PB">${_ftFmt(x.qtd_bruta)}</td>
           <td class="text-muted">${escapeHtml(x.unidade || '')}</td>
         </tr>`).join('')}</tbody>
     </table>
     <div class="text-muted" style="font-size:12px;margin-top:8px">
-      A coluna da direita já tem o fator de correção de cada linha aplicado.
-      Sub-receitas aparecem explodidas nos insumos delas.
+      PB = PL × FC de cada linha. Sub-receitas aparecem explodidas nos insumos delas.
     </div>
     <div class="ft-prod-acoes">
       <button class="btn btn-primary btn-sm" onclick="_ftRegistrarProducao()">
@@ -3073,6 +3858,504 @@ async function _ftRegistrarProducao() {
   });
   if (error) { showToast('Não registrou: ' + error.message, 'error'); return; }
   showToast('Produção registrada.', 'success');
+}
+
+// <IMPORTADOR>
+// ---------------------------------------------------------------------
+// IMPORTADOR — o Excel das fichas ("Template ficha técnica Rosewood")
+// ---------------------------------------------------------------------
+// Uma ficha por aba. Layout (conferido nas 137 abas da Kosher, 19/09):
+//   A1 nome · C3 outlet · C4 porções · C5 preço de venda · C8 data ·
+//   C9 categoria · C10 alergênicos (texto livre) · cabeçalho "INGREDIENT"
+//   na linha 13 · linha "Rendimento" (D) com o valor em E · "STORY BEHIND
+//   THIS FOOD" · "Steps" com o modo de preparo na coluna B.
+// As linhas são achadas pelo texto, não pelo número: três abas do arquivo
+// da Kosher têm o cabeçalho uma linha acima ou abaixo.
+//
+// Decisões do Fernando (plano da etapa 4): genérico fica em BRANCO.
+//   - E29 = 25 é resto do template ("$ 25,00"), não rendimento.
+//   - "qb" vira quantidade em branco — a linha fica "a completar".
+//   - A coluna UNIT não vale para peso: "Focaccia · Kg · 120" é 120 g,
+//     porque o cabeçalho da coluna diz QUANTITY (GR). Volume (ml, L) e
+//     unidade (und, un) continuam valendo — 3 gemas não são 3 g.
+//   - Nome igual NÃO garante item certo: ingrediente só é ligado ao
+//     catálogo quando o nome casa com UM item só. O resto fica a vincular.
+
+const _FT_IMP_IGNORAR = /^(planilha\s*\d*|base\s*\(\d+\))$/i;
+const _FT_IMP_RENDIMENTO_TEMPLATE = 25;
+
+// "ALHO PORÓ " -> "alho poro"
+function _ftImpChave(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+// Mais solta, só para achar sub-receita: "Mix cogumelos" = "Mix de cogumelos".
+function _ftImpChaveSolta(s) {
+  return _ftImpChave(s).replace(/\b(de|da|do|das|dos|e|com|c)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+const _FT_IMP_ALERG = [
+  [/gl[uú]ten|trigo|centeio|cevada|aveia/i, 'gluten'], [/crust|camar[aã]o|lagosta/i, 'crustaceos'],
+  [/\bovos?\b/i, 'ovos'], [/peixe/i, 'peixes'], [/amendoim/i, 'amendoim'], [/\bsoja\b/i, 'soja'],
+  [/lactose/i, 'lactose'], [/\bleite|latic/i, 'leite'], [/am[eê]ndoa/i, 'amendoa'], [/avel[aã]/i, 'avela'],
+  [/caju/i, 'castanha_caju'], [/par[aá]|brasil/i, 'castanha_para'], [/macad[aâ]mia/i, 'macadamia'],
+  [/\bnoz(es)?\b/i, 'nozes'], [/pec[aã]/i, 'peca'], [/pistache/i, 'pistache'], [/pinoli|pinh[aã]o/i, 'pinoli'],
+  [/oleaginosa|castanha/i, 'castanhas'], [/l[aá]tex/i, 'latex'], [/gergelim|s[eé]samo/i, 'gergelim'],
+  [/sulfit/i, 'sulfitos'],
+];
+
+function _ftImpAlergenos(texto) {
+  const lista = [], fora = [];
+  String(texto || '').split(/[\/,;+]|\s+e\s+/).map(t => t.trim()).filter(Boolean).forEach(t => {
+    const hit = _FT_IMP_ALERG.find(([re]) => re.test(t));
+    if (hit) { if (!lista.includes(hit[1])) lista.push(hit[1]); }
+    else fora.push(t);
+  });
+  return { lista, fora };
+}
+
+function _ftImpNumero(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  const t = String(v || '').trim();
+  if (!t) return null;
+  const m = t.replace(/\s/g, '').match(/^(\d+(?:[.,]\d+)?)/);
+  return m ? parseFloat(m[1].replace(',', '.')) : null;
+}
+
+function _ftImpData(v, XLSX) {
+  if (typeof v === 'number' && v > 20000 && v < 80000 && XLSX && XLSX.SSF) {
+    const d = XLSX.SSF.parse_date_code(v);
+    if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+  }
+  if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
+  const m = String(v || '').trim().match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  if (m) {
+    const a = m[3].length === 2 ? '20' + m[3] : m[3];
+    return `${a}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  }
+  return null;
+}
+
+// Lê UMA aba. Devolve { ficha } ou { ignorada: motivo }.
+function _ftImpLerAba(ws, nomeAba, XLSX) {
+  if (_FT_IMP_IGNORAR.test(String(nomeAba).trim())) return { ignorada: 'aba de rascunho do arquivo' };
+  if (!ws || !ws['!ref']) return { ignorada: 'aba vazia' };
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+  const cel = (r, c) => (rows[r] && rows[r][c] != null ? rows[r][c] : '');
+  const txt = (r, c) => String(cel(r, c)).trim();
+
+  const nome = txt(0, 0);
+  if (!nome) return { ignorada: 'sem nome em A1' };
+  const iCab = rows.findIndex(r => String(r[1]).trim().toUpperCase() === 'INGREDIENT');
+  if (iCab < 0) return { ignorada: 'sem a tabela de ingredientes' };
+  const cabQtd = String(rows[iCab][4] || '').toUpperCase();
+  if (!/\bGR\b|GRAMA/.test(cabQtd)) {
+    return { ignorada: `a coluna de quantidade diz "${String(rows[iCab][4]).trim()}", não gramas — conferir à mão` };
+  }
+  let iRend = rows.findIndex((r, i) => i > iCab && /rendimento/i.test(String(r[3])));
+  const fimLinhas = iRend > 0 ? iRend : Math.min(rows.length, iCab + 16);
+
+  // Cabeçalho: rótulo na coluna A, valor na C (o modelo mescla C:D).
+  const valorDe = re => {
+    const i = rows.findIndex((r, k) => k < iCab && re.test(String(r[0])));
+    return i >= 0 ? cel(i, 2) : '';
+  };
+  const avisos = [];
+  const outlet = String(valorDe(/^outlet/i)).trim();
+  const porcoesBrutas = valorDe(/^servings/i);
+  let porcoes = null;
+  if (String(porcoesBrutas).trim() !== '') {
+    const n = typeof porcoesBrutas === 'number' ? porcoesBrutas
+      : /portion|por[cç]/i.test(String(porcoesBrutas)) || /^\d+$/.test(String(porcoesBrutas).trim())
+        ? _ftImpNumero(porcoesBrutas) : null;
+    if (n && Number.isInteger(n) && n > 0) porcoes = n;
+    else avisos.push(`porções "${String(porcoesBrutas).trim()}" não é um número de porções — ficou em branco`);
+  }
+  const precoBruto = valorDe(/selling price/i);
+  const preco_venda = _ftImpNumero(precoBruto) > 0 ? _ftImpNumero(precoBruto) : null;
+  const dataBruta = valorDe(/^updated/i);
+  const data_referencia = _ftImpData(dataBruta, XLSX);
+  if (String(dataBruta).trim() && !data_referencia) avisos.push(`data "${String(dataBruta).trim()}" não é data — ficou em branco`);
+  const categoria = String(valorDe(/^category/i)).trim() || null;
+  const alergTexto = String(valorDe(/^alerg/i)).trim();
+  const alerg = _ftImpAlergenos(alergTexto);
+
+  const linhas = [];
+  for (let i = iCab + 1; i < fimLinhas; i++) {
+    const r = rows[i] || [];
+    const ing = String(r[1] || '').trim();
+    if (!ing) continue;
+    const un = String(r[2] || '').trim().toLowerCase();
+    const bruto = r[4];
+    const brutoTxt = String(bruto == null ? '' : bruto).trim();
+    let unidade = 'g', quantidade = null, aCompletar = false, obs = null;
+    if (/^(qb|qd|q\.b\.?)$/i.test(un) || /^(qb|qd|q\.b\.?)$/i.test(brutoTxt)) {
+      aCompletar = true; obs = 'qb na planilha';
+    } else {
+      if (un === 'ml') unidade = 'ml';
+      else if (un === 'l' || un === 'lt') { unidade = 'L'; obs = 'conferir: a planilha diz L numa coluna em gramas'; }
+      else if (/^(und|un|um|unid|unit|unidade)$/.test(un)) unidade = 'un';
+      else if (/fava/i.test(brutoTxt)) unidade = 'un';
+      quantidade = _ftImpNumero(bruto);
+      if (quantidade == null || quantidade <= 0) { quantidade = null; aCompletar = true; }
+    }
+    linhas.push({ nome: ing, quantidade, unidade, aCompletar, observacao: obs });
+  }
+  if (!linhas.length) return { ignorada: 'nenhum ingrediente preenchido' };
+
+  let rendimento = null;
+  if (iRend > 0) {
+    const v = cel(iRend, 4);
+    const n = _ftImpNumero(v);
+    if (n != null && n > 0 && n !== _FT_IMP_RENDIMENTO_TEMPLATE) rendimento = n;
+  }
+  if (rendimento == null) avisos.push('rendimento em branco');
+
+  // História: a linha logo abaixo de "STORY BEHIND THIS FOOD".
+  const iStory = rows.findIndex(r => /story behind/i.test(String(r[0])));
+  const iPrep = rows.findIndex(r => /preparation method/i.test(String(r[0])));
+  let historia = null;
+  if (iStory >= 0) {
+    const fim = iPrep > iStory ? iPrep : iStory + 2;
+    historia = rows.slice(iStory + 1, fim).map(r => r.map(x => String(x).trim()).filter(Boolean).join(' '))
+      .filter(Boolean).join('\n') || null;
+    const naMesma = (rows[iStory] || []).slice(1).map(x => String(x).trim()).filter(Boolean).join(' ');
+    if (naMesma) historia = [naMesma, historia].filter(Boolean).join('\n');
+  }
+  // Modo de preparo: da linha "Steps" até o fim, colunas B em diante.
+  const iSteps = rows.findIndex(r => /^steps/i.test(String(r[0]).trim()));
+  let modo_preparo = null;
+  if (iSteps >= 0) {
+    modo_preparo = rows.slice(iSteps).map(r => r.slice(1).map(x => String(x).trim()).filter(Boolean).join(' '))
+      .filter(Boolean).join('\n') || null;
+  }
+
+  const obsFicha = [];
+  if (alerg.fora.length) obsFicha.push('Alergênicos na planilha fora da lista: ' + alerg.fora.join(', ') + '.');
+  if (alerg.lista.includes('castanhas') && /oleaginosa/i.test(alergTexto)) {
+    obsFicha.push('A planilha diz "Oleaginosas": marcar a castanha específica.');
+  }
+
+  return { ficha: {
+    aba: nomeAba, nome, outlet, porcoes, preco_venda, data_referencia, categoria,
+    alergenos: alerg.lista, alergTexto, observacao: obsFicha.join('\n') || null,
+    tipo: /p\.?\s*f\.?\s*$/i.test(String(nomeAba).trim()) ? 'prato' : 'base',
+    rendimento, rendimento_un: 'g', historia, modo_preparo, linhas, avisos,
+  } };
+}
+
+function _ftImpLerArquivo(wb, XLSX) {
+  const fichas = [], ignoradas = [];
+  wb.SheetNames.forEach(n => {
+    const r = _ftImpLerAba(wb.Sheets[n], n, XLSX);
+    if (r.ficha) fichas.push(r.ficha); else ignoradas.push({ aba: n, motivo: r.ignorada });
+  });
+  // Duas abas com o mesmo nome em A1 gravariam uma por cima da outra.
+  const vistos = {};
+  fichas.forEach(f => {
+    const k = _ftImpChave(f.nome);
+    if (vistos[k]) { f.nome = f.nome + ' (' + f.aba + ')'; f.avisos.push('nome repetido em outra aba — renomeada'); }
+    vistos[k] = true;
+  });
+  return { fichas, ignoradas };
+}
+
+// Liga cada ingrediente: 1) outra ficha do arquivo ou do PDV (sub-receita),
+// 2) item do catálogo com o MESMO nome e só um, 3) a vincular.
+// `existentes`: fichas ativas do PDV [{id, nome}]; `catalogo`: itens ativos.
+function _ftImpResolver(lidas, existentes, catalogo) {
+  const porNomeArquivo = {}, porNomeSolto = {};
+  lidas.fichas.forEach(f => {
+    [f.nome, f.aba].forEach(n => {
+      const k = _ftImpChave(n), s = _ftImpChaveSolta(n);
+      if (k) (porNomeArquivo[k] = porNomeArquivo[k] || new Set()).add(f);
+      if (s) (porNomeSolto[s] = porNomeSolto[s] || new Set()).add(f);
+    });
+  });
+  const existe = {};
+  (existentes || []).forEach(e => { existe[_ftImpChave(e.nome)] = e; });
+  const itens = {};
+  (catalogo || []).forEach(i => {
+    [i.nome, i.nome_curto, i.nome_inventario].filter(Boolean).forEach(n => {
+      const k = _ftImpChave(n);
+      (itens[k] = itens[k] || new Set()).add(i);
+    });
+  });
+
+  lidas.fichas.forEach(f => {
+    f.existente = existe[_ftImpChave(f.nome)] || null;
+    f.linhas.forEach(l => {
+      l.sub = null; l.subExistente = null; l.item = null;
+      const k = _ftImpChave(l.nome), s = _ftImpChaveSolta(l.nome);
+      const cand = [...(porNomeArquivo[k] || porNomeSolto[s] || [])].filter(x => x !== f);
+      if (cand.length === 1) { l.sub = cand[0]; return; }
+      if (existe[k] && existe[k].nome !== f.nome) { l.subExistente = existe[k]; return; }
+      const it = [...(itens[k] || [])];
+      if (it.length === 1) l.item = it[0];
+    });
+  });
+
+  // Ordem de gravação: base antes de quem a usa.
+  const ordem = [], marca = new Map();
+  const visita = f => {
+    if (marca.get(f) === 2) return;
+    marca.set(f, 1);
+    f.linhas.forEach(l => {
+      if (!l.sub) return;
+      // Uma base que volta a usar quem a usa: o banco recusaria. Fica a vincular.
+      if (marca.get(l.sub) === 1) { l.sub = null; l.ciclo = true; return; }
+      visita(l.sub);
+    });
+    marca.set(f, 2);
+    ordem.push(f);
+  };
+  lidas.fichas.forEach(visita);
+  lidas.ordem = ordem;
+  return lidas;
+}
+// </IMPORTADOR>
+
+
+// =====================================================================
+// IMPORTAR A PLANILHA DE FICHAS
+// =====================================================================
+// O chef escolhe o .xlsx; o navegador lê (nada sobe para servidor), mostra
+// a prévia e só grava quando ele confirma. Cada ficha entra pela mesma
+// função da tela (salvar_ficha_rascunho): nasce rascunho, e a que já existe
+// com o mesmo nome ganha versão nova em vez de duplicar.
+
+function _ftCarregarScript(src) {
+  return new Promise((ok, falha) => {
+    if ([...document.scripts].some(s => s.src === src)) return ok();
+    const s = document.createElement('script');
+    s.src = src; s.onload = () => ok(); s.onerror = () => falha(new Error('não carregou ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+function _ftImportar() {
+  _FT.imp = null;
+  _FT.raiz.innerHTML = `
+    <div class="ft-editor">
+      <div class="ft-editor-topo">
+        <button class="btn btn-secondary btn-sm" onclick="_ftVoltar()">← Voltar</button>
+        <span class="ft-modo-edicao">importar para ${escapeHtml(_FT.pdvNome)}</span>
+      </div>
+      <div class="ft-ver-titulo">Importar planilha de fichas</div>
+      <label class="ft-imp-arquivo">
+        <input type="file" accept=".xlsx,.xlsm,.xls" onchange="_ftImpArquivo(this)">
+        <span>Escolher o arquivo .xlsx</span>
+      </label>
+      <div class="text-muted" style="font-size:12px;margin-top:6px">Modelo "Template ficha técnica Rosewood": uma ficha por aba.</div>
+      <div id="ft-imp-res"></div>
+    </div>`;
+}
+
+async function _ftImpArquivo(input) {
+  const arq = input.files && input.files[0];
+  const res = document.getElementById('ft-imp-res');
+  if (!arq || !res) return;
+  res.innerHTML = '<div class="loading-text">Lendo a planilha...</div>';
+  try {
+    if (!window.XLSX) await _ftCarregarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    const buf = await arq.arrayBuffer();
+    const wb = window.XLSX.read(buf, { type: 'array' });
+    const lidas = _ftImpLerArquivo(wb, window.XLSX);
+
+    // As fichas do PDV que têm o mesmo nome: trazer as linhas para saber o
+    // que mudou e para reaproveitar o vínculo que alguém já fez à mão.
+    const existentes = _FT.lista.map(f => ({ id: f.id, nome: f.nome, item_id: f.item_id }));
+    _ftImpResolver(lidas, existentes, _FT.catalogo);
+    const ids = lidas.fichas.filter(f => f.existente).map(f => f.existente.id);
+    const antigas = {};
+    for (let i = 0; i < ids.length; i += 100) {
+      const [{ data: fs }, { data: ls }] = await Promise.all([
+        sb.from('fichas_tecnicas').select('*').in('id', ids.slice(i, i + 100)),
+        sb.from('ficha_itens').select('ficha_id, item_id, sub_ficha_id, descricao, observacao, quantidade, unidade, fator_correcao, ordem')
+          .in('ficha_id', ids.slice(i, i + 100)).order('ordem'),
+      ]);
+      (fs || []).forEach(f => { antigas[f.id] = { ficha: f, linhas: [] }; });
+      (ls || []).forEach(l => antigas[l.ficha_id] && antigas[l.ficha_id].linhas.push(l));
+    }
+    lidas.fichas.forEach(f => {
+      if (!f.existente) return;
+      const a = antigas[f.existente.id];
+      if (!a) return;
+      f.antiga = a;
+      const vinc = {};
+      a.linhas.forEach(l => { if (l.descricao && (l.item_id || l.sub_ficha_id)) vinc[_ftImpChave(l.descricao)] = l; });
+      f.linhas.forEach(l => {
+        if (l.sub || l.subExistente || l.item) return;
+        const v = vinc[_ftImpChave(l.nome)];
+        if (v) { l.vinculoAntigo = { item_id: v.item_id, sub_ficha_id: v.sub_ficha_id }; }
+      });
+    });
+    _FT.imp = { arquivo: arq.name, lidas };
+    _ftImpRenderPrevia();
+  } catch (e) {
+    res.innerHTML = `<div class="aviso aviso-error">Não consegui ler o arquivo: ${escapeHtml(e.message || e)}</div>`;
+  }
+}
+
+// O que vai para o banco. Campo que a planilha traz em branco NÃO apaga o
+// que já está no sistema — genérico fica em branco na primeira carga, mas
+// quem completou o rendimento na tela não pode perdê-lo numa reimportação.
+function _ftImpPayload(f, ids) {
+  const a = f.antiga && f.antiga.ficha;
+  const ou = (novo, velho) => (novo == null || novo === '' ? (velho ?? null) : novo);
+  const cab = {
+    nome: f.nome, categoria: ou(f.categoria, a?.categoria), tipo: f.tipo,
+    rendimento: f.rendimento != null ? f.rendimento : (a?.rendimento ?? null),
+    rendimento_un: f.rendimento != null ? f.rendimento_un : (a?.rendimento_un || f.rendimento_un),
+    porcoes: ou(f.porcoes, a?.porcoes), modo_preparo: ou(f.modo_preparo, a?.modo_preparo),
+    observacao: ou(f.observacao, a?.observacao), historia: ou(f.historia, a?.historia),
+    validade_secundaria: a?.validade_secundaria || null,
+    data_referencia: ou(f.data_referencia, a?.data_referencia),
+    item_id: a?.item_id || null,
+    alergenos: f.alergenos.length ? f.alergenos : (a?.alergenos || []),
+    preco_venda: f.preco_venda,
+  };
+  const linhas = f.linhas.map(l => {
+    const sub = l.sub ? ids.get(l.sub) : (l.subExistente ? l.subExistente.id : l.vinculoAntigo?.sub_ficha_id);
+    const item = l.item ? l.item.id : (sub ? null : l.vinculoAntigo?.item_id);
+    return { item_id: item || null, sub_ficha_id: sub || null,
+      // O nome da planilha fica na linha mesmo depois de vinculada.
+      descricao: l.nome, observacao: l.observacao, quantidade: l.quantidade,
+      unidade: l.unidade, fator_correcao: 1 };
+  });
+  return { cab, linhas };
+}
+
+function _ftImpContas(f) {
+  const vinc = l => l.sub || l.subExistente || l.item || l.vinculoAntigo;
+  return {
+    sub: f.linhas.filter(l => l.sub || l.subExistente || l.vinculoAntigo?.sub_ficha_id).length,
+    item: f.linhas.filter(l => l.item || l.vinculoAntigo?.item_id).length,
+    vincular: f.linhas.filter(l => !vinc(l)).length,
+    completar: f.linhas.filter(l => l.quantidade == null).length,
+  };
+}
+
+// Sem mudança: mesmo cabeçalho que a planilha traz e mesmas linhas.
+function _ftImpIgual(f) {
+  const a = f.antiga;
+  if (!a) return false;
+  const p = _ftImpPayload(f, new Map());
+  const x = a.ficha;
+  const n = v => v == null ? '' : String(v);
+  if (n(p.cab.categoria) !== n(x.categoria) || n(p.cab.rendimento != null ? Number(p.cab.rendimento) : '') !== n(x.rendimento != null ? Number(x.rendimento) : '')
+      || n(p.cab.porcoes) !== n(x.porcoes) || n(p.cab.modo_preparo) !== n(x.modo_preparo)
+      || (p.cab.tipo || 'base') !== (x.tipo || 'base')) return false;
+  if (p.linhas.length !== a.linhas.length) return false;
+  return p.linhas.every((l, i) => {
+    const o = a.linhas[i];
+    return _ftImpChave(l.descricao) === _ftImpChave(o.descricao || '')
+      && n(l.quantidade != null ? Number(l.quantidade) : '') === n(o.quantidade != null ? Number(o.quantidade) : '')
+      && String(l.unidade).toLowerCase() === String(o.unidade).toLowerCase();
+  });
+}
+
+function _ftImpRenderPrevia() {
+  const res = document.getElementById('ft-imp-res');
+  const { lidas, arquivo } = _FT.imp;
+  const fichas = lidas.fichas;
+  fichas.forEach(f => { f.acao = !f.existente ? 'nova' : _ftImpIgual(f) ? 'igual' : 'versao'; });
+  const tot = fichas.reduce((s, f) => { const c = _ftImpContas(f);
+    s.sub += c.sub; s.item += c.item; s.vincular += c.vincular; s.completar += c.completar; return s; },
+    { sub: 0, item: 0, vincular: 0, completar: 0 });
+  const conta = a => fichas.filter(f => f.acao === a).length;
+  const semRend = fichas.filter(f => f.rendimento == null && !(f.antiga && f.antiga.ficha.rendimento)).length;
+  const pdv = _ftImpChave(_FT.pdvNome);
+  const outrosOutlets = [...new Set(fichas.map(f => f.outlet).filter(o => o && !pdv.includes(_ftImpChave(o))
+    && !_ftImpChave(o).includes(pdv)))];
+
+  const linhaHtml = l => {
+    const tag = l.sub ? `<span class="ft-tag ft-tag-rec">sub-receita: ${escapeHtml(l.sub.nome)}</span>`
+      : l.subExistente ? `<span class="ft-tag ft-tag-rec">sub-receita: ${escapeHtml(l.subExistente.nome)}</span>`
+      : l.item ? `<span class="ft-tag">${escapeHtml(l.item.nome)}</span>`
+      : l.vinculoAntigo ? '<span class="ft-tag">vínculo já feito</span>'
+      : `<span class="ft-tag ft-tag-aberto">a vincular</span>`;
+    return `<li>${escapeHtml(l.nome)} · ${l.quantidade == null ? '<span class="ft-tag ft-tag-aberto">a completar</span>'
+      : _ftFmt(l.quantidade) + ' ' + escapeHtml(l.unidade)} ${tag}${l.ciclo ? ' <span class="text-muted">(voltaria para a própria receita)</span>' : ''}${
+      l.observacao ? ` <span class="text-muted">— ${escapeHtml(l.observacao)}</span>` : ''}</li>`;
+  };
+
+  res.innerHTML = `
+    <div class="ft-imp-resumo">
+      <div><strong>${fichas.length}</strong> fichas em "${escapeHtml(arquivo)}" — ${fichas.filter(f => f.tipo === 'prato').length} pratos, ${
+        fichas.filter(f => f.tipo !== 'prato').length} bases</div>
+      <div>${conta('nova')} novas · ${conta('versao')} já existem e ganham versão nova · ${conta('igual')} sem mudança</div>
+      <div>Ingredientes: ${tot.item} ligados ao catálogo · ${tot.sub} sub-receitas · <strong>${tot.vincular} a vincular</strong> · ${tot.completar} a completar</div>
+      <div>${semRend} fichas com rendimento em branco${lidas.ignoradas.length ? ` · ${lidas.ignoradas.length} abas ignoradas` : ''}</div>
+    </div>
+    ${outrosOutlets.length ? `<div class="aviso aviso-warn">A planilha diz outlet "${outrosOutlets.map(escapeHtml).join('", "')}" e você está importando em <strong>${escapeHtml(_FT.pdvNome)}</strong>.</div>` : ''}
+    <div class="aviso aviso-info">Todas entram como <strong>rascunho</strong>. Ficha publicada que já existe continua valendo; a importação vira uma alteração para aprovar.</div>
+    <div class="ft-rodape" style="margin:14px 0">
+      <button class="btn btn-primary" id="ft-imp-go" onclick="_ftImpGravar()"${conta('nova') + conta('versao') ? '' : ' disabled'}>
+        Importar ${conta('nova') + conta('versao')} fichas</button>
+      <button class="btn btn-outline" onclick="_ftImportar()">Escolher outro arquivo</button>
+    </div>
+    <div id="ft-imp-prog"></div>
+    <div class="ft-imp-lista">${fichas.map(f => { const c = _ftImpContas(f); return `
+      <details class="ft-imp-ficha">
+        <summary>
+          <span class="ft-imp-nome">${escapeHtml(f.nome)}</span>
+          <span class="ft-tag ${f.acao === 'nova' ? '' : f.acao === 'versao' ? 'ft-tag-rec' : ''}">${
+            f.acao === 'nova' ? 'nova' : f.acao === 'versao' ? 'nova versão' : 'sem mudança'}</span>
+          ${f.tipo === 'prato' ? '<span class="ft-tag ft-tag-prato">prato</span>' : ''}
+          <span class="text-muted">${f.linhas.length} ingr.${c.vincular ? ` · ${c.vincular} a vincular` : ''}${
+            c.completar ? ` · ${c.completar} a completar` : ''}${f.rendimento == null ? ' · sem rendimento' : ''}</span>
+        </summary>
+        <div class="ft-imp-det">
+          <div class="text-muted">aba "${escapeHtml(f.aba)}"${f.categoria ? ' · ' + escapeHtml(f.categoria) : ''}${
+            f.rendimento != null ? ` · rende ${_ftFmt(f.rendimento)} g` : ''}${f.porcoes ? ` · ${f.porcoes} porções` : ''}</div>
+          ${f.avisos.filter(a => a !== 'rendimento em branco').map(a => `<div class="ft-custo-falta">${escapeHtml(a)}</div>`).join('')}
+          ${f.observacao ? `<div class="ft-custo-falta">${escapeHtml(f.observacao)}</div>` : ''}
+          <ul>${f.linhas.map(linhaHtml).join('')}</ul>
+        </div>
+      </details>`; }).join('')}</div>
+    ${lidas.ignoradas.length ? `<div class="section-title mt-3"><span>Abas ignoradas</span></div>
+      <ul class="ft-imp-ign">${lidas.ignoradas.map(x => `<li>${escapeHtml(x.aba)} — ${escapeHtml(x.motivo)}</li>`).join('')}</ul>` : ''}`;
+}
+
+async function _ftImpGravar() {
+  const { lidas, arquivo } = _FT.imp;
+  const btn = document.getElementById('ft-imp-go');
+  const prog = document.getElementById('ft-imp-prog');
+  if (btn) btn.disabled = true;
+  const ids = new Map();
+  const feitas = { nova: 0, versao: 0, igual: 0 };
+  const erros = [];
+  const fila = lidas.ordem;
+  for (let i = 0; i < fila.length; i++) {
+    const f = fila[i];
+    if (prog) prog.innerHTML = `<div class="loading-text">Gravando ${i + 1} de ${fila.length}: ${escapeHtml(f.nome)}</div>`;
+    if (f.acao === 'igual') { ids.set(f, f.existente.id); feitas.igual++; continue; }
+    const { cab, linhas } = _ftImpPayload(f, ids);
+    const { data, error } = await sb.rpc('salvar_ficha_rascunho', {
+      p_ficha_id: f.existente ? f.existente.id : null, p_pdv: _FT.pdvId,
+      p_cabecalho: cab, p_linhas: linhas,
+      p_resumo: `Importada da planilha "${arquivo}", aba "${f.aba}"`, p_origem: 'importacao',
+    });
+    if (error) { erros.push({ f, msg: error.message }); continue; }
+    ids.set(f, data.ficha_id);
+    feitas[f.acao]++;
+  }
+  const pend = lidas.fichas.filter(f => ids.has(f)).map(f => ({ f, c: _ftImpContas(f) }))
+    .filter(x => x.c.vincular || x.c.completar || x.f.rendimento == null);
+  if (prog) prog.innerHTML = `
+    <div class="aviso ${erros.length ? 'aviso-warn' : 'aviso-info'}">
+      <strong>${feitas.nova} fichas criadas · ${feitas.versao} com versão nova · ${feitas.igual} sem mudança${
+        erros.length ? ` · ${erros.length} com erro` : ''}.</strong>
+      ${pend.length ? `<br>${pend.length} fichas ainda têm pendência (ingrediente a vincular, quantidade a completar ou rendimento).` : ''}
+      ${erros.map(x => `<br>• ${escapeHtml(x.f.nome)}: ${escapeHtml(x.msg)}`).join('')}
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="_ftVoltar()">Ver as fichas</button>`;
+  // A lista de fundo precisa saber das fichas novas antes de qualquer outra ação.
+  const { data } = await sb.from('fichas_tecnicas').select('id, nome, categoria, tipo, status, rendimento, rendimento_un, porcoes, versao, atualizada_em, item_id, criada_em, sharepoint_versao')
+    .eq('pdv_id', _FT.pdvId).eq('ativa', true);
+  if (data) _FT.lista = data;
 }
 
 // =====================================================================

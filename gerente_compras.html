@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609151104">
+<link rel="stylesheet" href="style.css?v=202609201318">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609151104"></script>
+<script src="config.js?v=202609201318"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -237,6 +237,8 @@
 
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
     <div class="nav-item" onclick="goTab('fechamento',this)"><span class="nav-icon">⇥</span> Fechar o Mês</div>
+    <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas
+      <span class="nav-badge" id="badgeFichas"></span></div>
     <div class="nav-item" onclick="goTab('catalogo',this)"><span class="nav-icon">◎</span> Catálogo &amp; Preços</div>
     <div class="nav-item" onclick="goTab('pendentes',this)">
       <span class="nav-icon">⚠</span> Itens Pendentes
@@ -581,6 +583,10 @@
   </div>
 
   <!-- ====================== FECHAMENTO DO MÊS ====================== -->
+  <div class="tab-content" id="tab-fichas">
+    <div id="ftRoot"></div>
+  </div>
+
   <div class="tab-content" id="tab-fechamento">
     <div class="main full">
       <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
@@ -767,14 +773,20 @@
           </select>
         </div>
       </div>
-      <div class="form-row col2">
-        <div><label class="field-label">Inventário?</label>
-          <select class="select" id="pm-inv"><option value="false">Não</option><option value="true">Sim</option></select>
-        </div>
-        <div><label class="field-label">Preço inicial (opcional)</label>
-          <input class="input" id="pm-preco" type="number" step="0.01" min="0">
+      <div class="field"><label class="field-label">Nome que a cozinha vê (opcional)</label>
+        <input class="input" id="pm-curto" placeholder="como o cozinheiro pediu"></div>
+      <div class="field">
+        <label class="field-label">Em quais listas este item entra</label>
+        <div class="pm-listas">
+          <label><input type="checkbox" id="pm-compra" checked> Solicitar compra</label>
+          <label><input type="checkbox" id="pm-req" checked> Requisição da Comissária</label>
+          <label><input type="checkbox" id="pm-inv"> Inventário</label>
         </div>
       </div>
+      <div class="field"><label class="field-label">Preço inicial (opcional)</label>
+        <input class="input" id="pm-preco" type="number" step="0.01" min="0">
+      </div>
+      <div id="pm-parecidos"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="fecharModal('pendModal')">Cancelar</button>
@@ -782,6 +794,17 @@
     </div>
   </div>
 </div>
+
+<style>
+  .pm-listas { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+  .pm-listas label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+  .pend-parecidos { margin-top: 6px; font-size: 12px; color: var(--orange); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .pend-parecidos button {
+    font: inherit; font-size: 12px; background: none; border: 1px dashed var(--orange);
+    color: var(--orange); padding: 2px 8px; cursor: pointer;
+  }
+  .pend-parecidos button:hover { background: rgba(224,140,62,0.12); }
+</style>
 
 <!-- Modal: Revisar e Enviar Lista do Dia -->
 <div class="modal-overlay" id="revisaoListaModal">
@@ -817,6 +840,7 @@ const tabTitles = {
   divergencias: ['Divergências de Estoque', 'Diferenças entre contagem física e saldo teórico'],
   relatorios:   ['Relatórios', 'Visibilidade quantitativa por PDV/período/categoria'],
   fechamento:   ['Fechar o Mês', 'Colunas da planilha REQUISIÇÃO COZINHA, um PDV por vez'],
+  fichas:       ['Fichas Técnicas', 'Receitas de todas as cozinhas e o que espera aprovação'],
   catalogo:     ['Catálogo & Preços', 'Itens do catálogo com preço, fornecedor e disponibilidade'],
   pendentes:    ['Itens Pendentes', 'Itens livres aguardando decisão'],
 };
@@ -897,6 +921,17 @@ function ptDate(d) {
 function escapeHtml(s) {
   if (s === null || s === undefined) return '';
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Fichas técnicas: o gerente vê as de todas as cozinhas e aprova (Executive
+// Chef e Cost Controller, GENERAL-09). A tela mora no config.js.
+async function abrirTelaFichas() {
+  if (!state.pdvs || !state.pdvs.length) await carregarPDVs();
+  const pdvs = state.pdvs.map(p => ({ id: p.id, nome: p.nome }));
+  const pdvId = _FT.pdvId && pdvs.some(p => p.id === _FT.pdvId) ? _FT.pdvId : pdvs[0]?.id;
+  if (!pdvId) { document.getElementById('ftRoot').innerHTML = '<div class="empty-text">Nenhuma cozinha cadastrada.</div>'; return; }
+  await montarFichas('#ftRoot', { pdvId, pdvs });
+  setBadge('badgeFichas', (_FT.fila || []).length);
 }
 
 // Abrir o registro para ver os itens — detalhe compartilhado em config.js
@@ -1002,6 +1037,7 @@ function goTab(tab, el) {
   if (tab === 'divergencias') carregarDivergencias();
   if (tab === 'reqCreate')   initReqCreate();
   if (tab === 'fechamento')  initFechamento();
+  if (tab === 'fichas')      abrirTelaFichas();
   // Atualiza cart sidebar (aparece só em reqCreate)
   if (typeof atualizarCartBarRC === 'function') atualizarCartBarRC();
   // Auto-abre grupo pai se sub-item ativo
@@ -1029,6 +1065,14 @@ async function atualizarBadges() {
       bd.style.color = '#fff';
     } else bd.style.display = 'none';
   }
+  // Fichas esperando o Executive Chef ou o Cost Controller, em todas as cozinhas.
+  const [{ count: cFt }, { count: cRev }] = await Promise.all([
+    sb.from('fichas_tecnicas').select('id', { count: 'exact', head: true })
+      .eq('ativa', true).in('status', ['degustacao', 'validacao_custo']),
+    sb.from('ficha_revisoes').select('id', { count: 'exact', head: true })
+      .in('status', ['degustacao', 'validacao_custo']),
+  ]);
+  setBadge('badgeFichas', (cFt || 0) + (cRev || 0));
 }
 function setBadge(id, n) {
   const b = document.getElementById(id);
@@ -3067,6 +3111,14 @@ async function carregarPendentes() {
       <div class="text-muted" style="font-size:11px">${p.origem === 'compra' ? 'Compra' : 'Requisição'} · ${escapeHtml(p.pdvs?.nome||'—')}</div>
       <div class="pend-item-name">${escapeHtml(p.nome_digitado)}</div>
       <div class="text-muted" style="font-size:11px">sugerido: ${p.categoria_sugerida||'—'} ${p.unidade_sugerida||''}</div>
+      ${(() => {
+        // Quase sempre o item já existe com outro nome: mostrar isso aqui
+        // evita a duplicata antes de ele clicar em "Adicionar ao Catálogo".
+        const par = itensParecidos(p.nome_digitado, (state.catalogo || []).filter(i => i.ativo !== false), 2);
+        return par.length ? `<div class="pend-parecidos">já existe?
+          ${par.map(x => `<button onclick='abrirVincularPend(${JSON.stringify(p).replace(/'/g, "&apos;")})'>${escapeHtml(x.item.nome)}</button>`).join('')}
+        </div>` : '';
+      })()}
       <div class="form-actions">
         <button class="btn btn-sm btn-green" onclick='abrirModalPend(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Adicionar ao Catálogo</button>
         <button class="btn btn-sm btn-outline" onclick='abrirVincularPend(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Já existe — vincular</button>
@@ -3207,8 +3259,17 @@ function abrirModalPend(p) {
   document.getElementById('pm-nome').value = p.nome_digitado;
   document.getElementById('pm-cat').value = p.categoria_sugerida || 'proteina';
   document.getElementById('pm-unid').value = p.unidade_sugerida || 'kg';
-  document.getElementById('pm-inv').value = 'false';
+  document.getElementById('pm-curto').value = p.nome_digitado;
+  document.getElementById('pm-compra').checked = p.origem === 'compra';
+  document.getElementById('pm-req').checked = p.origem !== 'compra';
+  document.getElementById('pm-inv').checked = false;
   document.getElementById('pm-preco').value = '';
+  const par = itensParecidos(p.nome_digitado, (state.catalogo || []).filter(i => i.ativo !== false), 3);
+  document.getElementById('pm-parecidos').innerHTML = par.length
+    ? `<div class="aviso aviso-warn" style="margin-top:10px">Já existe com nome parecido:
+        ${par.map(x => escapeHtml(x.item.nome)).join(' · ')}.
+        <button class="btn btn-sm btn-outline" onclick="fecharModal('pendModal');abrirVincularPend(state.pendModalRow)">Vincular em vez de criar</button></div>`
+    : '';
   abrirModal('pendModal');
 }
 
@@ -3217,13 +3278,24 @@ async function confirmarAdicaoCatalogo() {
   const nome = document.getElementById('pm-nome').value.trim();
   const cat = document.getElementById('pm-cat').value;
   const unid = document.getElementById('pm-unid').value;
-  const inv = document.getElementById('pm-inv').value === 'true';
+  const inv = document.getElementById('pm-inv').checked;
+  const naCompra = document.getElementById('pm-compra').checked;
+  const naReq = document.getElementById('pm-req').checked;
+  const curto = document.getElementById('pm-curto').value.trim();
   const preco = parseFloat(document.getElementById('pm-preco').value);
+  if (!naCompra && !naReq && !inv) {
+    showToast('Escolha ao menos uma lista para o item aparecer.', 'error'); return;
+  }
 
   const btn = document.getElementById('pmConfirm'); btn.disabled = true; btn.textContent = 'Salvando...';
   try {
+    // Antes o item nascia sempre comprado e na requisição, sem ele escolher:
+    // item de cozinha entrava na lista de compras e vice-versa.
     const { data: novo, error } = await sb.from('itens').insert({
       nome, categoria: cat, unidade: unid, inventario: inv, ativo: true,
+      nome_curto: curto && curto !== nome ? curto : null,
+      req_ativo: naReq, no_checklist_estoque: false,
+      tipo_aquisicao: naCompra ? 'comprado' : 'transformado',
     }).select().single();
     if (error) throw error;
     if (!isNaN(preco) && preco > 0) {

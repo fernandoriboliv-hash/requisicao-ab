@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609151104">
+<link rel="stylesheet" href="style.css?v=202609201318">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609151104"></script>
+<script src="config.js?v=202609201318"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -200,6 +200,19 @@
     border-color: var(--error);
   }
   .cancel-motivos { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+  .troca-btn {
+    display: inline-block; margin-left: 8px; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    background: none; border: 1px dashed var(--border); color: var(--muted); padding: 2px 8px; cursor: pointer;
+  }
+  .troca-btn:hover { color: var(--gold); border-color: var(--gold); }
+  .troca-nota { color: var(--orange) !important; }
+  .troca-sug { display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; }
+  .troca-sug-item {
+    display: flex; justify-content: space-between; gap: 10px; text-align: left; font: inherit; font-size: 13px;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border-subtle); padding: 7px 10px; cursor: pointer;
+  }
+  .troca-sug-item:hover { border-color: var(--gold); }
+  .troca-escolhido { font-size: 13px; }
   .cancel-motivo-btn {
     background: rgba(224,82,82,0.06);
     border: 1px solid rgba(224,82,82,0.3);
@@ -1307,6 +1320,41 @@
   </div>
 </div>
 
+<!-- Modal: trocar o item de uma linha da requisição (migration 74) -->
+<div class="modal-overlay" id="trocarItemModal">
+  <div class="modal" style="width:520px">
+    <div class="modal-header">
+      <span>Trocar item</span>
+      <button class="modal-close" onclick="fecharModal('trocarItemModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="trocaInfo" class="text-muted" style="font-size:13px"></div>
+      <label class="field-label mt-3">Item certo</label>
+      <input class="input" type="text" id="trocaBusca" placeholder="Buscar no catálogo..." autocomplete="off"
+             oninput="trocaSugerir(this.value)">
+      <div id="trocaSug" class="troca-sug"></div>
+      <div id="trocaEscolhido" class="mt-2"></div>
+      <label class="field-label mt-3">Quantidade</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="input" type="text" inputmode="decimal" id="trocaQtd" style="max-width:140px">
+        <span id="trocaUn" class="text-muted"></span>
+      </div>
+      <label class="field-label mt-3">Motivo</label>
+      <div class="cancel-motivos">
+        <button type="button" class="cancel-motivo-btn troca-motivo-btn" data-tm="Pediu o item errado" onclick="setMotivoTroca('Pediu o item errado')">Pediu o item errado</button>
+        <button type="button" class="cancel-motivo-btn troca-motivo-btn" data-tm="Item em falta — substituto" onclick="setMotivoTroca('Item em falta — substituto')">Em falta — substituto</button>
+        <button type="button" class="cancel-motivo-btn troca-motivo-btn" data-tm="Quantidade ajustada" onclick="setMotivoTroca('Quantidade ajustada')">Quantidade ajustada</button>
+      </div>
+      <input class="input" type="text" id="trocaObs" placeholder="Observação (opcional)...">
+      <input type="hidden" id="trocaMotivo">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('trocarItemModal')">Voltar</button>
+      <button class="btn btn-primary" id="btnConfirmarTroca" onclick="confirmarTroca()">Trocar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: adicionar item avulso ao checklist -->
 <div class="modal-overlay" id="itemAvulsoModal">
   <div class="modal">
@@ -1691,7 +1739,8 @@ function renderFila() {
           <td class="td-cat"><span class="cat-pill ${catCls}">${catTxt}</span></td>
           <td class="td-item">${escapeHtml(it.item_nome)}${pacote
             ? ` <span class="pct-badge">por ${rot}</span>` : ''}${it.comentario
-            ? `<span class="item-obs">${escapeHtml(it.comentario)}</span>` : ''}</td>
+            ? `<span class="item-obs">${escapeHtml(it.comentario)}</span>` : ''}${notaTroca(it)}${!entregue
+            ? `<button class="troca-btn" onclick="event.stopPropagation();abrirTroca('${r.id}','${it.id}')">trocar item</button>` : ''}</td>
           <td class="num td-solic" data-label="Solicitado">${solicitado}</td>
           <td class="td-entr" data-label="Entregue">${campoEntrega}</td>
           <td class="td-div">${entregue && it.divergencia
@@ -1743,6 +1792,122 @@ function renderFila() {
       </div>
     </div>`;
   }).join('');
+}
+
+// =====================================================================
+// TROCAR O ITEM DE UMA LINHA (DECISOES J2, migration 74)
+// =====================================================================
+// O cozinheiro pediu o Parmesão Tirolez e queria o Serra das Antas. Antes, a
+// Comissaria entregava o errado zerado e abria uma requisição nova só para o
+// certo. Agora troca a linha: item e quantidade. O que foi pedido fica
+// guardado, com quem trocou, quando e por quê — o cozinheiro vê a troca.
+function notaTroca(it) {
+  if (!it.trocado_em) return '';
+  const qtd = it.quantidade_original != null ? ' ' + it.quantidade_original + ' ' + (it.unidade_original || '') : '';
+  return `<span class="item-obs troca-nota">pediu ${escapeHtml(it.item_nome_original || 'item livre')}${escapeHtml(qtd)} · trocado${
+    autorComPerfil(it.trocado_por) ? ' por ' + escapeHtml(autorComPerfil(it.trocado_por)) : ''} · ${escapeHtml(it.motivo_troca || '')}</span>`;
+}
+
+const _TROCA = { reqId: null, riId: null, item: null, linha: null };
+
+function abrirTroca(reqId, riId) {
+  const req = state.reqs.find(r => r.id === reqId);
+  const it = (req?.requisicao_itens || []).find(x => x.id === riId);
+  if (!it) return;
+  Object.assign(_TROCA, { reqId, riId, item: null, linha: it });
+  const unPedido = ehPacote(it) ? rotuloPacote(it) : (it.item_unidade || '');
+  document.getElementById('trocaInfo').innerHTML =
+    `<strong>${escapeHtml(req.pdvs?.nome || '—')}</strong> pediu <strong>${escapeHtml(it.item_nome)}</strong> · ${it.quantidade_solicitada} ${escapeHtml(unPedido)}`;
+  document.getElementById('trocaBusca').value = '';
+  document.getElementById('trocaSug').innerHTML = '';
+  document.getElementById('trocaEscolhido').innerHTML = '';
+  document.getElementById('trocaQtd').value = String(it.quantidade_solicitada).replace('.', ',');
+  document.getElementById('trocaUn').textContent = unPedido;
+  document.getElementById('trocaObs').value = '';
+  document.getElementById('trocaMotivo').value = '';
+  document.querySelectorAll('.troca-motivo-btn').forEach(b => b.classList.remove('selected'));
+  // Sem escolher outro item, a troca é só de quantidade: começa com o atual.
+  const atual = (state.catalogo || []).find(i => i.id === it.item_id);
+  if (atual) escolherTroca(atual.id, true);
+  abrirModal('trocarItemModal');
+  setTimeout(() => document.getElementById('trocaBusca')?.focus(), 60);
+}
+
+function trocaSugerir(v) {
+  const q = String(v || '').trim();
+  const cx = document.getElementById('trocaSug');
+  if (q.length < 2) { cx.innerHTML = ''; return; }
+  // Mais palavras em comum primeiro: "serra das antas" tem de trazer o
+  // Serra das Antas no topo, e não todo queijo que tem "das" no nome.
+  const palavras = q.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .split(/\s+/).filter(p => p.length >= 3);
+  const nota = i => {
+    const n = (String(i.nome || '') + ' ' + String(i.nome_curto || '')).toUpperCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return palavras.filter(p => n.includes(p)).length;
+  };
+  const achados = (state.catalogo || []).filter(i => itemAtendeBusca(i, q)
+      || (i.nome_curto && itemCasaBusca(i.nome_curto, q)))
+    .map(i => ({ i, n: nota(i) }))
+    .sort((a, b) => b.n - a.n || (b.i.req_ativo === true) - (a.i.req_ativo === true) || a.i.nome.localeCompare(b.i.nome))
+    .slice(0, 12).map(x => x.i);
+  cx.innerHTML = achados.length
+    ? achados.map(i => `<button class="troca-sug-item" onclick="escolherTroca('${i.id}')">${escapeHtml(nomeExibicao(i))}
+        <span class="text-muted">${escapeHtml(i.unidade || '')}${ehPacote(i) ? ' · por ' + escapeHtml(rotuloPacote(i)) : ''}</span></button>`).join('')
+    : '<div class="text-muted" style="font-size:12px;padding:6px">Nada encontrado.</div>';
+}
+
+function escolherTroca(id, inicial) {
+  const i = (state.catalogo || []).find(x => x.id === id);
+  if (!i) return;
+  _TROCA.item = i;
+  const un = ehPacote(i) ? rotuloPacote(i) : (i.unidade || '');
+  const unAntes = ehPacote(_TROCA.linha) ? rotuloPacote(_TROCA.linha) : (_TROCA.linha.item_unidade || '');
+  document.getElementById('trocaEscolhido').innerHTML =
+    `<div class="troca-escolhido">${inicial ? 'Item atual: ' : 'Trocar por: '}<strong>${escapeHtml(nomeExibicao(i))}</strong></div>`;
+  document.getElementById('trocaUn').textContent = un;
+  document.getElementById('trocaSug').innerHTML = '';
+  // Outra unidade (KG × PCT): a quantidade antiga não vale, digita de novo.
+  if (!inicial && String(un).toUpperCase() !== String(unAntes).toUpperCase()) {
+    document.getElementById('trocaQtd').value = '';
+    document.getElementById('trocaQtd').focus();
+  }
+}
+
+function setMotivoTroca(m) {
+  document.querySelectorAll('.troca-motivo-btn').forEach(b => b.classList.toggle('selected', b.dataset.tm === m));
+  document.getElementById('trocaMotivo').value = m;
+}
+
+let _trocando = false;
+async function confirmarTroca() {
+  if (_trocando) return;
+  if (!_TROCA.item) { showToast('Escolha o item certo.', 'error'); return; }
+  const qtd = numBR(document.getElementById('trocaQtd').value);
+  if (!(qtd > 0)) { showToast('Informe a quantidade.', 'error'); return; }
+  const base = document.getElementById('trocaMotivo').value;
+  if (!base) { showToast('Escolha o motivo da troca.', 'error'); return; }
+  const obs = document.getElementById('trocaObs').value.trim();
+  _trocando = true;
+  const btn = document.getElementById('btnConfirmarTroca');
+  btn.disabled = true;
+  try {
+    const { error } = await sb.rpc('corrigir_item_requisicao', {
+      p_ri: _TROCA.riId, p_item: _TROCA.item.id, p_quantidade: qtd,
+      p_motivo: base + (obs ? ' — ' + obs : ''),
+    });
+    if (error) throw error;
+    fecharModal('trocarItemModal');
+    showToast('Linha corrigida. O pedido original ficou registrado.', 'success');
+    const aberto = _TROCA.reqId;
+    await carregarFila();
+    document.getElementById('detail-' + aberto)?.classList.add('open');
+    document.getElementById('chev-' + aberto)?.classList.add('open');
+  } catch (e) {
+    showToast('Não trocou: ' + (e.message || e), 'error');
+  } finally {
+    _trocando = false; btn.disabled = false;
+  }
 }
 
 function toggleDetail(id) {
