@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609201318">
+<link rel="stylesheet" href="style.css?v=202609221423">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609201318"></script>
+<script src="config.js?v=202609221423"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -239,6 +239,7 @@
     <div class="nav-item" onclick="goTab('fechamento',this)"><span class="nav-icon">⇥</span> Fechar o Mês</div>
     <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas
       <span class="nav-badge" id="badgeFichas"></span></div>
+    <div class="nav-item" onclick="goTab('descartes',this)"><span class="nav-icon">⊘</span> Descartes</div>
     <div class="nav-item" onclick="goTab('catalogo',this)"><span class="nav-icon">◎</span> Catálogo &amp; Preços</div>
     <div class="nav-item" onclick="goTab('pendentes',this)">
       <span class="nav-icon">⚠</span> Itens Pendentes
@@ -587,6 +588,10 @@
     <div id="ftRoot"></div>
   </div>
 
+  <div class="tab-content" id="tab-descartes">
+    <div id="dsRoot"></div>
+  </div>
+
   <div class="tab-content" id="tab-fechamento">
     <div class="main full">
       <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
@@ -841,6 +846,7 @@ const tabTitles = {
   relatorios:   ['Relatórios', 'Visibilidade quantitativa por PDV/período/categoria'],
   fechamento:   ['Fechar o Mês', 'Colunas da planilha REQUISIÇÃO COZINHA, um PDV por vez'],
   fichas:       ['Fichas Técnicas', 'Receitas de todas as cozinhas e o que espera aprovação'],
+  descartes:    ['Descartes', 'O que cada cozinha descartou, com o custo'],
   catalogo:     ['Catálogo & Preços', 'Itens do catálogo com preço, fornecedor e disponibilidade'],
   pendentes:    ['Itens Pendentes', 'Itens livres aguardando decisão'],
 };
@@ -932,6 +938,15 @@ async function abrirTelaFichas() {
   if (!pdvId) { document.getElementById('ftRoot').innerHTML = '<div class="empty-text">Nenhuma cozinha cadastrada.</div>'; return; }
   await montarFichas('#ftRoot', { pdvId, pdvs });
   setBadge('badgeFichas', (_FT.fila || []).length);
+}
+
+// Descarte de qualquer cozinha, com o custo do que foi para o lixo.
+async function abrirTelaDescartes() {
+  if (!state.pdvs || !state.pdvs.length) await carregarPDVs();
+  const pdvs = state.pdvs.map(p => ({ id: p.id, nome: p.nome }));
+  const pdvId = _DS.pdvId && pdvs.some(p => p.id === _DS.pdvId) ? _DS.pdvId : pdvs[0]?.id;
+  if (!pdvId) { document.getElementById('dsRoot').innerHTML = '<div class="empty-text">Nenhuma cozinha cadastrada.</div>'; return; }
+  await montarDescartes('#dsRoot', { pdvId, pdvs });
 }
 
 // Abrir o registro para ver os itens — detalhe compartilhado em config.js
@@ -1038,6 +1053,7 @@ function goTab(tab, el) {
   if (tab === 'reqCreate')   initReqCreate();
   if (tab === 'fechamento')  initFechamento();
   if (tab === 'fichas')      abrirTelaFichas();
+  if (tab === 'descartes')   abrirTelaDescartes();
   // Atualiza cart sidebar (aparece só em reqCreate)
   if (typeof atualizarCartBarRC === 'function') atualizarCartBarRC();
   // Auto-abre grupo pai se sub-item ativo

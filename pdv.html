@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609201318">
+<link rel="stylesheet" href="style.css?v=202609221423">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609201318"></script>
+<script src="config.js?v=202609221423"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -433,6 +433,7 @@
       <span class="nav-badge" id="badgeRascunhos"></span>
     </div>
     <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas</div>
+    <div class="nav-item" onclick="goTab('descartes',this)"><span class="nav-icon">⊘</span> Descartes</div>
     <div class="nav-item" id="navInventario" onclick="goTab('inventario',this)" style="display:none"><span class="nav-icon">▦</span> Inventário</div>
     <div class="nav-item" onclick="goTab('historico',this)"><span class="nav-icon">⏱</span> Histórico</div>
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
@@ -682,6 +683,10 @@
   <!-- ====================== INVENTÁRIO ====================== -->
   <div class="tab-content" id="tab-fichas">
     <div class="main full"><div id="ftRoot"></div></div>
+  </div>
+
+  <div class="tab-content" id="tab-descartes">
+    <div class="main full"><div id="dsRoot"></div></div>
   </div>
 
   <div class="tab-content" id="tab-inventario">
@@ -1454,6 +1459,7 @@ const tabTitles = {
   historico:  ['Histórico', 'Tudo o que o seu PDV já pediu'],
   relatorios: ['Relatórios', 'Aquisições finalizadas do seu PDV'],
   fichas:     ['Fichas Técnicas', 'Receitas da sua cozinha'],
+  descartes:  ['Descartes', 'O que foi descartado na sua cozinha'],
 };
 
 function toggleSidebar() {
@@ -1469,6 +1475,12 @@ function toggleSidebar() {
 // Vista). A tela em si é a mesma do executivo.html — mora no config.js.
 async function abrirTelaFichas() {
   await montarFichas('#ftRoot', {
+    pdvId: state.perfil.pdv_id, pdvNome: state.pdvNome });
+}
+
+// Quem registra o descarte é quem tem o produto na mão (SOP LJ-04).
+async function abrirTelaDescartes() {
+  await montarDescartes('#dsRoot', {
     pdvId: state.perfil.pdv_id, pdvNome: state.pdvNome });
 }
 
@@ -1498,6 +1510,7 @@ function goTab(aba, el) {
   if (aba === 'historico') setupHistoricoTab();
   if (aba === 'inicio') atualizarCardRascunhos();
   if (aba === 'fichas') abrirTelaFichas();
+  if (aba === 'descartes') abrirTelaDescartes();
   if (aba === 'inventario') abrirTelaInventario();
   if (window.innerWidth <= 900) {
     document.querySelector('.sidebar')?.classList.remove('open');

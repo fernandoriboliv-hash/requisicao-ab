@@ -2334,6 +2334,9 @@ const _FT_ALERGENOS = [
   ['peca', 'Pecã'], ['pistache', 'Pistache'], ['pinoli', 'Pinoli'],
   ['castanhas', 'Castanhas (outras)'],
   ['latex', 'Látex natural'], ['gergelim', 'Gergelim'], ['sulfitos', 'Sulfitos'],
+  // Pimenta não é alergênico da RDC, mas é o que a cozinha marca na ficha —
+  // as planilhas já vinham com "Pimentas" e "Pimenta do reino" (22/09).
+  ['pimenta', 'Pimenta'],
 ];
 
 // Motivos de desperdício — lista única das SOPs (GENERAL-03, 10 e 11, LJ-04,
@@ -2418,8 +2421,14 @@ function _ftVeCusto() {
   return perfilVePreco() || p === 'pdv';
 }
 
-// Preço de venda, CMV % e margem: só compras e master (RLS da migration 73).
+// Preço de venda, CMV % e margem. O chef vê: "o preço de venda dos pratos não
+// é uma informação restrita" (22/09). O cozinheiro não vê — é foco, não
+// sigilo. Quem grava preço e meta continua sendo compras (RLS da migration 75).
 function _ftVeGerencial() {
+  const p = window.state && window.state.perfil && window.state.perfil.perfil;
+  return p === 'gerente_compras' || p === 'master_sistema' || p === 'executivo';
+}
+function _ftEditaGerencial() {
   const p = window.state && window.state.perfil && window.state.perfil.perfil;
   return p === 'gerente_compras' || p === 'master_sistema';
 }
@@ -2459,13 +2468,19 @@ async function montarFichas(seletor, opts) {
 
   // Ver é de quem é do PDV; editar é de quem responde por ele (a mesma regra
   // da contagem); aprovar é do gerente de compras.
-  const [pode, aprova, pdv] = await Promise.all([
-    sb.rpc('pode_contar_pdv', { p_pdv: _FT.pdvId }),
+  const [pode, aprova, pdv, fase, ate] = await Promise.all([
+    sb.rpc('pode_editar_fichas_pdv', { p_pdv: _FT.pdvId }),
     sb.rpc('pode_aprovar_fichas'),
     sb.from('pdvs').select('nome, codigo').eq('id', _FT.pdvId).maybeSingle(),
+    sb.rpc('fichas_fase_cadastro'),
+    sb.from('config_sistema').select('valor').eq('chave', 'fichas_cadastro_ate').maybeSingle(),
   ]);
   _FT.podeEditar = pode.data === true;
   _FT.aprova = aprova.data === true;
+  // Até 24/10 as cozinhas cadastram as fichas que já usam: quem é do PDV
+  // edita (o cozinheiro inclusive) e o que se salva já fica publicado.
+  _FT.fase = fase.data === true;
+  _FT.faseAte = ate.data?.valor || null;
   _FT.pdvCodigo = pdv.data?.codigo || '';
   if (pdv.data?.nome) _FT.pdvNome = pdv.data.nome;
   if (!_FT.catalogo.length) await _ftCarregarCatalogo();
@@ -2560,6 +2575,11 @@ function _ftRenderLista() {
         <span class="text-muted">${escapeHtml(x.pdvNome)}</span>
         ${_ftStatusPill(x.etapa)}
       </button>`).join('')}
+    </div>` : ''}
+    ${_FT.fase && _FT.podeEditar ? `<div class="ft-fase">
+      <span>Cadastro das fichas até <strong>${_ftDataBR(_FT.faseAte)}</strong> — o que for salvo já entra como publicado.</span>
+      ${_FT.lista.filter(f => f.status !== 'publicada').length ? `<button class="btn btn-sm btn-outline"
+        onclick="_ftPublicarCadastro()">Publicar ${_FT.lista.filter(f => f.status !== 'publicada').length} em rascunho</button>` : ''}
     </div>` : ''}
     <div class="ft-topo">
       ${_FT.pdvs && _FT.pdvs.length > 1 ? `<select class="select ft-pdv" onchange="_ftTrocarPdv(this.value)">
@@ -2840,7 +2860,11 @@ function _ftAcoesHtml() {
   if (_FT.podeEditar && !(etapa === 'publicada' && rev)) {
     b.push(botao(vendoRev ? 'Editar alteração' : 'Editar ficha', '_ftEditar()', 'btn-primary'));
   }
-  if (etapa === 'rascunho' && _FT.podeEditar) b.push(botao('Enviar para degustação', "_ftAvancar('enviar_degustacao')", 'btn-gold'));
+  if (etapa === 'rascunho' && _FT.podeEditar) {
+    b.push(_FT.fase && !vendoRev
+      ? botao('Publicar', `_ftPublicarCadastro('${f.id}')`, 'btn-gold')
+      : botao('Enviar para degustação', "_ftAvancar('enviar_degustacao')", 'btn-gold'));
+  }
   if (etapa === 'degustacao' && _FT.aprova) {
     b.push(botao('Aprovar degustação', "_ftAvancar('aprovar_degustacao')", 'btn-gold'));
     b.push(botao('Devolver para ajustes', "_ftPedirMotivo('devolver')"));
@@ -2946,13 +2970,13 @@ function _ftRenderGerencial() {
   const k = _ftIndicadores();
   const pct = v => v == null ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
   cx.innerHTML = `<div class="ft-gerencial">
-    <div class="ft-gerencial-titulo">Cost Controller de A&amp;B <span class="text-muted">— só compras e master veem</span></div>
+    <div class="ft-gerencial-titulo">Custo e preço <span class="text-muted">— chef e compras</span></div>
     <div class="ft-gerencial-grade">
       <label>Preço de venda líquido<input class="input ft-mini" id="ft-pv" inputmode="decimal"
-        value="${k.preco != null ? _ftFmt(k.preco) : ''}" placeholder="R$"></label>
+        value="${k.preco != null ? _ftFmt(k.preco) : ''}" placeholder="R$"${_ftEditaGerencial() ? '' : ' disabled'}></label>
       <label>Meta de CMV da cozinha<input class="input ft-mini" id="ft-meta" inputmode="decimal"
-        value="${k.meta != null ? _ftFmt(k.meta) : ''}" placeholder="%"></label>
-      <button class="btn btn-sm btn-outline" onclick="_ftSalvarGerencial()">Salvar</button>
+        value="${k.meta != null ? _ftFmt(k.meta) : ''}" placeholder="%"${_ftEditaGerencial() ? '' : ' disabled'}></label>
+      ${_ftEditaGerencial() ? '<button class="btn btn-sm btn-outline" onclick="_ftSalvarGerencial()">Salvar</button>' : ''}
     </div>
     <div class="ft-gerencial-kpis">
       <span>Custo da Porção <strong>${_ftFmtR(k.porcao)}</strong></span>
@@ -3591,6 +3615,19 @@ async function _ftAvancar(acao) {
   }
 }
 
+// Fase de cadastro: a ficha já foi aprovada fora do sistema, então publicar é
+// registro, não aprovação. Vale até a data em config_sistema.
+async function _ftPublicarCadastro(fichaId) {
+  const quantas = fichaId ? 1 : _FT.lista.filter(f => f.status !== 'publicada').length;
+  if (!fichaId && !confirm(`Publicar ${quantas} ficha(s) em rascunho de ${_FT.pdvNome}?`)) return;
+  const { data, error } = await sb.rpc('publicar_fichas_cadastro',
+    { p_pdv: _FT.pdvId, p_ficha: fichaId || null });
+  if (error) { showToast('Não publicou: ' + error.message, 'error'); return; }
+  showToast(data === 1 ? 'Ficha publicada.' : data + ' fichas publicadas.', 'success');
+  await montarFichas(_FT.raiz, _FT);
+  if (fichaId) await _ftAbrir(fichaId);
+}
+
 // ── Histórico: versões e aprovações, numa linha do tempo só ────────
 async function _ftHistorico() {
   const cx = document.getElementById('ft-producao');
@@ -3902,7 +3939,7 @@ const _FT_IMP_ALERG = [
   [/caju/i, 'castanha_caju'], [/par[aá]|brasil/i, 'castanha_para'], [/macad[aâ]mia/i, 'macadamia'],
   [/\bnoz(es)?\b/i, 'nozes'], [/pec[aã]/i, 'peca'], [/pistache/i, 'pistache'], [/pinoli|pinh[aã]o/i, 'pinoli'],
   [/oleaginosa|castanha/i, 'castanhas'], [/l[aá]tex/i, 'latex'], [/gergelim|s[eé]samo/i, 'gergelim'],
-  [/sulfit/i, 'sulfitos'],
+  [/sulfit/i, 'sulfitos'], [/pimenta/i, 'pimenta'],
 ];
 
 function _ftImpAlergenos(texto) {
@@ -4356,6 +4393,342 @@ async function _ftImpGravar() {
   const { data } = await sb.from('fichas_tecnicas').select('id, nome, categoria, tipo, status, rendimento, rendimento_un, porcoes, versao, atualizada_em, item_id, criada_em, sharepoint_versao')
     .eq('pdv_id', _FT.pdvId).eq('ativa', true);
   if (data) _FT.lista = data;
+}
+
+// =====================================================================
+// REGISTRO DE DESCARTE
+// =====================================================================
+// LJ-04 e BLAISE-04 mandam registrar o que se joga fora com quantidade e
+// motivo, e a liderança do turno validar depois; a GENERAL-11 acrescenta o
+// descarte por etiqueta e por validade. Os 16 motivos são a lista única das
+// SOPs (migration 72).
+//
+// Quem registra é quem tem o produto na mão — o cozinheiro inclusive
+// (migration 75). A conferência não trava nada: descarte que espera
+// aprovação para ser anotado não é anotado.
+//
+// O descarte não baixa estoque (decisão de 04/09): é indicador. O custo
+// aparece para quem já vê preço, porque é o que transforma "três bandejas"
+// em "R$ 180 no lixo".
+
+const _DS = {
+  raiz: null, pdvId: null, pdvNome: '', pdvs: null,
+  lista: [], catalogo: [], fichas: [], precos: null, custoFicha: {},
+  de: null, ate: null, alvo: null,
+  podeRegistrar: false, podeConferir: false, salvando: false,
+};
+
+const _DS_DESTINOS = [['lixo', 'Lixo'], ['consumo_interno', 'Consumo interno'], ['doacao', 'Doação']];
+const _dsHoje = () => { const d = new Date(); return d.getFullYear() + '-'
+  + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const _dsRot = m => (_DESP_MOTIVOS.find(x => x[0] === m) || [m, m])[1];
+const _dsGrupo = m => (_DESP_MOTIVOS.find(x => x[0] === m) || [m, m, 'Outro'])[2];
+
+async function montarDescartes(seletor, opts) {
+  const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
+  if (!raiz) return;
+  _DS.raiz = raiz;
+  if (opts.pdvs) _DS.pdvs = opts.pdvs;
+  _DS.pdvId = opts.pdvId;
+  _DS.pdvNome = opts.pdvNome || (_DS.pdvs || []).find(p => p.id === opts.pdvId)?.nome || '';
+  if (!_DS.de) { _DS.de = _dsHoje().slice(0, 8) + '01'; _DS.ate = _dsHoje(); }
+  raiz.innerHTML = '<div class="loading-text">Carregando descartes...</div>';
+
+  const [lista, pode, confere, fichas] = await Promise.all([
+    sb.from('desperdicios')
+      .select('*, itens(nome, unidade), fichas_tecnicas(nome, rendimento_un)')
+      .eq('pdv_id', _DS.pdvId).gte('data', _DS.de).lte('data', _DS.ate)
+      .order('data', { ascending: false }).order('criado_em', { ascending: false }),
+    sb.rpc('pode_ver_fichas_pdv', { p_pdv: _DS.pdvId }),
+    sb.rpc('pode_conferir_descarte', { p_pdv: _DS.pdvId }),
+    sb.from('fichas_tecnicas').select('id, nome, rendimento, rendimento_un')
+      .eq('pdv_id', _DS.pdvId).eq('ativa', true).order('nome'),
+  ]);
+  if (lista.error) {
+    raiz.innerHTML = '<div class="empty-text">Não consegui carregar os descartes.</div>'
+      + '<div class="text-muted" style="font-size:11px;text-align:center;margin-top:6px">'
+      + escapeHtml(lista.error.message) + '</div>';
+    return;
+  }
+  _DS.lista = lista.data || [];
+  _DS.podeRegistrar = pode.data === true;
+  _DS.podeConferir = confere.data === true;
+  _DS.fichas = fichas.data || [];
+  if (!_DS.catalogo.length) {
+    let todos = [];
+    for (let i = 0; ; i += 1000) {
+      const { data } = await sb.from('itens').select('id, nome, nome_curto, unidade, categoria')
+        .eq('ativo', true).order('nome').range(i, i + 999);
+      todos = todos.concat(data || []);
+      if (!data || data.length < 1000) break;
+    }
+    _DS.catalogo = todos;
+  }
+  if (perfilVePreco() && !_DS.precos) {
+    const { data: pr } = await sb.from('precos').select('item_id, preco_unitario').eq('vigente', true);
+    _DS.precos = Object.fromEntries((pr || []).map(p => [p.item_id, parseFloat(p.preco_unitario) || 0]));
+  }
+  await carregarAutores(sb);
+  // Custo do que é produção da casa: R$ por unidade de rendimento da ficha.
+  if (perfilVePreco()) {
+    const ids = [...new Set(_DS.lista.filter(d => d.ficha_id).map(d => d.ficha_id))]
+      .filter(id => !(id in _DS.custoFicha));
+    for (const id of ids) {
+      const { data } = await sb.rpc('custo_ficha_pronto', { p_ficha: id });
+      _DS.custoFicha[id] = data || null;
+    }
+  }
+  _dsRender();
+}
+
+// Quanto custou o que foi para o lixo. Sem preço, devolve null — e a tela
+// mostra "—", não zero: zero diria que não custou nada.
+function _dsCusto(d) {
+  if (!perfilVePreco()) return null;
+  if (d.item_id) {
+    const it = _DS.catalogo.find(i => i.id === d.item_id);
+    const p = _DS.precos ? _DS.precos[d.item_id] : 0;
+    const q = converterUnidade(d.quantidade, d.unidade, it?.unidade);
+    return q != null && p > 0 ? q * p : null;
+  }
+  if (d.ficha_id) {
+    const c = _DS.custoFicha[d.ficha_id];
+    if (!c || c.custo_unitario == null) return null;
+    const q = converterUnidade(d.quantidade, d.unidade, c.rendimento_un);
+    return q != null ? q * Number(c.custo_unitario) : null;
+  }
+  return null;
+}
+
+function _dsRender() {
+  const vePreco = perfilVePreco();
+  const eu = window.state?.perfil?.id;
+  const total = { qtdKg: 0, custo: 0, semCusto: 0 };
+  const porGrupo = {};
+  _DS.lista.forEach(d => {
+    const kg = converterUnidade(d.quantidade, d.unidade, 'kg');
+    const c = _dsCusto(d);
+    if (kg != null) total.qtdKg += kg;
+    if (c != null) total.custo += c; else total.semCusto++;
+    const g = _dsGrupo(d.motivo);
+    porGrupo[g] = porGrupo[g] || { n: 0, kg: 0, custo: 0 };
+    porGrupo[g].n++;
+    if (kg != null) porGrupo[g].kg += kg;
+    if (c != null) porGrupo[g].custo += c;
+  });
+  const aConferir = _DS.lista.filter(d => !d.conferido_em).length;
+
+  _DS.raiz.innerHTML = `
+    <div class="ds-topo">
+      ${_DS.pdvs && _DS.pdvs.length > 1 ? `<select class="select ft-pdv" onchange="_dsTrocarPdv(this.value)">
+        ${_DS.pdvs.map(p => `<option value="${p.id}"${p.id === _DS.pdvId ? ' selected' : ''}>${escapeHtml(p.nome)}</option>`).join('')}
+      </select>` : ''}
+      <label class="ds-periodo">de <input class="input" type="date" value="${_DS.de}" onchange="_dsPeriodo('de', this.value)"></label>
+      <label class="ds-periodo">até <input class="input" type="date" value="${_DS.ate}" onchange="_dsPeriodo('ate', this.value)"></label>
+    </div>
+
+    ${_DS.podeRegistrar ? `<div class="form-panel ds-form" style="display:block">
+      <div class="section-title" style="margin-top:0"><span>Registrar descarte</span></div>
+      <div class="ds-alvo" id="ds-alvo">${_dsAlvoHtml()}</div>
+      <div class="form-row col3">
+        <div class="form-group">
+          <label>Quantidade</label>
+          <div style="display:flex;gap:6px">
+            <input class="input" id="ds-qtd" inputmode="decimal" style="flex:1" placeholder="0,0">
+            <select class="select" id="ds-un" style="width:78px">
+              ${['kg', 'g', 'un', 'L', 'ml'].map(u => `<option value="${u}">${u}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Motivo</label>
+          <select class="select" id="ds-motivo">
+            <option value="">Escolha...</option>
+            ${[...new Set(_DESP_MOTIVOS.map(m => m[2]))].map(g => `<optgroup label="${escapeHtml(g)}">${
+              _DESP_MOTIVOS.filter(m => m[2] === g).map(m => `<option value="${m[0]}">${escapeHtml(m[1])}</option>`).join('')
+            }</optgroup>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Destino</label>
+          <select class="select" id="ds-destino">
+            ${_DS_DESTINOS.map(([v, r]) => `<option value="${v}">${r}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-row col2">
+        <div class="form-group">
+          <label>Data</label>
+          <input class="input" type="date" id="ds-data" value="${_dsHoje()}" max="${_dsHoje()}">
+        </div>
+        <div class="form-group">
+          <label>Observação</label>
+          <input class="input" id="ds-obs" placeholder="opcional">
+        </div>
+      </div>
+      <div class="ft-rodape" style="margin-top:6px">
+        <button class="btn btn-primary" onclick="_dsRegistrar()">Registrar</button>
+      </div>
+    </div>` : ''}
+
+    ${_DS.lista.length ? `
+      <div class="ds-resumo">
+        ${Object.entries(porGrupo).sort((a, b) => b[1].custo - a[1].custo || b[1].kg - a[1].kg).map(([g, v]) => `
+          <div class="ds-card">
+            <div class="ds-card-rot">${escapeHtml(g)}</div>
+            <div class="ds-card-val">${_ftFmt(v.kg)} kg${vePreco ? ` · ${_ftFmtR(v.custo)}` : ''}</div>
+            <div class="text-muted" style="font-size:11px">${v.n} registro(s)</div>
+          </div>`).join('')}
+        <div class="ds-card ds-card-total">
+          <div class="ds-card-rot">No período</div>
+          <div class="ds-card-val">${_ftFmt(total.qtdKg)} kg${vePreco ? ` · ${_ftFmtR(total.custo)}` : ''}</div>
+          <div class="text-muted" style="font-size:11px">${_DS.lista.length} registro(s)${
+            aConferir ? ` · ${aConferir} a conferir` : ' · todos conferidos'}${
+            vePreco && total.semCusto ? ` · ${total.semCusto} sem preço` : ''}</div>
+        </div>
+      </div>
+
+      <div class="table-wrap ds-tabela"><table class="data-table tabela-cards">
+        <thead><tr><th>Data</th><th>O que</th><th class="num">Quantidade</th><th>Motivo</th>
+          <th>Destino</th><th>Quem</th>${vePreco ? '<th class="num">Custo</th>' : ''}<th></th></tr></thead>
+        <tbody>${_DS.lista.map(d => {
+          const nome = d.itens?.nome || d.fichas_tecnicas?.nome || d.descricao || '—';
+          const c = _dsCusto(d);
+          const podeApagar = _DS.podeConferir
+            || (!d.conferido_em && _DS.podeRegistrar && d.usuario_id === eu);
+          return `<tr>
+            <td data-label="Data">${_ftDataBR(d.data)}</td>
+            <td class="td-titulo">${escapeHtml(nome)}
+              ${d.ficha_id ? '<span class="ft-tag ft-tag-rec">produção</span>' : ''}
+              ${!d.item_id && !d.ficha_id ? '<span class="ft-tag ft-tag-aberto">fora do catálogo</span>' : ''}
+              ${d.observacao ? `<div class="ft-linha-obs">${escapeHtml(d.observacao)}</div>` : ''}</td>
+            <td class="num" data-label="Quantidade">${_ftFmt(d.quantidade)} ${escapeHtml(d.unidade)}</td>
+            <td data-label="Motivo">${escapeHtml(_dsRot(d.motivo))}</td>
+            <td data-label="Destino">${(_DS_DESTINOS.find(x => x[0] === d.destino) || [, d.destino])[1]}</td>
+            <td data-label="Quem" class="text-muted">${escapeHtml(autorComPerfil(d.usuario_id) || '—')}${
+              d.conferido_em ? `<br><span class="ds-conf">✓ conferido${
+                autorComPerfil(d.conferido_por) ? ' por ' + escapeHtml(autorComPerfil(d.conferido_por)) : ''}</span>` : ''}</td>
+            ${vePreco ? `<td class="num" data-label="Custo">${c == null ? '<span class="text-muted">—</span>' : _ftFmtR(c)}</td>` : ''}
+            <td class="td-acoes">
+              ${_DS.podeConferir && !d.conferido_em
+                ? `<button class="btn btn-sm btn-outline" onclick="_dsConferir('${d.id}')">Conferir</button>` : ''}
+              ${podeApagar ? `<button class="btn btn-sm btn-secondary" onclick="_dsRemover('${d.id}')">Remover</button>` : ''}
+            </td>
+          </tr>`; }).join('')}</tbody>
+      </table></div>`
+      : '<div class="empty-text">Nenhum descarte registrado no período.</div>'}`;
+}
+
+function _dsAlvoHtml() {
+  const a = _DS.alvo;
+  if (a) {
+    return `<div class="ft-produto-sel">
+      <span>${escapeHtml(a.nome)}${a.tipo === 'ficha' ? ' — produção da casa' : a.tipo === 'livre' ? ' — fora do catálogo' : ''}</span>
+      <button class="ft-del" onclick="_dsLimparAlvo()" title="Trocar">×</button>
+    </div>`;
+  }
+  return `<label>O que foi descartado</label>
+    <input class="input" id="ds-busca" autocomplete="off" oninput="_dsBuscar(this.value)"
+           placeholder="Item do catálogo ou produção da cozinha...">
+    <div class="ft-sug" id="ds-sug"></div>`;
+}
+
+function _dsBuscar(v) {
+  const cx = document.getElementById('ds-sug');
+  const q = String(v || '').trim();
+  if (!cx) return;
+  if (q.length < 2) { cx.innerHTML = ''; return; }
+  const fichas = _DS.fichas.filter(f => itemCasaBusca(f.nome, q)).slice(0, 5)
+    .map(f => ({ tipo: 'ficha', id: f.id, nome: f.nome }));
+  const itens = _DS.catalogo.filter(i => itemAtendeBusca(i, q)
+      || (i.nome_curto && itemCasaBusca(i.nome_curto, q))).slice(0, 10)
+    .map(i => ({ tipo: 'item', id: i.id, nome: nomeExibicao(i), un: i.unidade }));
+  const todos = [...fichas, ...itens];
+  cx.innerHTML = (todos.length ? todos.map(x => `
+      <button class="ft-sug-item" onclick="_dsEscolher('${x.tipo}','${x.id}')">${escapeHtml(x.nome)}
+        ${x.tipo === 'ficha' ? '<span class="ft-tag ft-tag-rec">produção</span>'
+          : `<span class="text-muted">${escapeHtml(x.un || '')}</span>`}</button>`).join('') : '')
+    + `<button class="ft-sug-item" onclick="_dsEscolher('livre','${escapeHtml(q).replace(/'/g, "\\'")}')">
+        Registrar como "${escapeHtml(q)}" <span class="ft-tag ft-tag-aberto">fora do catálogo</span></button>`;
+}
+
+function _dsEscolher(tipo, id) {
+  if (tipo === 'livre') _DS.alvo = { tipo, nome: id };
+  else if (tipo === 'ficha') {
+    const f = _DS.fichas.find(x => x.id === id);
+    _DS.alvo = { tipo, id, nome: f?.nome || '', un: f?.rendimento_un || 'kg' };
+  } else {
+    const i = _DS.catalogo.find(x => x.id === id);
+    _DS.alvo = { tipo, id, nome: nomeExibicao(i), un: i?.unidade || 'kg' };
+  }
+  document.getElementById('ds-alvo').innerHTML = _dsAlvoHtml();
+  // A unidade começa na do item: quem descarta 2 kg não quer trocar o campo.
+  const un = document.getElementById('ds-un');
+  const alvoUn = String(_DS.alvo.un || 'kg').toLowerCase();
+  if (un) un.value = ['kg', 'g', 'un', 'l', 'ml'].includes(alvoUn) ? (alvoUn === 'l' ? 'L' : alvoUn) : 'kg';
+  document.getElementById('ds-qtd')?.focus();
+}
+
+function _dsLimparAlvo() {
+  _DS.alvo = null;
+  document.getElementById('ds-alvo').innerHTML = _dsAlvoHtml();
+  document.getElementById('ds-busca')?.focus();
+}
+
+function _dsPeriodo(campo, valor) {
+  _DS[campo] = valor;
+  montarDescartes(_DS.raiz, _DS);
+}
+
+function _dsTrocarPdv(id) {
+  const p = (_DS.pdvs || []).find(x => x.id === id);
+  _DS.alvo = null;
+  montarDescartes(_DS.raiz, { pdvId: id, pdvNome: p?.nome || '' });
+}
+
+async function _dsRegistrar() {
+  if (_DS.salvando) return;
+  const qtd = numBR(document.getElementById('ds-qtd')?.value);
+  const motivo = document.getElementById('ds-motivo')?.value;
+  const destino = document.getElementById('ds-destino')?.value || 'lixo';
+  const data = document.getElementById('ds-data')?.value || _dsHoje();
+  const obs = (document.getElementById('ds-obs')?.value || '').trim();
+  const un = document.getElementById('ds-un')?.value || 'kg';
+  if (!_DS.alvo) { showToast('Escolha o que foi descartado.', 'error'); return; }
+  if (!(qtd > 0)) { showToast('Informe a quantidade.', 'error'); return; }
+  if (!motivo) { showToast('Escolha o motivo.', 'error'); return; }
+
+  _DS.salvando = true;
+  const linha = {
+    pdv_id: _DS.pdvId, data, quantidade: qtd, unidade: un, motivo, destino,
+    observacao: obs || null, usuario_id: window.state?.perfil?.id || null,
+    item_id: _DS.alvo.tipo === 'item' ? _DS.alvo.id : null,
+    ficha_id: _DS.alvo.tipo === 'ficha' ? _DS.alvo.id : null,
+    descricao: _DS.alvo.tipo === 'livre' ? _DS.alvo.nome : null,
+  };
+  const { error } = await sb.from('desperdicios').insert(linha);
+  _DS.salvando = false;
+  if (error) { showToast('Não registrou: ' + error.message, 'error'); return; }
+  showToast('Descarte registrado.', 'success');
+  _DS.alvo = null;
+  await montarDescartes(_DS.raiz, _DS);
+}
+
+async function _dsConferir(id) {
+  const { data, error } = await sb.from('desperdicios').update({
+    conferido_por: window.state?.perfil?.id || null, conferido_em: new Date().toISOString(),
+  }).eq('id', id).select('id').maybeSingle();
+  if (error) { showToast('Não conferiu: ' + error.message, 'error'); return; }
+  if (!data) { showToast('Seu perfil não pode conferir descarte.', 'error'); return; }
+  await montarDescartes(_DS.raiz, _DS);
+}
+
+async function _dsRemover(id) {
+  if (!confirm('Remover este registro de descarte?')) return;
+  const { error } = await sb.from('desperdicios').delete().eq('id', id);
+  if (error) { showToast('Não removeu: ' + error.message, 'error'); return; }
+  showToast('Registro removido.', 'info');
+  await montarDescartes(_DS.raiz, _DS);
 }
 
 // =====================================================================

@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609201318">
+<link rel="stylesheet" href="style.css?v=202609221423">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609201318"></script>
+<script src="config.js?v=202609221423"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -116,6 +116,7 @@
   <div class="sidebar-nav">
     <div class="nav-item active" onclick="goTab('criar',this)"><span class="nav-icon">＋</span> Solicitar / Requisitar</div>
     <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas</div>
+    <div class="nav-item" onclick="goTab('descartes',this)"><span class="nav-icon">⊘</span> Descartes</div>
     <div class="nav-item" onclick="goTab('inventario',this)"><span class="nav-icon">▦</span> Inventário</div>
 
     <div class="nav-group" id="grp-estoque">
@@ -244,6 +245,10 @@
   <!-- ====================== INVENTÁRIO ====================== -->
   <div class="tab-content" id="tab-fichas">
     <div id="ftRoot"></div>
+  </div>
+
+  <div class="tab-content" id="tab-descartes">
+    <div id="dsRoot"></div>
   </div>
 
   <div class="tab-content" id="tab-inventario">
@@ -498,6 +503,8 @@ const tabTitles = {
   niveis:       ['Consultar Estoque', 'Saldo teórico atual dos itens de câmara'],
   divergencias: ['Divergências de Estoque', 'Diferenças entre contagem física e saldo teórico'],
   rel:          ['Relatório por PDV', 'Aquisições finalizadas consolidadas'],
+  fichas:       ['Fichas Técnicas', 'Receitas da cozinha'],
+  descartes:    ['Descartes', 'O que foi descartado e o que ainda falta conferir'],
 };
 
 function toggleNavGroup(headEl) {
@@ -538,6 +545,22 @@ async function abrirTelaFichas() {
   await montarFichas('#ftRoot', { pdvId, pdvNome: pdv?.nome || '', pdvs });
 }
 
+// Mesma escolha de cozinha das fichas: o chef executivo não tem PDV fixo.
+async function abrirTelaDescartes() {
+  const pdvs = state.perfil.pdv_id ? null
+    : (state.pdvs || []).map(p => ({ id: p.id, nome: p.nome }));
+  const pdvId = state.perfil.pdv_id
+    || (_DS.pdvId && (pdvs || []).some(p => p.id === _DS.pdvId) ? _DS.pdvId : null)
+    || (pdvs || [])[0]?.id;
+  if (!pdvId) {
+    document.getElementById('dsRoot').innerHTML =
+      '<div class="empty-text">Nenhuma cozinha disponível.</div>';
+    return;
+  }
+  const pdv = (state.pdvs || []).find(p => p.id === pdvId);
+  await montarDescartes('#dsRoot', { pdvId, pdvNome: pdv?.nome || '', pdvs });
+}
+
 async function abrirTelaInventario(pdvId) {
   const meu = pdvId || state.perfil.pdv_id;
   const cx = document.getElementById('inv-pdv-escolha');
@@ -567,7 +590,7 @@ function goTab(aba, el) {
   else delete document.body.dataset.processo;
   state.abaAtual = aba;
   document.querySelectorAll('.tab-content').forEach(c => {
-    if (['tab-criar','tab-compras','tab-reqs','tab-niveis','tab-divergencias','tab-rel','tab-inventario'].includes(c.id)) c.classList.remove('active');
+    if (['tab-criar','tab-compras','tab-reqs','tab-niveis','tab-divergencias','tab-rel','tab-inventario','tab-fichas','tab-descartes'].includes(c.id)) c.classList.remove('active');
   });
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('tab-' + aba).classList.add('active');
@@ -576,6 +599,7 @@ function goTab(aba, el) {
   document.getElementById('topTitle').textContent = t;
   document.getElementById('topSub').textContent = s;
   if (aba === 'fichas') abrirTelaFichas();
+  if (aba === 'descartes') abrirTelaDescartes();
   if (aba === 'inventario') abrirTelaInventario();
   if (aba === 'compras') carregarComprasGeral();
   if (aba === 'reqs')    carregarReqsGeral();

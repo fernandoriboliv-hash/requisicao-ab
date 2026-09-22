@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609201318">
+<link rel="stylesheet" href="style.css?v=202609221423">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609201318"></script>
+<script src="config.js?v=202609221423"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -805,6 +805,7 @@
 
     <div class="nav-item" data-proc="compra" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
     <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">▤</span> Fichas Técnicas</div>
+    <div class="nav-item" onclick="goTab('descartes',this)"><span class="nav-icon">⊘</span> Descartes</div>
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
   </div>
   <div class="sidebar-foot">
@@ -1248,6 +1249,10 @@
     <div id="ftRoot"></div>
   </div>
 
+  <div class="tab-content" id="tab-descartes">
+    <div id="dsRoot"></div>
+  </div>
+
   </div>
 </div>
 
@@ -1471,6 +1476,7 @@ const tabTitles = {
   relatorios:   ['Relatórios', ''],
   inventario:   ['Inventário do Mês', 'Contagem da câmara da Comissaria'],
   fichas:       ['Fichas Técnicas', 'Receitas da Comissaria'],
+  descartes:    ['Descartes', 'O que foi descartado na Comissaria'],
 };
 
 function toggleNavGroup(headEl) {
@@ -1520,6 +1526,7 @@ function goTab(aba, el) {
   if (aba === 'divergencias') carregarDivergencias();
   if (aba === 'inventario') abrirTelaInventario();
   if (aba === 'fichas') abrirTelaFichas();
+  if (aba === 'descartes') abrirTelaDescartes();
   openParentGroup(el);
   document.getElementById('chkSaveBar').classList.toggle('visible',
     aba === 'checklist' && Object.keys(state.chk.dirty).length > 0);
@@ -1543,6 +1550,17 @@ async function abrirTelaInventario() {
     return;
   }
   await montarInventario('#invRoot',
+    { pdvId: state.pdvComissariaId, pdvNome: 'Comissaria' });
+}
+
+// Descarte da câmara da Comissaria — mesma tela das cozinhas.
+async function abrirTelaDescartes() {
+  if (!state.pdvComissariaId) {
+    document.getElementById('dsRoot').innerHTML =
+      '<div class="empty-text">PDV "Comissaria" não encontrado no banco.</div>';
+    return;
+  }
+  await montarDescartes('#dsRoot',
     { pdvId: state.pdvComissariaId, pdvNome: 'Comissaria' });
 }
 
