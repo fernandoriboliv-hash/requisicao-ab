@@ -2489,6 +2489,7 @@ async function montarFichas(seletor, opts) {
     _FT.precos = Object.fromEntries((pr || []).map(p => [p.item_id, parseFloat(p.preco_unitario) || 0]));
   }
   _FT.fila = _FT.aprova ? await _ftCarregarFila() : [];
+  _FT.vinc = _FT.podeEditar ? await _ftCarregarVinc() : [];
   _ftRenderLista();
 }
 
@@ -2586,7 +2587,9 @@ function _ftRenderLista() {
         ${_FT.pdvs.map(p => `<option value="${p.id}"${p.id === _FT.pdvId ? ' selected' : ''}>${escapeHtml(p.nome)}</option>`).join('')}
       </select>` : ''}
       ${_FT.podeEditar ? `<button class="btn btn-primary" onclick="_ftNova()">+ Nova ficha</button>
-        <button class="btn btn-outline" onclick="_ftImportar()">Importar planilha</button>` : ''}
+        <button class="btn btn-outline" onclick="_ftImportar()">Importar planilha</button>
+        ${(_FT.vinc || []).length ? `<button class="btn btn-outline" onclick="_ftAbrirVinc()">Vincular ingredientes
+          <span class="ft-vinc-n">${_FT.vinc.length}</span></button>` : ''}` : ''}
       <input class="input ft-busca" id="ft-busca" placeholder="Buscar receita pelo nome"
              value="${escapeHtml(_FT.busca)}" oninput="_ftBuscar(this.value)" autocomplete="off">
     </div>
@@ -2658,6 +2661,14 @@ function _ftLinhasDe(rows, doRetrato) {
   return (rows || []).map(l => ({
     id: l.id || null, item_id: l.item_id || null, sub_ficha_id: l.sub_ficha_id || null,
     descricao: l.descricao || null, observacao: l.observacao || null,
+    // `nome` é o item do catálogo — é por ele que o custo e as comparações
+    // andam. `nomeFicha` é como a cozinha escreveu ("cebola branca"), e é o
+    // que a tela e o PDF mostram: vincular ao catálogo não renomeia a receita
+    // (decisão dele em 22/09).
+    nomeFicha: (l.descricao || '').trim() || null,
+    nomeCat: l.item_id ? ((doRetrato ? l.item_nome : l.itens?.nome) || null)
+           : l.sub_ficha_id ? ((doRetrato ? l.sub_ficha_nome : l.fichas_tecnicas?.nome) || null)
+           : null,
     nome: l.item_id ? ((doRetrato ? l.item_nome : l.itens?.nome) || l.descricao || '?')
         : l.sub_ficha_id ? ((doRetrato ? l.sub_ficha_nome : l.fichas_tecnicas?.nome) || l.descricao || '?')
         : (l.descricao || 'Linha em aberto'),
@@ -2765,9 +2776,10 @@ function _ftRenderVisualizar(versaoAntiga) {
           ${temFc ? '<th class="num" title="FC — Fator de Correção: PB ÷ PL">FC</th><th class="num" title="Peso Bruto — como sai da câmara">PB</th>' : ''}
           ${vePreco && !versaoAntiga ? '<th class="num">Custo</th>' : ''}</tr></thead>
         <tbody>${_FT.linhas.map((l, i) => `<tr class="${!l.item_id && !l.sub_ficha_id ? 'ft-linha-aberta' : ''}">
-          <td class="td-titulo">${escapeHtml(l.nome)}
+          <td class="td-titulo">${escapeHtml(_ftNomeLinha(l))}
             ${l.sub_ficha_id ? '<span class="ft-tag ft-tag-rec">sub-receita</span>' : ''}
             ${!l.item_id && !l.sub_ficha_id ? '<span class="ft-tag ft-tag-aberto">a vincular</span>' : ''}
+            ${_ftNomeCatDiferente(l) ? `<div class="ft-linha-cat">${escapeHtml(_ftNomeCatDiferente(l))}</div>` : ''}
             ${l.observacao ? `<div class="ft-linha-obs">${escapeHtml(l.observacao)}</div>` : ''}</td>
           <td class="num" data-label="PL">${l.quantidade == null
             ? '<span class="ft-tag ft-tag-aberto">a completar</span>'
@@ -3239,8 +3251,9 @@ function _ftLinhasHtml() {
   return _FT.linhas.map((l, i) => `
     <div class="ft-linha${!l.item_id && !l.sub_ficha_id ? ' ft-linha-aberta' : ''}">
       <div class="ft-linha-nome">
-        ${escapeHtml(l.nome)}
+        ${escapeHtml(_ftNomeLinha(l))}
         ${l.sub_ficha_id ? '<span class="ft-tag ft-tag-rec">sub-receita</span>' : ''}
+        ${_ftNomeCatDiferente(l) ? `<div class="ft-linha-cat">${escapeHtml(_ftNomeCatDiferente(l))}</div>` : ''}
         ${!l.item_id && !l.sub_ficha_id
           ? `<button class="ft-vincular" onclick="_ftVincular(${i})">vincular</button>`
           : l.quantidade == null ? '<span class="ft-tag ft-tag-aberto">a completar</span>' : ''}
@@ -3259,6 +3272,14 @@ function _ftLinhasHtml() {
              onchange="_ftSetFator(${i}, this.value)" onclick="this.select()">
       <button class="ft-del" onclick="_ftRemover(${i})" title="Remover">×</button>
     </div>`).join('');
+}
+
+// O que a linha mostra: o texto da cozinha quando existe, senão o do catálogo.
+function _ftNomeLinha(l) { return l.nomeFicha || l.nome || ''; }
+// O item do catálogo, só quando ele diz outra coisa que não o texto da ficha.
+function _ftNomeCatDiferente(l) {
+  if (!l.nomeCat || !l.nomeFicha) return null;
+  return _ftNorm(l.nomeCat) === _ftNorm(l.nomeFicha) ? null : l.nomeCat;
 }
 
 function _ftRedesenharLinhas() {
@@ -3348,6 +3369,125 @@ function _ftVincularEscolher(i, tipo, id) {
   l.sub_ficha_id = tipo === 'rec' ? id : null;
   l.nome = o.nome;
   _ftRedesenharLinhas();
+}
+
+// ---------------------------------------------------------------------
+// VINCULAR INGREDIENTES AO CATÁLOGO — pelo texto, não pela linha
+// ---------------------------------------------------------------------
+// As 128 fichas da Kosher chegaram com 444 linhas sem item no catálogo, mas
+// só 232 textos diferentes: "sal" aparece 25 vezes e "cebola branca" 9.
+// Vincular pelo texto resolve as 25 de uma vez. E a escolha fica guardada:
+// na cozinha seguinte, "cebola branca" já chega sugerida (migration 77).
+//
+// O texto da ficha não muda. A cozinha escreveu "cebola branca" e a ficha
+// continua dizendo "cebola branca"; "CEBOLA BRANCA C4" fica por baixo, só
+// para o custo (decisão dele em 22/09).
+
+async function _ftCarregarVinc() {
+  const { data } = await sb.rpc('ingredientes_a_vincular', { p_pdv: _FT.pdvId });
+  return data || [];
+}
+
+function _ftAbrirVinc() { _FT.vendo = 'vincular'; _FT.vincQ = ''; _ftRenderVinc(); }
+
+function _ftRenderVinc() {
+  const fila = _FT.vinc || [];
+  const q = _ftNorm(_FT.vincQ || '');
+  const vis = q ? fila.filter(x => _ftNorm(x.texto).includes(q)) : fila;
+  const linhas = fila.reduce((a, x) => a + (x.linhas || 0), 0);
+
+  _FT.raiz.innerHTML = `
+    <button class="btn btn-secondary btn-sm" onclick="_ftVoltarLista()">← Fichas</button>
+    <div class="ft-ver-titulo mt-2">Vincular ingredientes ao catálogo</div>
+    <div class="ft-ver-meta">
+      <span><strong>${fila.length}</strong> ${fila.length === 1 ? 'ingrediente' : 'ingredientes'}</span>
+      <span><strong>${linhas}</strong> ${linhas === 1 ? 'linha' : 'linhas'} de ficha</span>
+      <span>${escapeHtml(_FT.pdvNome)}</span>
+    </div>
+    ${fila.length ? `<input class="input ft-busca mt-2" placeholder="Buscar ingrediente"
+        value="${escapeHtml(_FT.vincQ || '')}" oninput="_ftVincFiltrar(this.value)" autocomplete="off">` : ''}
+    <div class="ft-vinc-lista mt-2">
+      ${vis.length ? vis.map(x => _ftVincLinhaHtml(x)).join('')
+        : `<div class="empty-text">${fila.length
+            ? 'Nenhum ingrediente com esse nome.'
+            : 'Todos os ingredientes desta cozinha já estão vinculados.'}</div>`}
+    </div>`;
+}
+
+function _ftVincFiltrar(v) { _FT.vincQ = v; _ftRenderVinc(); }
+function _ftVoltarLista() { _FT.vendo = 'ficha'; _ftRenderLista(); }
+
+// Uma linha por texto. A sugestão aprendida vem primeiro; depois as do
+// catálogo por semelhança de palavra; e a busca para o resto.
+function _ftVincLinhaHtml(x) {
+  const id = 'ft-vl-' + x.chave.replace(/[^A-Z0-9]/g, '_');
+  if (x.feito) {
+    return `<div class="ft-vinc-linha ft-vinc-feito" id="${id}">
+      <div class="ft-vinc-txt">${escapeHtml(x.texto)}
+        <span class="text-muted">→ ${escapeHtml(x.feito.nome)} · ${x.feito.n} linha(s)</span></div>
+    </div>`;
+  }
+  const cand = _ftCandidatos(x.texto, new Set()).slice(0, 4);
+  const jaTem = new Set(cand.map(c => c.id));
+  const chips = [];
+  if (x.sugestao_id && !jaTem.has(x.sugestao_id)) {
+    chips.push({ tipo: x.sugestao_tipo, id: x.sugestao_id, nome: x.sugestao_nome, aprendida: true });
+  } else if (x.sugestao_id) {
+    cand.forEach(c => { if (c.id === x.sugestao_id) c.aprendida = true; });
+  }
+  chips.push(...cand);
+
+  return `<div class="ft-vinc-linha" id="${id}">
+    <div class="ft-vinc-txt">${escapeHtml(x.texto)}
+      <span class="text-muted">${x.linhas} linha(s) em ${x.fichas} ficha(s)</span></div>
+    <div class="ft-vinc-chips">
+      ${chips.map(c => `<button class="ft-vinc-chip${c.aprendida ? ' ft-vinc-chip-ap' : ''}"
+        onclick="_ftVincAplicar('${x.chave}','${c.tipo}','${c.id}')"
+        >${escapeHtml(c.nome)}${c.tipo === 'rec' ? ' <span class="ft-tag ft-tag-rec">sub-receita</span>' : ''}</button>`).join('')}
+      <button class="ft-vinc-chip ft-vinc-chip-mais" onclick="_ftVincBuscarAbrir('${x.chave}')">buscar…</button>
+    </div>
+    <div class="ft-vinc-busca" id="${id}-b"></div>
+  </div>`;
+}
+
+function _ftVincAchar(chave) { return (_FT.vinc || []).find(x => x.chave === chave); }
+function _ftVincEl(chave) { return document.getElementById('ft-vl-' + chave.replace(/[^A-Z0-9]/g, '_')); }
+
+function _ftVincBuscarAbrir(chave) {
+  const cx = document.getElementById('ft-vl-' + chave.replace(/[^A-Z0-9]/g, '_') + '-b');
+  const x = _ftVincAchar(chave);
+  if (!cx || !x) return;
+  if (cx.innerHTML) { cx.innerHTML = ''; return; }
+  cx.innerHTML = `<input class="input" autocomplete="off" value="${escapeHtml(x.texto)}"
+      oninput="_ftVincSugerir('${chave}', this.value)">
+    <div class="ft-sug" id="ft-vs-${chave.replace(/[^A-Z0-9]/g, '_')}"></div>`;
+  const inp = cx.querySelector('input');
+  inp.focus(); inp.select();
+  _ftVincSugerir(chave, inp.value);
+}
+
+function _ftVincSugerir(chave, v) {
+  const cx = document.getElementById('ft-vs-' + chave.replace(/[^A-Z0-9]/g, '_'));
+  if (!cx) return;
+  const todos = _ftCandidatos(v, new Set());
+  cx.innerHTML = todos.length
+    ? todos.map(c => `<button class="ft-sug-item" onclick="_ftVincAplicar('${chave}','${c.tipo}','${c.id}')">
+        ${escapeHtml(c.nome)}${c.tipo === 'rec' ? ' <span class="ft-tag ft-tag-rec">sub-receita</span>' : ''}</button>`).join('')
+    : '<div class="text-muted" style="font-size:12px;padding:8px">Nada encontrado. Se o item não existe no catálogo, avise o gerente de compras.</div>';
+}
+
+async function _ftVincAplicar(chave, tipo, id) {
+  const x = _ftVincAchar(chave);
+  if (!x || x.feito) return;
+  const o = tipo === 'rec' ? _FT.lista.find(f => f.id === id) : _FT.catalogo.find(c => c.id === id);
+  const { data, error } = await sb.rpc('vincular_ingrediente', {
+    p_pdv: _FT.pdvId, p_texto: x.texto,
+    p_item: tipo === 'item' ? id : null, p_sub: tipo === 'rec' ? id : null });
+  if (error) { showToast('Não vinculou: ' + error.message, 'error'); return; }
+  x.feito = { nome: o?.nome || '', n: data || 0 };
+  const el = _ftVincEl(chave);
+  if (el) el.outerHTML = _ftVincLinhaHtml(x);
+  showToast(`${x.texto}: ${data} linha(s) vinculada(s).`, 'success');
 }
 
 // ---------------------------------------------------------------------
@@ -3783,7 +3923,7 @@ async function _ftImprimir(gerencial) {
     <table class="fp-ing">
       <thead><tr><th>Ingrediente</th><th>PB</th><th>PL</th><th>FC</th>${gerencial ? '<th>Custo</th>' : ''}</tr></thead>
       <tbody>${linhas.map((l, i) => `<tr>
-        <td>${escapeHtml(l.nome)}${l.sub_ficha_id ? ' <i>(sub-receita)</i>' : ''}${
+        <td>${escapeHtml(_ftNomeLinha(l))}${l.sub_ficha_id ? ' <i>(sub-receita)</i>' : ''}${
           l.observacao ? `<div class="fp-obs">${escapeHtml(l.observacao)}</div>` : ''}</td>
         <td>${l.quantidade == null ? '—' : _ftFmt(l.quantidade * (l.fator_correcao || 1)) + ' ' + escapeHtml(l.unidade)}</td>
         <td>${l.quantidade == null ? '—' : _ftFmt(l.quantidade) + ' ' + escapeHtml(l.unidade)}</td>
@@ -4464,13 +4604,13 @@ async function montarDescartes(seletor, opts) {
     }
     _DS.catalogo = todos;
   }
-  if (perfilVePreco() && !_DS.precos) {
+  if (_ftVeCusto() && !_DS.precos) {
     const { data: pr } = await sb.from('precos').select('item_id, preco_unitario').eq('vigente', true);
     _DS.precos = Object.fromEntries((pr || []).map(p => [p.item_id, parseFloat(p.preco_unitario) || 0]));
   }
   await carregarAutores(sb);
   // Custo do que é produção da casa: R$ por unidade de rendimento da ficha.
-  if (perfilVePreco()) {
+  if (_ftVeCusto()) {
     const ids = [...new Set(_DS.lista.filter(d => d.ficha_id).map(d => d.ficha_id))]
       .filter(id => !(id in _DS.custoFicha));
     for (const id of ids) {
@@ -4484,7 +4624,7 @@ async function montarDescartes(seletor, opts) {
 // Quanto custou o que foi para o lixo. Sem preço, devolve null — e a tela
 // mostra "—", não zero: zero diria que não custou nada.
 function _dsCusto(d) {
-  if (!perfilVePreco()) return null;
+  if (!_ftVeCusto()) return null;
   if (d.item_id) {
     const it = _DS.catalogo.find(i => i.id === d.item_id);
     const p = _DS.precos ? _DS.precos[d.item_id] : 0;
@@ -4501,7 +4641,7 @@ function _dsCusto(d) {
 }
 
 function _dsRender() {
-  const vePreco = perfilVePreco();
+  const vePreco = _ftVeCusto();
   const eu = window.state?.perfil?.id;
   const total = { qtdKg: 0, custo: 0, semCusto: 0 };
   const porGrupo = {};

@@ -1947,3 +1947,34 @@ body[data-processo] #execCartBtn:disabled { background: var(--muted2); color: va
 .ds-card-total { border-color: rgba(184,150,62,.45); background: rgba(184,150,62,.07); }
 .ds-conf { color: var(--green); font-size: 11px; }
 .ds-tabela .num { white-space: nowrap; }
+
+/* ── Vincular ingredientes ao catálogo ─────────────────────────────── */
+/* O item do catálogo aparece por baixo do que a cozinha escreveu — nunca
+   no lugar dele. */
+.ft-linha-cat {
+  flex-basis: 100%; font-size: 11px; color: var(--muted); line-height: 1.35;
+  letter-spacing: .4px;
+}
+.ft-linha-cat::before { content: "↳ "; opacity: .7; }
+.ft-vinc-n {
+  display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 6px;
+  background: var(--gold); color: #1a1a1a; font-size: 11px; font-weight: 600;
+}
+.ft-vinc-lista { display: flex; flex-direction: column; gap: 2px; }
+.ft-vinc-linha {
+  border-bottom: 1px solid var(--border-subtle); padding: 10px 2px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
+}
+.ft-vinc-txt { flex: 1 1 210px; font-size: 14px; }
+.ft-vinc-txt .text-muted { font-size: 11px; margin-left: 8px; }
+.ft-vinc-chips { flex: 2 1 340px; display: flex; flex-wrap: wrap; gap: 6px; }
+.ft-vinc-chip {
+  background: transparent; border: 1px solid var(--border-subtle); color: var(--text);
+  font-size: 12px; padding: 4px 10px; cursor: pointer; font-family: inherit;
+}
+.ft-vinc-chip:hover { border-color: var(--gold); background: var(--panel2); }
+.ft-vinc-chip-ap { border-color: rgba(184,150,62,.55); }
+.ft-vinc-chip-mais { color: var(--muted); }
+.ft-vinc-busca { flex-basis: 100%; position: relative; }
+.ft-vinc-feito { opacity: .6; }
+.ft-vinc-feito .ft-vinc-txt::before { content: "✓ "; color: var(--green); }
