@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609221502">
+<link rel="stylesheet" href="style.css?v=202609242049">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609221502"></script>
+<script src="config.js?v=202609242049"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -118,6 +118,7 @@
     <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas</div>
     <div class="nav-item" onclick="goTab('descartes',this)"><span class="nav-icon">⊘</span> Descartes</div>
     <div class="nav-item" onclick="goTab('inventario',this)"><span class="nav-icon">▦</span> Inventário</div>
+    <div class="nav-item" onclick="goTab('fechamento',this)"><span class="nav-icon">⇥</span> Fechar o Mês</div>
 
     <div class="nav-group" id="grp-estoque">
       <div class="nav-group-head" onclick="toggleNavGroup(this)">
@@ -259,6 +260,12 @@
                 onchange="abrirTelaInventario(this.value)"></select>
       </div>
       <div id="invRoot"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-fechamento">
+    <div class="main full">
+      <div id="fqRoot"></div>
     </div>
   </div>
 
@@ -460,6 +467,14 @@ window.addEventListener('load', async () => {
   state.user = user; state.perfil = perfil;
   document.getElementById('userName').textContent = perfil.nome || '';
 
+  // Fechar o Mes so faz sentido para chef DE cozinha: a exportacao e por
+  // cozinha e a regra do servidor e `usuarios.pdv_id` (migration 80). O
+  // chef executivo do hotel nao tem PDV, entao veria sempre a mesma tela
+  // vazia — melhor nao oferecer a porta do que abrir numa parede.
+  if (!perfil.pdv_id) {
+    document.querySelector('.nav-item[onclick*="fechamento"]')?.remove();
+  }
+
   const { data: pdvs } = await sb.from('pdvs').select('*').eq('ativo', true).order('ordem');
   state.pdvs = pdvs || [];
   state.pdvsMap = Object.fromEntries(state.pdvs.map(p => [p.id, p]));
@@ -505,6 +520,7 @@ const tabTitles = {
   rel:          ['Relatório por PDV', 'Aquisições finalizadas consolidadas'],
   fichas:       ['Fichas Técnicas', 'Receitas da cozinha'],
   descartes:    ['Descartes', 'O que foi descartado e o que ainda falta conferir'],
+  fechamento:   ['Fechar o Mês', 'Colunas da planilha REQUISIÇÃO COZINHA para o financeiro'],
 };
 
 function toggleNavGroup(headEl) {
@@ -590,7 +606,7 @@ function goTab(aba, el) {
   else delete document.body.dataset.processo;
   state.abaAtual = aba;
   document.querySelectorAll('.tab-content').forEach(c => {
-    if (['tab-criar','tab-compras','tab-reqs','tab-niveis','tab-divergencias','tab-rel','tab-inventario','tab-fichas','tab-descartes'].includes(c.id)) c.classList.remove('active');
+    if (['tab-criar','tab-compras','tab-reqs','tab-niveis','tab-divergencias','tab-rel','tab-inventario','tab-fichas','tab-descartes','tab-fechamento'].includes(c.id)) c.classList.remove('active');
   });
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('tab-' + aba).classList.add('active');
@@ -601,6 +617,7 @@ function goTab(aba, el) {
   if (aba === 'fichas') abrirTelaFichas();
   if (aba === 'descartes') abrirTelaDescartes();
   if (aba === 'inventario') abrirTelaInventario();
+  if (aba === 'fechamento')  montarFechamentoReq('#fqRoot');
   if (aba === 'compras') carregarComprasGeral();
   if (aba === 'reqs')    carregarReqsGeral();
   if (aba === 'niveis')       carregarNiveisEst();
@@ -615,11 +632,14 @@ function goTab(aba, el) {
     document.getElementById('sbOverlay')?.classList.remove('open');
   }
 }
-// Compat: alias pra chamadas internas que ainda usam switchAba
+// Compat: alias pra chamadas internas que ainda usam switchAba.
+// Acha o item do menu pelo destino, nao pela posicao: o indice fixo ja
+// estava defasado desde que Fichas e Descartes entraram no meio da barra,
+// e marcava como ativo um item que nao era o da tela aberta.
 const switchAba = (aba) => {
-  const map = { criar: 0, compras: 1, reqs: 2, niveis: 3, divergencias: 4, rel: 5 };
-  const nav = document.querySelectorAll('.nav-item')[map[aba] ?? 0];
-  goTab(aba, nav);
+  const nav = [...document.querySelectorAll('.nav-item')]
+    .find(n => (n.getAttribute('onclick') || '').includes("goTab('" + aba + "'"));
+  goTab(aba, nav || undefined);
 };
 function switchSub(sub) {
   state.subAtual = sub;

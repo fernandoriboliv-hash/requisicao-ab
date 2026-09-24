@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609221502">
+<link rel="stylesheet" href="style.css?v=202609242049">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609221502"></script>
+<script src="config.js?v=202609242049"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -2282,6 +2282,23 @@ function renderFechamento(d) {
   // inteira subia uma linha e o mês colava desalinhado.
 
   const html = [];
+
+  // Quando a conversao esta ligada o total muda de natureza: passa a ser
+  // peso COMPRADO, nao o peso que a Comissaria pesou. Sem dizer isso na
+  // tela, ele ve o numero de outubro subir e nao sabe se foi consumo ou
+  // conversao. Os meses anteriores ao corte continuam como sempre foram.
+  if (a.peso_bruto_desde) {
+    html.push(`
+      <div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
+        <div class="section-title" style="margin-top:0"><span>Quantidades em peso bruto</span></div>
+        <div class="text-muted" style="font-size:12px">
+          A partir da competência de <strong>${ptDate(a.peso_bruto_desde)}</strong> as
+          quantidades saem convertidas pelo fator de aproveitamento — é o peso
+          comprado, que é o número do Cost Controller. Competências anteriores
+          saem como sempre saíram.
+        </div>
+      </div>`);
+  }
 
   html.push(bloco('fec-bloco-req',
     'Planilha1 — coluna Retirado',

@@ -1111,6 +1111,47 @@ function estimativaPeso(qtd, pesoMedio, unidade) {
   return `≈ ${total.toLocaleString('pt-BR', { maximumFractionDigits: total < 10 ? 2 : 1 })} ${unidade || 'kg'}`;
 }
 
+// ---------------------------------------------------------------------
+// PESO BRUTO — do que se pesa na balança ao que o hotel comprou
+// ---------------------------------------------------------------------
+// A Comissária pesa o que está entregando, já limpo. O custo da cozinha é
+// do peso COMPRADO: o que saiu na limpeza foi pago do mesmo jeito. O fator
+// sobe a cadeia do catálogo (porção → filé → peixe inteiro, migration 40),
+// então dois saltos multiplicam.
+//
+// Sem aproveitamento preenchido devolve null, e a tela não mostra nada —
+// item comprado pronto é o próprio peso bruto.
+function fatorPesoBruto(itemId, catalogo) {
+  if (!itemId || !catalogo) return null;
+  const porId = catalogo instanceof Map
+    ? catalogo : new Map(catalogo.map(i => [i.id, i]));
+  let fator = 1, passos = [], atual = porId.get(itemId), voltas = 0;
+  while (atual && Number(atual.aproveitamento_pct) > 0 && voltas++ < 6) {
+    fator = fator * 100 / Number(atual.aproveitamento_pct);
+    passos.push(Number(atual.aproveitamento_pct));
+    if (!atual.item_origem_id) break;
+    atual = porId.get(atual.item_origem_id);
+  }
+  return passos.length ? { fator, passos, origem: atual || null } : null;
+}
+
+const _pbNum = n => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+
+// A linha que a Comissária lê: quanto rende, por quanto multiplica e qual é
+// o peso bruto do que ela acabou de pesar.
+function avisoPesoBruto(itemId, peso, unidade, catalogo) {
+  const f = fatorPesoBruto(itemId, catalogo);
+  if (!f) return '';
+  const p = parseFloat(peso);
+  const bruto = p > 0 ? p * f.fator : null;
+  return '<span class="peso-bruto">aproveitamento ' + f.passos.map(x => _pbNum(x) + '%').join(' · ')
+    + ' · fator ' + f.fator.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    + (bruto != null
+        ? ' · bruto <strong>' + _pbNum(bruto) + ' ' + (unidade || 'kg') + '</strong>'
+        : '')
+    + '</span>';
+}
+
 // Congela no item do pedido como ele era na hora: se o catálogo mudar de
 // regime depois, o pedido antigo continua sendo lido do jeito que foi feito.
 //
@@ -4642,7 +4683,6 @@ function _dsCusto(d) {
 
 function _dsRender() {
   const vePreco = _ftVeCusto();
-  const eu = window.state?.perfil?.id;
   const total = { qtdKg: 0, custo: 0, semCusto: 0 };
   const porGrupo = {};
   _DS.lista.forEach(d => {
@@ -4659,13 +4699,11 @@ function _dsRender() {
   const aConferir = _DS.lista.filter(d => !d.conferido_em).length;
 
   _DS.raiz.innerHTML = `
-    <div class="ds-topo">
-      ${_DS.pdvs && _DS.pdvs.length > 1 ? `<select class="select ft-pdv" onchange="_dsTrocarPdv(this.value)">
+    ${_DS.pdvs && _DS.pdvs.length > 1 ? `<div class="ds-topo">
+      <select class="select ft-pdv" onchange="_dsTrocarPdv(this.value)">
         ${_DS.pdvs.map(p => `<option value="${p.id}"${p.id === _DS.pdvId ? ' selected' : ''}>${escapeHtml(p.nome)}</option>`).join('')}
-      </select>` : ''}
-      <label class="ds-periodo">de <input class="input" type="date" value="${_DS.de}" onchange="_dsPeriodo('de', this.value)"></label>
-      <label class="ds-periodo">até <input class="input" type="date" value="${_DS.ate}" onchange="_dsPeriodo('ate', this.value)"></label>
-    </div>
+      </select>
+    </div>` : ''}
 
     ${_DS.podeRegistrar ? `<div class="form-panel ds-form" style="display:block">
       <div class="section-title" style="margin-top:0"><span>Registrar descarte</span></div>
@@ -4711,6 +4749,12 @@ function _dsRender() {
       </div>
     </div>` : ''}
 
+    <div class="ds-topo ds-filtro">
+      <span class="ds-periodo-rot">Registros de</span>
+      <label class="ds-periodo"><input class="input" type="date" value="${_DS.de}" onchange="_dsPeriodo('de', this.value)"></label>
+      <label class="ds-periodo">até <input class="input" type="date" value="${_DS.ate}" onchange="_dsPeriodo('ate', this.value)"></label>
+    </div>
+
     ${_DS.lista.length ? `
       <div class="ds-resumo">
         ${Object.entries(porGrupo).sort((a, b) => b[1].custo - a[1].custo || b[1].kg - a[1].kg).map(([g, v]) => `
@@ -4734,8 +4778,11 @@ function _dsRender() {
         <tbody>${_DS.lista.map(d => {
           const nome = d.itens?.nome || d.fichas_tecnicas?.nome || d.descricao || '—';
           const c = _dsCusto(d);
-          const podeApagar = _DS.podeConferir
-            || (!d.conferido_em && _DS.podeRegistrar && d.usuario_id === eu);
+          // Remover e da lideranca, nunca de quem registrou (24/09/2026):
+          // registro que o proprio autor apaga nao serve de indicador. O
+          // cozinheiro que errar pede para o chef corrigir. A regra vale de
+          // verdade no banco (migration 81) — aqui e so o botao.
+          const podeApagar = _DS.podeConferir;
           return `<tr>
             <td data-label="Data">${_ftDataBR(d.data)}</td>
             <td class="td-titulo">${escapeHtml(nome)}
@@ -5058,4 +5105,286 @@ function numBR(v) {
   const limpo = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t;
   const n = parseFloat(limpo);
   return isFinite(n) ? n : null;
+}
+
+// =====================================================================
+// EXPORTAR A REQUISIÇÃO DO MÊS — tela da cozinha
+// =====================================================================
+// O bloco colável da planilha REQUISIÇÃO COZINHA, do jeito que o gerente
+// de compras já gera em "Fechar o Mês", agora na mão de quem precisa
+// mandar o número para o financeiro (pedido de 24/09/2026).
+//
+// Só a requisição. O inventário continua exclusivo do gerente.
+//
+// A cozinha não é escolhida aqui: vem de `pdvs_para_exportar()`, que
+// devolve o que o login pode exportar (migration 80). Montar o seletor
+// com a lista inteira de PDVs deixaria o chef escolher uma cozinha que o
+// servidor recusa no fim — depois de escolher o mês e clicar em Gerar.
+//
+// A tela do gerente continua com a implementação dela, que tem o que
+// aqui não existe: o seletor requisição/inventário, os grupos de centro
+// de custo e o painel das 14 contagens. Quando esta mudar, conferir se a
+// de lá precisa da mesma mudança.
+const _FQ = { raiz: null, pdvs: [], dados: null, gerando: false };
+
+async function montarFechamentoReq(seletor) {
+  const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
+  if (!raiz) return;
+  _FQ.raiz = raiz;
+  if (_FQ.pdvs.length) { _fqTela(); return; }
+
+  raiz.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const { data, error } = await sb.rpc('pdvs_para_exportar');
+  if (error) {
+    raiz.innerHTML = '<div class="empty-text">Não consegui carregar as cozinhas.</div>';
+    showToast('Erro: ' + error.message, 'error');
+    return;
+  }
+  _FQ.pdvs = data || [];
+  if (!_FQ.pdvs.length) {
+    raiz.innerHTML = '<div class="empty-text">Seu login não está ligado a nenhuma cozinha, '
+      + 'então não há o que exportar. Fale com o gerente de compras.</div>';
+    return;
+  }
+  _fqTela();
+}
+
+function _fqTela() {
+  // Mês corrente: o fechamento acontece nos últimos dias do mês, sobre o
+  // mês que está terminando. Abrir no anterior obrigaria a corrigir
+  // sempre, e quem esquecesse exportaria o mês errado.
+  const mes = document.getElementById('fq-mes')?.value || mesCorrente();
+  const pdv = document.getElementById('fq-pdv')?.value || _FQ.pdvs[0].id;
+  const um = _FQ.pdvs.length === 1;
+  _FQ.raiz.innerHTML = `
+    <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      ${um ? `<input type="hidden" id="fq-pdv" value="${_FQ.pdvs[0].id}">
+        <span class="text-muted" style="font-size:12px">${escapeHtml(_FQ.pdvs[0].nome)}</span>`
+      : `<span class="text-muted" style="font-size:12px">Cozinha</span>
+        <select class="select" id="fq-pdv" style="max-width:220px">
+          ${_FQ.pdvs.map(p => `<option value="${p.id}"${p.id === pdv ? ' selected' : ''}
+            >${escapeHtml(p.nome)}</option>`).join('')}
+        </select>`}
+      <span class="text-muted" style="font-size:12px">Mês</span>
+      <input class="input" type="month" id="fq-mes" style="max-width:160px" value="${mes}">
+      <button class="btn btn-gold" onclick="_fqGerar()">Gerar</button>
+    </div>
+    <div id="fq-kpis" class="stats-grid" style="display:none"></div>
+    <div id="fqContainer"><div class="empty-text">Escolha o mês e clique em Gerar.</div></div>`;
+}
+
+async function _fqGerar() {
+  if (_FQ.gerando) return;
+  const pdvId = document.getElementById('fq-pdv')?.value;
+  const mes   = document.getElementById('fq-mes')?.value;
+  if (!pdvId || !mes) { showToast('Escolha o mês.', 'error'); return; }
+
+  const [ano, m] = mes.split('-').map(Number);
+  const de  = `${mes}-01`;
+  const ate = new Date(ano, m, 0).toISOString().slice(0, 10);
+
+  const cont = document.getElementById('fqContainer');
+  cont.innerHTML = '<div class="loading-text">Gerando...</div>';
+  document.getElementById('fq-kpis').style.display = 'none';
+
+  _FQ.gerando = true;
+  const { data, error } = await sb.rpc('exportar_planilha_requisicao_grupo',
+    { p_pdv_ids: [pdvId], p_de: de, p_ate: ate });
+  _FQ.gerando = false;
+
+  if (error) {
+    cont.innerHTML = '<div class="empty-text">Não consegui gerar.</div>';
+    showToast('Erro: ' + error.message, 'error');
+    return;
+  }
+  _FQ.dados = data;
+  _fqRender(data);
+}
+
+function _fqRender(d) {
+  const r = d.requisicao, c = d.receitas, a = d.avisos;
+
+  const kpis = document.getElementById('fq-kpis');
+  kpis.style.display = '';
+  kpis.innerHTML = [
+    ['Itens com saída', a.itens_movidos],
+    ['Células da coluna ' + r.coluna, r.preenchidas],
+    ['Produções a digitar', c.preenchidas],
+    ['Sem linha na planilha', d.orfaos.length],
+  ].map(([t, v]) => `
+    <div class="stat-card">
+      <div class="stat-label">${t}</div>
+      <div class="stat-val">${v}</div>
+    </div>`).join('');
+
+  const html = [];
+
+  // Quando a conversao esta ligada o total muda de natureza: passa a ser
+  // peso COMPRADO, nao o peso que a Comissaria pesou. Sem dizer isso na
+  // tela, ele ve o numero de outubro subir e nao sabe se foi consumo ou
+  // conversao. Os meses anteriores ao corte continuam como sempre foram.
+  if (a.peso_bruto_desde) {
+    html.push(`
+      <div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
+        <div class="section-title" style="margin-top:0"><span>Quantidades em peso bruto</span></div>
+        <div class="text-muted" style="font-size:12px">
+          A partir da competência de <strong>${_ftDataBR(a.peso_bruto_desde)}</strong> as
+          quantidades saem convertidas pelo fator de aproveitamento — é o peso
+          comprado, que é o número do Cost Controller. Competências anteriores
+          saem como sempre saíram.
+        </div>
+      </div>`);
+  }
+
+  // O conteúdo do textarea entra por .value, nunca dentro da tag: o
+  // parser de HTML descarta a primeira quebra de linha logo depois de
+  // <textarea>, e o bloco quase sempre começa com linha vazia. Escrito no
+  // innerHTML, a coluna inteira sobe uma linha e o mês cola desalinhado.
+  html.push(`
+    <div class="form-panel" style="display:block;margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">
+        <span>Planilha1 — coluna Retirado</span>
+        <button class="btn btn-sm btn-gold" onclick="_fqCopiar('fq-bloco-req')">Copiar</button>
+      </div>
+      <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+        Colar em ${r.coluna}${r.primeira_linha} (até ${r.coluna}${r.ultima_linha})
+        · ${r.preenchidas} de ${r.com_item} linhas pareadas
+      </div>
+      <textarea id="fq-bloco-req" class="input" readonly rows="8" spellcheck="false"
+        style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre;resize:vertical"
+        ></textarea>
+    </div>`);
+
+  // A aba 2 não sai como bloco: as linhas dela são mescladas na planilha
+  // do financeiro, e colar em célula mesclada estraga a mescla. Tem que
+  // ser digitada — então a tela mostra o total de cada produção e de
+  // quais itens ele veio, porque uma linha pode somar dois.
+  html.push(`
+    <div class="form-panel" style="display:block;margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">
+        <span>Receitas Açougue — coluna Qtde (KG)</span>
+      </div>
+      <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+        Digitar na coluna ${c.coluna} · ${c.preenchidas} de ${c.com_item} produções mapeadas
+      </div>
+      ${c.linhas.length ? `
+      <table class="data-table">
+        <thead><tr><th>Linha</th><th>Produção</th><th style="text-align:right">Total</th></tr></thead>
+        <tbody>${c.linhas.map(l => `
+          <tr>
+            <td data-label="Linha"><strong>${c.coluna}${l.linha}</strong></td>
+            <td data-label="Produção">
+              ${escapeHtml(l.nome)}
+              ${l.itens.length > 1 ? `<div class="pend-item-meta">${
+                l.itens.map(i => `${escapeHtml(i.item)} ${_ftFmt(i.qtd)}`).join(' &nbsp;+&nbsp; ')
+              }</div>` : ''}
+            </td>
+            <td data-label="Total" style="text-align:right"><strong>${_ftFmt(l.qtd)}</strong></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '<div class="empty-text">Nenhuma produção com saída no período.</div>'}
+    </div>`);
+
+  // Linha da aba 1 que sempre sai vazia porque o item dela entra pela
+  // aba 2. Sem este aviso parece célula esquecida.
+  const vazias = r.vazias_por_receita || [];
+  if (vazias.length) {
+    html.push(`
+      <div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
+        <div class="section-title" style="margin-top:0"><span>Saem vazias na coluna ${r.coluna}</span></div>
+        <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+          O consumo delas entra pela aba Receitas Açougue.
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${vazias.map(l =>
+          `<span class="pend-item-meta" style="border:1px solid var(--border-subtle);padding:4px 8px"
+            >${r.coluna}${l.linha} · ${escapeHtml(l.nome)}</span>`).join('')}</div>
+      </div>`);
+  }
+
+  if (c.sem_item.length) {
+    html.push(`
+      <div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
+        <div class="section-title" style="margin-top:0"><span>Produções sem item no catálogo</span></div>
+        <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+          Estas linhas saem vazias na coluna ${c.coluna}.
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${c.sem_item.map(l =>
+          `<span class="pend-item-meta" style="border:1px solid var(--border-subtle);padding:4px 8px"
+            >${c.coluna}${l.linha} · ${escapeHtml(l.nome)}</span>`).join('')}</div>
+      </div>`);
+  }
+
+  if (a.linhas_sem_peso) {
+    html.push(`
+      <div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
+        <div class="section-title" style="margin-top:0">
+          <span>${a.linhas_sem_peso} linha(s) de pacote sem peso registrado</span>
+        </div>
+        <div class="text-muted" style="font-size:12px">
+          Entraram como zero. A Comissaria corrige o peso na requisição.
+        </div>
+      </div>`);
+  }
+
+  if (d.orfaos.length) {
+    html.push(`
+      <div class="form-panel" style="display:block">
+        <div class="section-title" style="margin-top:0">
+          <span>Não têm linha na planilha (${d.orfaos.length})</span>
+          <button class="btn btn-sm btn-outline" onclick="_fqCopiarOrfaos()">Copiar lista</button>
+        </div>
+        <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+          Saíram da câmara no período, mas não existem na planilha do financeiro.
+        </div>
+        <table class="data-table">
+          <thead><tr><th>Item</th><th style="text-align:right">Saída</th><th>Unid.</th></tr></thead>
+          <tbody>${d.orfaos.map(o => `
+            <tr>
+              <td data-label="Item">${escapeHtml(o.nome || '—')}</td>
+              <td data-label="Saída" style="text-align:right">${_ftFmt(o.qtd)}</td>
+              <td data-label="Unid." class="text-muted">${escapeHtml(o.unidade || '')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`);
+  }
+
+  document.getElementById('fqContainer').innerHTML = html.join('');
+
+  const el = document.getElementById('fq-bloco-req');
+  if (el) el.value = r.bloco || '';
+
+  // Se o bloco não tiver exatamente uma linha por linha da planilha, a
+  // colagem sai deslocada e ninguém percebe olhando a tela. Melhor o
+  // aviso barulhento que um mês inteiro conferido errado.
+  const tem = (el?.value || '').split('\n').length;
+  const esperado = r.ultima_linha - r.primeira_linha + 1;
+  if (tem !== esperado) {
+    showToast(`Bloco da coluna ${r.coluna} com ${tem} linhas, esperava ${esperado}. Não cole.`, 'error');
+  }
+}
+
+async function _fqCopiar(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  try {
+    await navigator.clipboard.writeText(el.value);
+    showToast('Copiado — cole na planilha.', 'success');
+  } catch {
+    // Ambiente que bloqueia a área de transferência: seleciona para o usuário.
+    el.focus(); el.select();
+    showToast('Texto selecionado — use Ctrl+C.', 'info');
+  }
+}
+
+async function _fqCopiarOrfaos() {
+  const lista = (_FQ.dados && _FQ.dados.orfaos) || [];
+  if (!lista.length) return;
+  const txt = lista.map(o => [o.nome || '', _ftFmt(o.qtd), o.unidade || ''].join('\t')).join('\n');
+  try {
+    await navigator.clipboard.writeText(txt);
+    showToast('Lista copiada.', 'success');
+  } catch {
+    showToast('Não consegui copiar.', 'error');
+  }
 }

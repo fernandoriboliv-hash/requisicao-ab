@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609221502">
+<link rel="stylesheet" href="style.css?v=202609242049">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609221502"></script>
+<script src="config.js?v=202609242049"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -1717,12 +1717,23 @@ function renderFila() {
         ? `${it.quantidade_solicitada} ${rot}${est ? `<br><span class="est-peso">${est}</span>` : ''}`
         : `${it.quantidade_solicitada} ${it.item_unidade || ''}`;
 
+      // Proteína limpa: o peso da balança volta ao peso comprado pelo
+      // aproveitamento do catálogo. Fica à vista da Comissaria enquanto ela
+      // pesa — é o número que entra no custo da cozinha.
+      const unBruto = pacote ? unidadePeso(it) : (it.item_unidade || '');
+      const linhaBruto = (peso) => {
+        const h = state.aproveitamentoAtivo && typeof avisoPesoBruto === 'function'
+          ? avisoPesoBruto(it.item_id, peso, unBruto, state.catalogo) : '';
+        return h ? `<div class="pb-wrap" id="pb-${r.id}-${idx}">${h}</div>` : '';
+      };
+
       let campoEntrega;
       if (entregue) {
-        campoEntrega = pacote
+        campoEntrega = (pacote
           ? `${it.pacotes_entregues ?? '—'} ${rot}${it.quantidade_entregue != null
               ? ` <span class="est-peso">· ${it.quantidade_entregue} ${uPeso}</span>` : ''}`
-          : `${it.quantidade_entregue ?? '—'} ${it.item_unidade || ''}`;
+          : `${it.quantidade_entregue ?? '—'} ${it.item_unidade || ''}`)
+          + linhaBruto(it.quantidade_entregue);
       } else if (pacote) {
         campoEntrega = `
           <span class="qty-wrap">
@@ -1733,17 +1744,18 @@ function renderFila() {
           </span>
           <span class="qty-wrap qty-peso">
             <input class="qty-entrega" type="number" step="0.001" min="0" inputmode="decimal"
-                   placeholder="peso" id="qe-${r.id}-${idx}">
+                   placeholder="peso" id="qe-${r.id}-${idx}"
+                   oninput="pesoBrutoLinha('${r.id}',${idx},'${it.item_id || ''}','${escapeHtml(unBruto)}')">
             <span class="qty-un">${uPeso} pesado</span>
-          </span>`;
+          </span>` + linhaBruto(null);
       } else {
         campoEntrega = `
           <span class="qty-wrap">
             <input class="qty-entrega" type="number" step="0.1" min="0" inputmode="decimal"
                    value="${it.quantidade_solicitada}" id="qe-${r.id}-${idx}"
-                   oninput="checkDiv('${r.id}',${idx},${it.quantidade_solicitada},this.value)">
+                   oninput="checkDiv('${r.id}',${idx},${it.quantidade_solicitada},this.value);pesoBrutoLinha('${r.id}',${idx},'${it.item_id || ''}','${escapeHtml(unBruto)}')">
             <span class="qty-un">${escapeHtml(it.item_unidade || '')}</span>
-          </span>`;
+          </span>` + linhaBruto(it.quantidade_solicitada);
       }
 
       // "Ajuste de Peso" some no item de pacote: lá o peso diferente é o
@@ -2029,6 +2041,15 @@ async function confirmarCancelamento() {
   }
 }
 
+// Reescreve a linha do peso bruto a cada tecla — ela está com o produto na
+// balança, e o número tem de acompanhar.
+function pesoBrutoLinha(reqId, idx, itemId, unidade) {
+  const cx = document.getElementById('pb-' + reqId + '-' + idx);
+  if (!cx || !itemId || !state.aproveitamentoAtivo) return;
+  const v = document.getElementById('qe-' + reqId + '-' + idx)?.value;
+  cx.innerHTML = avisoPesoBruto(itemId, v, unidade, state.catalogo);
+}
+
 // Lê o que a Comissaria preencheu para um item. Devolve as duas grandezas
 // separadas — é a leitura única que a validação e a gravação compartilham,
 // pra não existirem duas interpretações do mesmo formulário.
@@ -2133,12 +2154,16 @@ async function registrarEntrega(reqId) {
 // CATÁLOGO COMPARTILHADO
 // =====================================================================
 async function carregarCatalogo() {
-  const [catR, prazoR] = await Promise.all([
+  const [catR, prazoR, aprovR] = await Promise.all([
     sb.from('itens').select('*').eq('ativo', true).order('nome'),
     sb.from('configuracoes_categoria').select('categoria, prazo_reposicao_horas'),
+    // Os fatores já estão no catálogo; a tela só passa a mostrá-los na data
+    // marcada em config_sistema (migration 79).
+    sb.rpc('aproveitamento_ativo'),
   ]);
   if (catR.error) { showToast('Erro ao carregar catálogo: ' + catR.error.message, 'error'); return; }
   state.catalogo = catR.data || [];
+  state.aproveitamentoAtivo = aprovR.data === true;
   state.prazoPorCategoria = {};
   (prazoR.data || []).forEach(c => { state.prazoPorCategoria[c.categoria] = c.prazo_reposicao_horas; });
 }
