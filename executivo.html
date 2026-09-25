@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609251558">
+<link rel="stylesheet" href="style.css?v=202609251604">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609251558"></script>
+<script src="config.js?v=202609251604"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -33,15 +33,25 @@
     grid-template-columns: 22px 1fr auto auto;
     align-items: center; gap: 12px;
     background: var(--panel); padding: 10px 14px; margin-bottom: 2px;
-    border: 1px solid transparent; cursor: pointer;
+    border: 1px solid transparent;
+    transition: border-color 0.15s, background 0.15s;
   }
+  .item-actions-cell { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
+  .item-row:hover { border-color: var(--border-subtle); }
   .item-row.selected { border-color: var(--gold); background: rgba(184,150,62,0.06); }
+  /* Coluna 1fr nao encolhe abaixo do conteudo: nome de fornecedor comprido
+     empurrava a linha e a pagina inteira ganhava rolagem lateral. */
+  .item-row > * { min-width: 0; }
+  .alvo-toggle { cursor: pointer; }
   .item-check {
     width: 18px; height: 18px; border: 1px solid var(--muted2);
     display: flex; align-items: center; justify-content: center;
   }
   .item-row.selected .item-check { background: var(--gold); border-color: var(--gold); color: #0F1117; }
-  .item-name { font-size: 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .item-name {
+    font-size: 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    min-width: 0; overflow-wrap: anywhere;
+  }
   .item-name .forn {
     font-size: 11px; color: var(--gold);
     background: rgba(184,150,62,0.10);
@@ -61,10 +71,30 @@
   }
   .subgroup-head:first-child { margin-top: 0; }
   .subgroup-head .count { font-size: 11px; color: var(--muted); font-family: 'DM Sans', sans-serif; letter-spacing: 1px; }
-  .item-qty-wrap { display: none; align-items: center; gap: 6px; }
-  .item-row.selected .item-qty-wrap { display: flex; }
+  /* Quantidade sempre visivel: define-se ANTES de clicar em Adicionar. */
+  .item-qty-wrap { display: flex; align-items: center; gap: 6px; }
   .qty-btn { width: 26px; height: 26px; background: rgba(255,255,255,0.08); border: none; color: var(--text); font-size: 16px; cursor: pointer; }
   .qty-input { width: 60px; text-align: center; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: var(--text); font-family: inherit; font-size: 14px; padding: 4px; outline: none; }
+  .item-action {
+    background: rgba(184,150,62,0.15); border: 1px solid var(--gold); color: var(--gold);
+    font-family: inherit; font-size: 12px; letter-spacing: 0.5px; padding: 6px 14px;
+    cursor: pointer; transition: background 0.15s; white-space: nowrap;
+  }
+  .item-action:hover { background: rgba(184,150,62,0.25); }
+  .item-action.remove { background: transparent; border-color: var(--border-subtle); color: var(--muted); }
+  .item-action.remove:hover { color: var(--error); border-color: var(--error); }
+  .item-row.selected .item-action.add { display: none; }
+  .item-row:not(.selected) .item-action.remove { display: none; }
+  /* O comentario e de quem ja escolheu o item. Aberto em todas as linhas,
+     ele dobrava a altura do catalogo inteiro por causa de um campo que
+     quase ninguem preenche. */
+  .item-coment { grid-column: 1 / -1; margin-top: 6px; display: none; }
+  .item-row.selected .item-coment { display: block; }
+  .item-coment input {
+    width: 100%; background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-subtle); color: var(--text);
+    font-family: inherit; font-size: 12px; padding: 6px 10px; outline: none;
+  }
   body { padding-bottom: 80px; }
 
   .pdv-selector-bar {
@@ -87,7 +117,8 @@
       grid-template-columns: 22px 1fr auto;
       grid-template-areas:
         "check nome unit"
-        "check acts acts";
+        "check acts acts"
+        "coment coment coment";
       row-gap: 6px; padding: 12px; gap: 8px;
     }
     .item-row .item-check       { grid-area: check; }
@@ -98,11 +129,15 @@
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
       flex-wrap: wrap;
     }
+    .item-qty-wrap { background: rgba(255,255,255,0.04); padding: 4px; border: 1px solid var(--border-subtle); }
     .qty-btn { width: 34px; height: 34px; font-size: 18px; }
     .qty-input {
       width: 62px !important; font-size: 15px !important;
       padding: 6px 4px !important; min-height: 34px !important;
     }
+    .item-action { padding: 10px 14px !important; font-size: 13px !important; min-height: 40px; flex: 1 1 auto; }
+    .item-coment { grid-area: coment; }
+    .item-coment input { padding: 10px !important; font-size: 13px !important; }
   }
 </style>
 </head>
@@ -711,22 +746,28 @@ function renderExecItemRow(item, modo) {
   const media = item.media_diaria || 0;
   const alerta = sel && media > 0 && qty > media * 3
     ? `<span class="text-orange" style="font-size:11px">⚠ ${(qty/media).toFixed(1)}× média</span>` : '';
-  return `<div class="item-row ${sel?'selected':''}" onclick="toggleItem('${modo}','${item.id}')">
-    <div class="item-check">${sel?'✓':''}</div>
-    <div class="item-name">${escapeHtml(modo === 'req' ? nomeExibicao(item) : item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''} ${alerta}</div>
-    <div class="item-unit">${item.unidade}
-      <button class="hist-badge" onclick="event.stopPropagation();abrirUltimosPedidos('${modo}','${item.id}')"
-              title="Ver os 3 últimos pedidos deste item">⏱</button></div>
-    <div class="item-qty-wrap" onclick="event.stopPropagation()">
-      <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',-1)">−</button>
-      <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}" onchange="setQty('${modo}','${item.id}',this.value)">
-      <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',1)">+</button>
-    </div>
-    <div class="item-coment" onclick="event.stopPropagation()">
-      <input placeholder="Comentário sobre este item (opcional)..." value="${escapeHtml(sel?.comentario || '')}"
-             onchange="setComentario('${modo}','${item.id}',this.value)">
-    </div>
-  </div>`;
+  return `
+    <div class="item-row ${sel ? 'selected' : ''}" id="row-${modo}-${item.id}">
+      <div class="item-check alvo-toggle" onclick="toggleItem('${modo}','${item.id}')">${sel ? '✓' : ''}</div>
+      <div class="item-name alvo-toggle" onclick="toggleItem('${modo}','${item.id}')">${escapeHtml(modo === 'req' ? nomeExibicao(item) : item.nome)}${item.fornecedor_principal ? `<span class="forn">${escapeHtml(item.fornecedor_principal)}</span>` : ''} ${alerta}</div>
+      <div class="item-unit">${escapeHtml(item.unidade || '')}
+        <button class="hist-badge" onclick="event.stopPropagation();abrirUltimosPedidos('${modo}','${item.id}')"
+                title="Ver os 3 últimos pedidos deste item">⏱</button></div>
+      <div class="item-actions-cell">
+        <div class="item-qty-wrap">
+          <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',-1)">−</button>
+          <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}"
+                 onchange="setQty('${modo}','${item.id}',this.value)" onclick="this.select()">
+          <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',1)">+</button>
+        </div>
+        <button class="item-action add" onclick="adicionarItem('${modo}','${item.id}')">+ Adicionar</button>
+        <button class="item-action remove" onclick="removerItem('${modo}','${item.id}')">Remover</button>
+      </div>
+      <div class="item-coment">
+        <input placeholder="Comentário sobre este item (opcional)..." value="${escapeHtml(sel?.comentario || '')}"
+               onchange="setComentario('${modo}','${item.id}',this.value)">
+      </div>
+    </div>`;
 }
 
 function renderItens(modo) {
@@ -862,29 +903,51 @@ function enviarFromCart() {
   enviar(state.subAtual);
 }
 
-function toggleItem(modo, itemId) {
-  if (state.selecionados[modo][itemId]) delete state.selecionados[modo][itemId];
-  else {
-    const item = state.catalogo.find(i => i.id === itemId);
-    state.selecionados[modo][itemId] = { item, qty: 1 };
-  }
+// A quantidade e o comentario sao lidos do DOM, nao do estado: eles sao
+// preenchidos ANTES de o item entrar na lista, que e como funciona na
+// tela do cozinheiro.
+function adicionarItem(modo, itemId) {
+  const input = document.querySelector(`#row-${modo}-${itemId} .qty-input`);
+  const qty = input ? (parseFloat(String(input.value).replace(',', '.')) || 1) : 1;
+  if (qty <= 0) { showToast('Quantidade inválida.', 'error'); return; }
+  const item = state.catalogo.find(i => i.id === itemId);
+  if (!item) return;
+  const cx = document.querySelector(`#row-${modo}-${itemId} .item-coment input`);
+  state.selecionados[modo][itemId] = { item, qty, comentario: cx ? cx.value.trim() : '' };
   renderItens(modo);
+}
+function removerItem(modo, itemId) {
+  delete state.selecionados[modo][itemId];
+  renderItens(modo);
+}
+function toggleItem(modo, itemId) {
+  if (state.selecionados[modo][itemId]) removerItem(modo, itemId);
+  else adicionarItem(modo, itemId);
 }
 function changeQty(modo, itemId, delta) {
-  const s = state.selecionados[modo][itemId]; if (!s) return;
-  s.qty = Math.max(0.1, Math.round((s.qty + delta) * 10) / 10);
-  renderItens(modo);
+  // Mexe sempre no input, para dar para ajustar antes de Adicionar.
+  const input = document.querySelector(`#row-${modo}-${itemId} .qty-input`);
+  if (!input) return;
+  const cur = parseFloat(String(input.value).replace(',', '.')) || 1;
+  const novo = Math.max(0.1, Math.round((cur + delta) * 10) / 10);
+  input.value = novo;
+  // Se ja esta na lista, acompanha — sem re-render, para nao apagar o que
+  // foi digitado nas outras linhas.
+  const s = state.selecionados[modo][itemId];
+  if (s) { s.qty = novo; atualizarExecCartBar(); }
 }
 function setQty(modo, itemId, val) {
-  const s = state.selecionados[modo][itemId]; if (!s) return;
   const v = parseFloat(String(val).replace(',', '.'));
-  // Zero virava 1 sem avisar. Agora o campo volta ao valor anterior e
-  // quem quer tirar o item usa o proprio toggle da linha.
+  const s = state.selecionados[modo][itemId];
+  // Zero virava 1 sem avisar: a pessoa digitava 0 para "nao quero este" e
+  // o pedido saia com 1. O campo volta ao que era; para tirar, Remover.
   if (isNaN(v) || v <= 0) {
-    showToast('Quantidade tem que ser maior que zero. Para tirar o item, desmarque a linha.', 'error');
-    renderItens(modo);
+    showToast('Quantidade tem que ser maior que zero. Para tirar o item, use Remover.', 'error');
+    const input = document.querySelector(`#row-${modo}-${itemId} .qty-input`);
+    if (input) input.value = s ? s.qty : 1;
     return;
   }
+  if (!s) return;   // ainda nao esta na lista: o valor do input basta
   s.qty = v;
   renderItens(modo);
 }
