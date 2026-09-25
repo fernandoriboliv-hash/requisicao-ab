@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609251203">
+<link rel="stylesheet" href="style.css?v=202609251558">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609251203"></script>
+<script src="config.js?v=202609251558"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -114,7 +114,8 @@
     <div class="sub">A&amp;B · Chef</div>
   </div>
   <div class="sidebar-nav">
-    <div class="nav-item active" onclick="goTab('criar',this)"><span class="nav-icon">＋</span> Solicitar / Requisitar</div>
+    <div class="nav-item active" data-proc="compra" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
+    <div class="nav-item" data-proc="req" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição da Comissaria</div>
     <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas</div>
     <div class="nav-item" onclick="goTab('descartes',this)"><span class="nav-icon">⊘</span> Descartes</div>
     <div class="nav-item" onclick="goTab('inventario',this)"><span class="nav-icon">▦</span> Inventário</div>
@@ -176,10 +177,6 @@
       <span class="text-muted" style="font-size:12px">Sem aprovação — chefes não aprovam, só geram registro</span>
     </div>
 
-    <div class="tabs" style="margin-top:0">
-      <button class="tab active" data-proc="compra" id="sub-btn-compra" onclick="switchSub('compra')">Solicitar Compra</button>
-      <button class="tab" data-proc="req" id="sub-btn-req" onclick="switchSub('req')">Requisição da Comissaria</button>
-    </div>
 
     <!-- SUB-ABA COMPRA -->
     <div class="tab-content active" id="sub-compra">
@@ -499,6 +496,12 @@ window.addEventListener('load', async () => {
   atualizarAvisoCorte();
   setInterval(atualizarAvisoCorte, 60_000);
   montarChipsPdv();
+
+  // A tela abre em Solicitar Compra. Passa por goTab e nao so por
+  // switchSub para que o titulo do topo e a cor do processo ja cheguem
+  // certos — antes o cabecalho abria em "Solicitar / Requisitar", que
+  // era o nome de quando as duas coisas eram uma aba so.
+  goTab(state.subAtual, document.querySelector('.nav-item[data-proc="' + state.subAtual + '"]'));
 });
 
 function isoDate(d) { return d.toISOString().split('T')[0]; }
@@ -513,6 +516,8 @@ function ptDate(d) { const date = new Date(typeof d === 'string' && d.length ===
 const tabTitles = {
   inventario:   ['Inventário', 'Contagem do mês, item por item'],
   criar:        ['Solicitar / Requisitar', 'Criar compra ou requisição em nome de qualquer PDV'],
+  compra:       ['Solicitar Compra', 'Compra externa, em nome de qualquer PDV'],
+  req:          ['Requisição da Comissaria', 'Retirada da câmara, em nome de qualquer PDV'],
   compras:      ['Compras (todos os PDVs)', 'Histórico consolidado de solicitações de compra'],
   reqs:         ['Requisições (todos os PDVs)', 'Histórico consolidado de requisições da Comissaria'],
   niveis:       ['Consultar Estoque', 'Saldo teórico atual dos itens de câmara'],
@@ -598,19 +603,27 @@ async function abrirTelaInventario(pdvId) {
 }
 
 function goTab(aba, el) {
-  // Aqui as duas abas sao consulta, nao criacao — entao entra so a cor,
-  // que e o que separa uma lista da outra ao bater o olho.
-  if (aba === 'compras') document.body.dataset.processo = 'compra';
-  else if (aba === 'reqs') document.body.dataset.processo = 'req';
-  else if (aba === 'criar') document.body.dataset.processo = state.subAtual === 'req' ? 'req' : 'compra';
+  // Compra e requisição são DOIS processos, e o chef escolhe qual está
+  // fazendo pelo menu — igual ao cozinheiro e à Comissária (25/09/2026).
+  // Antes eram uma aba só com um par de botões dentro, e o passo de trocar
+  // de processo ficava escondido no meio da tela.
+  //
+  // Os dois abrem o mesmo tab-criar: o catálogo, o PDV em nome de quem
+  // se pede e o carrinho são os mesmos; o que muda é o processo, e é
+  // switchSub quem troca a lista, a cor e o botão de enviar.
+  const destino = (aba === 'compra' || aba === 'req') ? 'criar' : aba;
+
+  if (aba === 'compra' || aba === 'compras') document.body.dataset.processo = 'compra';
+  else if (aba === 'req' || aba === 'reqs')   document.body.dataset.processo = 'req';
   else delete document.body.dataset.processo;
-  state.abaAtual = aba;
+  state.abaAtual = destino;
   document.querySelectorAll('.tab-content').forEach(c => {
     if (['tab-criar','tab-compras','tab-reqs','tab-niveis','tab-divergencias','tab-rel','tab-inventario','tab-fichas','tab-descartes','tab-fechamento'].includes(c.id)) c.classList.remove('active');
   });
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('tab-' + aba).classList.add('active');
+  document.getElementById('tab-' + destino).classList.add('active');
   if (el) el.classList.add('active');
+  if (aba === 'compra' || aba === 'req') switchSub(aba);
   const [t, s] = tabTitles[aba] || [aba, ''];
   document.getElementById('topTitle').textContent = t;
   document.getElementById('topSub').textContent = s;
@@ -643,12 +656,12 @@ const switchAba = (aba) => {
 };
 function switchSub(sub) {
   state.subAtual = sub;
-  ['compra','req'].forEach(s => {
+  ['compra', 'req'].forEach(s => {
     document.getElementById('sub-' + s).classList.toggle('active', s === sub);
-    document.getElementById('sub-btn-' + s).classList.toggle('active', s === sub);
+    // Os botões da faixa saíram quando o menu passou a separar os dois
+    // processos; a chamada continua tolerante para o caso de voltarem.
+    document.getElementById('sub-btn-' + s)?.classList.toggle('active', s === sub);
   });
-  // A tela de criar pedido e uma so para os dois processos: e aqui que o
-  // executivo escolhe qual esta fazendo, entao e aqui que a cor troca.
   document.body.dataset.processo = sub === 'req' ? 'req' : 'compra';
   atualizarExecCartBar();
 }
