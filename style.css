@@ -2004,3 +2004,8 @@ body[data-processo] #execCartBtn:disabled { background: var(--muted2); color: va
   letter-spacing: .2px;
 }
 .peso-bruto strong { color: var(--text); font-weight: 600; }
+
+/* Atalhos de periodo do fechamento. Quem manda o relatorio semanal faz
+   isso no celular, entao o alvo do toque tem que ser confortavel. */
+.fq-atalhos { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.fq-atalhos .btn { padding: 6px 12px; }

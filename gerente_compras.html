@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609242049">
+<link rel="stylesheet" href="style.css?v=202609251150">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609242049"></script>
+<script src="config.js?v=202609251150"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -595,14 +595,22 @@
   <div class="tab-content" id="tab-fechamento">
     <div class="main full">
       <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-        <select class="select" id="fec-tipo" style="max-width:190px" onchange="montarSeletorPdv();gerarFechamento()">
-          <option value="requisicao">Requisição do mês</option>
+        <select class="select" id="fec-tipo" style="max-width:190px" onchange="montarSeletorPdv();trocarTipoFechamento();gerarFechamento()">
+          <option value="requisicao">Requisição (período)</option>
           <option value="inventario">Inventário do mês</option>
         </select>
         <span class="text-muted" style="font-size:12px">PDV</span>
         <select class="select" id="fec-pdv" style="max-width:220px"></select>
-        <span class="text-muted" style="font-size:12px">Mês</span>
-        <input class="input" type="month" id="fec-mes" style="max-width:160px">
+        <span id="fec-mes-wrap">
+          <span class="text-muted" style="font-size:12px">Mês</span>
+          <input class="input" type="month" id="fec-mes" style="max-width:160px">
+        </span>
+        <span id="fec-periodo-wrap" style="display:flex;gap:8px;align-items:center">
+          <span class="text-muted" style="font-size:12px">de</span>
+          <input class="input" type="date" id="fec-de" style="max-width:160px">
+          <span class="text-muted" style="font-size:12px">até</span>
+          <input class="input" type="date" id="fec-ate" style="max-width:160px">
+        </span>
         <button class="btn btn-gold" onclick="gerarFechamento()">Gerar</button>
       </div>
       <div id="fec-painel"></div>
@@ -1995,8 +2003,24 @@ function montarSeletorPdv() {
   if (antes && [...sel.options].some(o => o.value === antes)) sel.value = antes;
 }
 
+// A requisicao passa a aceitar PERIODO, nao so mes fechado (25/09/2026):
+// algumas cozinhas mandam o proprio relatorio ao Cost Controller toda
+// semana ou a cada quinze dias. O inventario continua por competencia —
+// ele e mensal por natureza, nao por conveniencia de tela.
+function trocarTipoFechamento() {
+  const inv = document.getElementById('fec-tipo').value === 'inventario';
+  document.getElementById('fec-mes-wrap').style.display = inv ? '' : 'none';
+  document.getElementById('fec-periodo-wrap').style.display = inv ? 'none' : 'flex';
+}
+
 function initFechamento() {
   montarSeletorPdv();
+  trocarTipoFechamento();
+  const hoje = new Date();
+  const pDe = document.getElementById('fec-de');
+  const pAte = document.getElementById('fec-ate');
+  if (pDe && !pDe.value)   pDe.value  = isoDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+  if (pAte && !pAte.value) pAte.value = isoDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0));
   const mes = document.getElementById('fec-mes');
   if (mes && !mes.value) {
     // Mês corrente. O fechamento acontece nos últimos dias do mês, sobre o
@@ -2009,12 +2033,21 @@ function initFechamento() {
 async function gerarFechamento() {
   const tipo = document.getElementById('fec-tipo').value;
   const pdvId = document.getElementById('fec-pdv').value;
-  const mes = document.getElementById('fec-mes').value;
-  if (!pdvId || !mes) { showToast('Escolha o PDV e o mês.', 'error'); return; }
+  if (!pdvId) { showToast('Escolha o PDV.', 'error'); return; }
 
-  const [ano, m] = mes.split('-').map(Number);
-  const de  = `${mes}-01`;
-  const ate = new Date(ano, m, 0).toISOString().slice(0, 10);
+  let de, ate;
+  if (tipo === 'inventario') {
+    const mes = document.getElementById('fec-mes').value;
+    if (!mes) { showToast('Escolha o mês.', 'error'); return; }
+    const [ano, m] = mes.split('-').map(Number);
+    de  = `${mes}-01`;
+    ate = isoDate(new Date(ano, m, 0));
+  } else {
+    de  = document.getElementById('fec-de').value;
+    ate = document.getElementById('fec-ate').value;
+    if (!de || !ate) { showToast('Escolha o período.', 'error'); return; }
+    if (de > ate) { showToast('A data inicial está depois da final.', 'error'); return; }
+  }
 
   const cont = document.getElementById('fecContainer');
   cont.innerHTML = '<div class="loading-text">Gerando...</div>';

@@ -1922,7 +1922,7 @@ async function montarInventario(seletor, opts) {
   _invRender();
 }
 
-// As produções do açougue não têm linha entre os 725 itens da planilha —
+// As produções do açougue não têm linha entre os itens da planilha —
 // o lugar delas é a aba 2, por receita. Aqui elas aparecem como itens
 // nossos, e a exportação soma os que caem na mesma receita.
 async function _invCarregarProducoes() {
@@ -5149,15 +5149,47 @@ async function montarFechamentoReq(seletor) {
   _fqTela();
 }
 
+// Primeiro e ultimo dia do mes corrente, no fuso local. `toISOString()`
+// sozinho volta um dia em UTC-3 e o dia 01 virava o 30 do mes anterior.
+function _fqDia(d) {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+function _fqPeriodoPadrao() {
+  const h = new Date();
+  return { de: _fqDia(new Date(h.getFullYear(), h.getMonth(), 1)),
+           ate: _fqDia(new Date(h.getFullYear(), h.getMonth() + 1, 0)) };
+}
+
+// Atalhos de periodo. O mes inteiro continua sendo o caso normal — o
+// fechamento do financeiro é mensal —, mas quem manda o próprio relatório
+// para o Cost Controller toda semana não deveria ter que fazer conta de
+// calendário no celular (pedido de 25/09/2026).
+function _fqAtalho(quantos) {
+  const h = new Date();
+  if (quantos === 'mes') {
+    const p = _fqPeriodoPadrao();
+    document.getElementById('fq-de').value = p.de;
+    document.getElementById('fq-ate').value = p.ate;
+  } else {
+    const ate = new Date(h.getFullYear(), h.getMonth(), h.getDate());
+    const de = new Date(ate.getTime() - (quantos - 1) * 86400000);
+    document.getElementById('fq-de').value = _fqDia(de);
+    document.getElementById('fq-ate').value = _fqDia(ate);
+  }
+  _fqGerar();
+}
+
 function _fqTela() {
-  // Mês corrente: o fechamento acontece nos últimos dias do mês, sobre o
-  // mês que está terminando. Abrir no anterior obrigaria a corrigir
-  // sempre, e quem esquecesse exportaria o mês errado.
-  const mes = document.getElementById('fq-mes')?.value || mesCorrente();
+  // O periodo abre no mes corrente: o fechamento acontece nos ultimos dias
+  // do mes, sobre o mes que esta terminando. Quem fecha no dia 1o ou 2 do
+  // mes seguinte troca as datas.
+  const ant = _fqPeriodoPadrao();
+  const de  = document.getElementById('fq-de')?.value  || ant.de;
+  const ate = document.getElementById('fq-ate')?.value || ant.ate;
   const pdv = document.getElementById('fq-pdv')?.value || _FQ.pdvs[0].id;
   const um = _FQ.pdvs.length === 1;
   _FQ.raiz.innerHTML = `
-    <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+    <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
       ${um ? `<input type="hidden" id="fq-pdv" value="${_FQ.pdvs[0].id}">
         <span class="text-muted" style="font-size:12px">${escapeHtml(_FQ.pdvs[0].nome)}</span>`
       : `<span class="text-muted" style="font-size:12px">Cozinha</span>
@@ -5165,23 +5197,28 @@ function _fqTela() {
           ${_FQ.pdvs.map(p => `<option value="${p.id}"${p.id === pdv ? ' selected' : ''}
             >${escapeHtml(p.nome)}</option>`).join('')}
         </select>`}
-      <span class="text-muted" style="font-size:12px">Mês</span>
-      <input class="input" type="month" id="fq-mes" style="max-width:160px" value="${mes}">
+      <span class="text-muted" style="font-size:12px">de</span>
+      <input class="input" type="date" id="fq-de" style="max-width:160px" value="${de}">
+      <span class="text-muted" style="font-size:12px">até</span>
+      <input class="input" type="date" id="fq-ate" style="max-width:160px" value="${ate}">
       <button class="btn btn-gold" onclick="_fqGerar()">Gerar</button>
     </div>
+    <div class="fq-atalhos">
+      <button class="btn btn-sm btn-outline" onclick="_fqAtalho('mes')">Mês inteiro</button>
+      <button class="btn btn-sm btn-outline" onclick="_fqAtalho(7)">Últimos 7 dias</button>
+      <button class="btn btn-sm btn-outline" onclick="_fqAtalho(15)">Últimos 15 dias</button>
+    </div>
     <div id="fq-kpis" class="stats-grid" style="display:none"></div>
-    <div id="fqContainer"><div class="empty-text">Escolha o mês e clique em Gerar.</div></div>`;
+    <div id="fqContainer"><div class="empty-text">Escolha o período e clique em Gerar.</div></div>`;
 }
 
 async function _fqGerar() {
   if (_FQ.gerando) return;
   const pdvId = document.getElementById('fq-pdv')?.value;
-  const mes   = document.getElementById('fq-mes')?.value;
-  if (!pdvId || !mes) { showToast('Escolha o mês.', 'error'); return; }
-
-  const [ano, m] = mes.split('-').map(Number);
-  const de  = `${mes}-01`;
-  const ate = new Date(ano, m, 0).toISOString().slice(0, 10);
+  const de    = document.getElementById('fq-de')?.value;
+  const ate   = document.getElementById('fq-ate')?.value;
+  if (!pdvId || !de || !ate) { showToast('Escolha o período.', 'error'); return; }
+  if (de > ate) { showToast('A data inicial está depois da final.', 'error'); return; }
 
   const cont = document.getElementById('fqContainer');
   cont.innerHTML = '<div class="loading-text">Gerando...</div>';
