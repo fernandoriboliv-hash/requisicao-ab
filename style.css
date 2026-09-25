@@ -2009,3 +2009,22 @@ body[data-processo] #execCartBtn:disabled { background: var(--muted2); color: va
    isso no celular, entao o alvo do toque tem que ser confortavel. */
 .fq-atalhos { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
 .fq-atalhos .btn { padding: 6px 12px; }
+
+/* Lista curta do inventario (25/09/2026). A chave fica logo abaixo dos
+   chips de commodity, que e onde a pessoa ja esta olhando quando decide
+   o que quer ver. */
+.inv-chave {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 10px; font-size: 13px; color: var(--text); cursor: pointer;
+}
+.inv-chave input { width: 16px; height: 16px; accent-color: var(--gold); }
+.inv-chave em { font-style: normal; font-size: 11.5px; color: var(--muted); }
+/* Item que veio da busca e nao esta na lista da cozinha: fica visivel,
+   mas dito. Sem a marca, parece que a lista curta nao esta funcionando. */
+.inv-item.fora-da-lista { border-left: 2px solid var(--muted2); }
+.inv-incluir {
+  display: inline-block; margin-left: 8px; padding: 2px 8px;
+  background: none; border: 1px solid var(--border);
+  color: var(--gold-light); font-size: 11px; cursor: pointer;
+}
+.inv-incluir:hover { background: rgba(184,150,62,0.12); }

@@ -1842,6 +1842,11 @@ const _INV = {
   contagem: new Map(), // chave -> { id, qtd }
   commodity: null,     // filtro atual
   busca: '',
+  // Lista curta (migration 83): o que ESTA cozinha contou no mes passado
+  // mais o que ela requisitou neste. `extras` sao os itens que a pessoa
+  // achou na busca e mandou incluir — valem enquanto a tela estiver
+  // aberta; a partir do momento em que recebem contagem, ficam sozinhos.
+  usarLista: false, listaCurta: null, extras: new Set(),
   salvando: new Set(),
 };
 
@@ -1917,6 +1922,13 @@ async function montarInventario(seletor, opts) {
 
   await _invCarregarLivres();
 
+  const { data: cfg } = await sb.from('pdvs')
+    .select('inventario_lista_curta').eq('id', _INV.pdvId).maybeSingle();
+  _INV.usarLista = !!(cfg && cfg.inventario_lista_curta);
+  _INV.listaCurta = null;
+  _INV.extras = new Set();
+  if (_INV.usarLista) await _invCarregarListaCurta();
+
   _INV.commodity = null;
   _INV.busca = '';
   _invRender();
@@ -1963,25 +1975,68 @@ async function _invCarregarProducoes() {
 
 function _invTodos() { return _INV.linhas.concat(_INV.producoes); }
 
+async function _invCarregarListaCurta() {
+  const { data, error } = await sb.rpc('inventario_lista_curta',
+    { p_pdv: _INV.pdvId, p_competencia: _INV.competencia });
+  // Erro aqui nao pode esconder item: sem lista, vale a planilha inteira.
+  _INV.listaCurta = error ? null : new Set((data || []).map(x => x.chave));
+}
+
+// Cozinha sem historico devolve lista vazia — na primeira contagem dela,
+// ou num mes em que nao requisitou nada. Esconder tudo seria pior que
+// mostrar tudo, entao a chave fica ligada e a planilha inteira aparece.
+function _invListaAtiva() {
+  return !!(_INV.usarLista && _INV.listaCurta && _INV.listaCurta.size);
+}
+
+function _invNaLista(l) {
+  if (!_invListaAtiva()) return true;
+  const k = _invChave(l);
+  return _INV.listaCurta.has(k) || _INV.extras.has(k) || _INV.contagem.has(k);
+}
+
+async function _invTrocarLista(ligar) {
+  const { error } = await sb.rpc('definir_lista_curta',
+    { p_pdv: _INV.pdvId, p_valor: !!ligar });
+  if (error) { showToast('Nao consegui mudar: ' + error.message, 'error'); return; }
+  _INV.usarLista = !!ligar;
+  if (ligar && !_INV.listaCurta) await _invCarregarListaCurta();
+  _invRender();
+}
+
+// A busca alcanca a planilha inteira mesmo com a lista ligada. Quem achou
+// o item assim pode mande-lo para a lista, e ele fica visivel depois de
+// limpar a busca — sem isso a pessoa teria que buscar de novo a cada item.
+function _invIncluir(k) {
+  _INV.extras.add(k);
+  showToast('Item incluido na contagem desta cozinha.', 'success');
+  _invRender();
+}
+
 function _invFiltrados() {
   const q = normalizarBusca(_INV.busca || '');
   return _invTodos().filter(l => {
     if (_INV.commodity && String(l.commodity || '').trim() !== _INV.commodity) return false;
-    if (!q) return true;
-    return itemCasaBusca(l.nome, q);
+    // Buscando, a planilha inteira responde. A lista curta encurta o que
+    // aparece de saida, nao o que existe.
+    if (q) return itemCasaBusca(l.nome, q);
+    return _invNaLista(l);
   });
 }
 
 function _invRender() {
+  // Com a lista ligada, o universo da contagem e a lista — contar "12 de
+  // 764" quando a cozinha so tem 90 itens nao diz nada sobre o progresso.
+  const universo = _invTodos().filter(l => _invNaLista(l));
   const contados = _INV.contagem.size;
-  const total = _invTodos().length;
+  const total = universo.length;
   const fechado = _INV.status === 'fechado';
 
-  const commodities = [...new Set(_invTodos()
+  const commodities = [...new Set(universo
     .map(l => String(l.commodity || '').trim()).filter(Boolean))];
-  const contadosDe = (c) => _invTodos()
+  const contadosDe = (c) => universo
     .filter(l => String(l.commodity || '').trim() === c && _INV.contagem.has(_invChave(l))).length;
-  const totalDe = (c) => _invTodos()
+  const totalDe = (c) => universo
     .filter(l => String(l.commodity || '').trim() === c).length;
 
   const lista = _invFiltrados();
@@ -2012,6 +2067,16 @@ function _invRender() {
         + ' onclick="_invFiltrar(\'' + _escEd(c) + '\')">' + escapeHtml(c)
         + ' <em>' + contadosDe(c) + '/' + totalDe(c) + '</em></button>').join('')
     +   '</div>'
+    +   '<label class="inv-chave">'
+    +     '<input type="checkbox"' + (_INV.usarLista ? ' checked' : '')
+    +       ' onchange="_invTrocarLista(this.checked)">'
+    +     '<span>Mostrar só o que esta cozinha usa</span>'
+    +     (_INV.usarLista && !_invListaAtiva()
+        ? '<em>ainda sem histórico — a planilha inteira está à vista</em>'
+        : _invListaAtiva()
+          ? '<em>' + total + ' de ' + _invTodos().length + ' itens · a busca acha o resto</em>'
+          : '')
+    +   '</label>'
     + '</div>'
     + '<div class="inv-lista" id="inv-lista">'
     +   (lista.length ? lista.map(l => _invLinha(l, fechado)).join('')
@@ -2033,10 +2098,17 @@ function _invLinha(l, fechado) {
   const c = _INV.contagem.get(k);
   const tem = !!c;
   const zero = tem && c.qtd === 0;
+  // So aparece quando a busca trouxe algo de fora da lista da cozinha.
+  const fora = _invListaAtiva() && !_invNaLista(l);
   return ''
-    + '<div class="inv-item' + (tem ? ' contado' : '') + (zero ? ' zerado' : '') + '" id="inv-' + k + '">'
+    + '<div class="inv-item' + (tem ? ' contado' : '') + (zero ? ' zerado' : '')
+    +   (fora ? ' fora-da-lista' : '') + '" id="inv-' + k + '">'
     +   '<div class="inv-nome">' + escapeHtml(l.nome)
     +     (l.receita ? '<span class="inv-receita">' + escapeHtml(l.receita) + '</span>' : '')
+    +     (fora && !fechado
+        ? '<button class="inv-incluir" onclick="_invIncluir(\'' + k + '\')">'
+          + '+ incluir na minha lista</button>'
+        : '')
     +   '</div>'
     +   '<div class="inv-campo">'
     +     '<input class="input inv-qtd" type="text" inputmode="decimal"'
