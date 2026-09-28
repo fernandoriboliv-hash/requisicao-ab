@@ -1860,6 +1860,7 @@ const _INV = {
   // aberta; a partir do momento em que recebem contagem, ficam sozinhos.
   usarLista: false, listaCurta: null, extras: new Set(),
   salvando: new Set(),
+  foraPlanilha: [],
 };
 
 const _invChave = (l) => (l.linha_id ? 'L' + l.linha_id : 'I' + l.item_id);
@@ -1938,6 +1939,7 @@ async function montarInventario(seletor, opts) {
   _INV.linhas = linhas.map(l => ({ ...l, linha_id: l.id, item_id: null }));
 
   _INV.producoes = await _invCarregarProducoes();
+  _INV.foraPlanilha = await _invCarregarForaDaPlanilha();
 
   const { data: cont } = await sb.from('inventario_contagens')
     .select('id, linha_id, item_id, quantidade').eq('inventario_id', inv.id);
@@ -1951,6 +1953,10 @@ async function montarInventario(seletor, opts) {
   _INV.usarLista = !!(cfg && cfg.inventario_lista_curta);
   _INV.listaCurta = null;
   _INV.extras = new Set();
+  // O que a cozinha tem e a planilha nao lista entra sempre: a lista curta
+  // e montada a partir das linhas da planilha, entao esses itens nao teriam
+  // chave nenhuma para casar e sumiriam da contagem (migration 84).
+  _INV.foraPlanilha.forEach(l => _INV.extras.add(_invChave(l)));
   if (_INV.usarLista) await _invCarregarListaCurta();
 
   _INV.commodity = null;
@@ -1997,7 +2003,27 @@ async function _invCarregarProducoes() {
   return out;
 }
 
-function _invTodos() { return _INV.linhas.concat(_INV.producoes); }
+function _invTodos() {
+  return _INV.linhas.concat(_INV.producoes, _INV.foraPlanilha);
+}
+
+// Mercadoria que esta cozinha contou no mes passado ou requisitou no mes e
+// que nao tem linha na planilha do controller. Sao as que mais giram —
+// ATUM PEDACO PCT, SALMAO TARTAR, FILE MIGNON MOIDO — e ate agora nenhuma
+// aparecia na contagem. A contagem delas grava por item_id, igual a
+// producao do acougue; na exportacao saem num bloco de texto, porque nao
+// ha coluna da planilha onde encaixa-las (pedido do Fernando, 28/09/2026).
+async function _invCarregarForaDaPlanilha() {
+  const { data, error } = await sb.rpc('inventario_itens_fora_da_planilha',
+    { p_pdv: _INV.pdvId, p_competencia: _INV.competencia });
+  // Sem a migration 84 a funcao nao existe: a tela segue sem esses itens,
+  // que e exatamente como ela era antes.
+  if (error) return [];
+  return (data || []).map(x => ({
+    linha_id: null, item_id: x.item_id, nome: x.nome,
+    uom: x.uom, commodity: x.commodity || 'FORA DA PLANILHA',
+  }));
+}
 
 async function _invCarregarListaCurta() {
   const { data, error } = await sb.rpc('inventario_lista_curta',
