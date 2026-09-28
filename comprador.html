@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprador — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609251604">
+<link rel="stylesheet" href="style.css?v=202609281537">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609251604"></script>
+<script src="config.js?v=202609281537"></script>
 <style>
   /* Bloco de um fornecedor na fila de aprovados */
   .forn-bloco {
@@ -1607,7 +1607,7 @@ function filaPorFornecedor(grupos) {
             <tbody>${linhas}</tbody>
           </table>
           <div class="form-actions mt-3">
-            <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();abrirGerarPO('${escapeAttr(g.fornecedor)}')">
+            <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();abrirGerarPO('${_jsAttr(g.fornecedor)}')">
               Revisar e gerar ordem
             </button>
           </div>

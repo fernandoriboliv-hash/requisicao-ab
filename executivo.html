@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609251604">
+<link rel="stylesheet" href="style.css?v=202609281537">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609251604"></script>
+<script src="config.js?v=202609281537"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -756,7 +756,7 @@ function renderExecItemRow(item, modo) {
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
           <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',-1)">−</button>
-          <input class="qty-input" type="number" min="0.1" step="0.1" value="${qty}"
+          <input class="qty-input" type="text" inputmode="${modoTeclado(item.unidade)}" value="${qty}"
                  onchange="setQty('${modo}','${item.id}',this.value)" onclick="this.select()">
           <button class="qty-btn" onclick="changeQty('${modo}','${item.id}',1)">+</button>
         </div>
@@ -908,10 +908,10 @@ function enviarFromCart() {
 // tela do cozinheiro.
 function adicionarItem(modo, itemId) {
   const input = document.querySelector(`#row-${modo}-${itemId} .qty-input`);
-  const qty = input ? (parseFloat(String(input.value).replace(',', '.')) || 1) : 1;
-  if (qty <= 0) { showToast('Quantidade inválida.', 'error'); return; }
   const item = state.catalogo.find(i => i.id === itemId);
   if (!item) return;
+  const { n: qty, erro } = numQtd(input ? input.value : '1', { unidade: item.unidade });
+  if (erro) { showToast(erro, 'error'); return; }
   const cx = document.querySelector(`#row-${modo}-${itemId} .item-coment input`);
   state.selecionados[modo][itemId] = { item, qty, comentario: cx ? cx.value.trim() : '' };
   renderItens(modo);
@@ -928,8 +928,13 @@ function changeQty(modo, itemId, delta) {
   // Mexe sempre no input, para dar para ajustar antes de Adicionar.
   const input = document.querySelector(`#row-${modo}-${itemId} .qty-input`);
   if (!input) return;
-  const cur = parseFloat(String(input.value).replace(',', '.')) || 1;
-  const novo = Math.max(0.1, Math.round((cur + delta) * 10) / 10);
+  const item = state.catalogo.find(i => i.id === itemId);
+  const inteiro = !item || !unidadeFracionavel(item.unidade);
+  const cur = numBR(input.value) || 1;
+  // Item contado anda de 1 em 1; item pesado, de 0,1 em 0,1.
+  const novo = inteiro
+    ? Math.max(1, Math.round(cur) + delta)
+    : Math.max(0.1, Math.round((cur + delta * 0.1) * 10) / 10);
   input.value = novo;
   // Se ja esta na lista, acompanha — sem re-render, para nao apagar o que
   // foi digitado nas outras linhas.
@@ -937,12 +942,18 @@ function changeQty(modo, itemId, delta) {
   if (s) { s.qty = novo; atualizarExecCartBar(); }
 }
 function setQty(modo, itemId, val) {
-  const v = parseFloat(String(val).replace(',', '.'));
   const s = state.selecionados[modo][itemId];
+  const item = state.catalogo.find(i => i.id === itemId);
   // Zero virava 1 sem avisar: a pessoa digitava 0 para "nao quero este" e
   // o pedido saia com 1. O campo volta ao que era; para tirar, Remover.
-  if (isNaN(v) || v <= 0) {
-    showToast('Quantidade tem que ser maior que zero. Para tirar o item, use Remover.', 'error');
+  //
+  // Numero quebrado so vale se a unidade for de peso — quem decide e
+  // numQtd, que tambem devolve o motivo da recusa.
+  const { n: v, erro } = numQtd(val, { unidade: item && item.unidade });
+  if (erro) {
+    showToast(erro === 'Quantidade tem que ser maior que zero.'
+      ? 'Quantidade tem que ser maior que zero. Para tirar o item, use Remover.'
+      : erro, 'error');
     const input = document.querySelector(`#row-${modo}-${itemId} .qty-input`);
     if (input) input.value = s ? s.qty : 1;
     return;

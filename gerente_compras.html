@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609251604">
+<link rel="stylesheet" href="style.css?v=202609281537">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609251604"></script>
+<script src="config.js?v=202609281537"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -653,7 +653,7 @@
         </div>
         <div class="form-row col2">
           <div><label class="field-label">Fornecedor principal (opcional)</label><input class="input" id="c-forn"></div>
-          <div><label class="field-label">Média diária histórica</label><input class="input" id="c-media" type="number" step="0.01" min="0" value="0"></div>
+          <div><label class="field-label">Média diária histórica</label><input class="input" id="c-media" type="text" inputmode="decimal" value="0"></div>
         </div>
         <div class="form-actions">
           <button class="btn btn-primary" onclick="salvarItem()">Salvar Item</button>
@@ -797,7 +797,7 @@
         </div>
       </div>
       <div class="field"><label class="field-label">Preço inicial (opcional)</label>
-        <input class="input" id="pm-preco" type="number" step="0.01" min="0">
+        <input class="input" id="pm-preco" type="text" inputmode="decimal">
       </div>
       <div id="pm-parecidos"></div>
     </div>
@@ -1377,7 +1377,7 @@ function renderAddItens() {
         <div class="add-item-unit">${item.unidade || '—'}</div>
         <div class="add-item-qty-wrap">
           <button class="add-qty-btn" onclick="changeQtyAdd('${item.id}',-1)">−</button>
-          <input class="add-qty-input" type="number" min="0.1" step="0.1" value="1" onclick="this.select()">
+          <input class="add-qty-input" type="text" inputmode="${modoTeclado(item.unidade)}" value="1" onclick="this.select()">
           <button class="add-qty-btn" onclick="changeQtyAdd('${item.id}',1)">+</button>
           <button class="add-item-btn" onclick="adicionarItemManual('${item.id}')">+ Adicionar</button>
         </div>
@@ -1391,9 +1391,12 @@ function renderAddItens() {
 function changeQtyAdd(itemId, delta) {
   const input = document.querySelector(`#addrow-${itemId} .add-qty-input`);
   if (!input) return;
-  const cur = parseFloat(input.value) || 1;
-  const novo = Math.max(0.1, Math.round((cur + delta) * 10) / 10);
-  input.value = novo;
+  const item = state.catalogo.find(i => i.id === itemId);
+  const inteiro = !item || !unidadeFracionavel(item.unidade);
+  const cur = numBR(input.value) || 1;
+  input.value = inteiro
+    ? Math.max(1, Math.round(cur) + delta)
+    : Math.max(0.1, Math.round((cur + delta * 0.1) * 10) / 10);
 }
 
 async function carregarLista() {
@@ -1502,7 +1505,7 @@ async function carregarLista() {
           <div class="text-muted">${it.unidade||'—'}</div>
           <div class="lista-pdv-list">${it.pdvs.length ? it.pdvs.map(p => `${escapeHtml(p.pdv)}: ${p.qtd.toFixed(1)}`).join(' · ') : '<span class="text-muted">—</span>'}</div>
           <div class="lista-qtd-cell">
-            <input class="lista-final-input" type="number" step="0.1" min="0"
+            <input class="lista-final-input" type="text" inputmode="decimal"
               value="${(it.qtd_final||0).toFixed(1)}"
               onchange="setQtdFinal('${cat}','${kEsc}',this.value)">
             <button class="btn-remove-lista" onclick="removerItemLista('${cat}','${kEsc}','${it.origem}')" title="Remover da lista">✕</button>
@@ -1517,8 +1520,8 @@ async function carregarLista() {
 
 function setQtdFinal(cat, key, val) {
   if (!listaConsolidada) return;
-  const v = parseFloat(val);
-  if (isNaN(v) || v < 0) return;
+  const v = numBR(val);
+  if (v === null || v < 0) return;
   if (listaConsolidada[cat] && listaConsolidada[cat][key]) {
     listaConsolidada[cat][key].qtd_final = v;
   }
@@ -1533,10 +1536,10 @@ function setQtdFinal(cat, key, val) {
 function adicionarItemManual(itemId) {
   if (!itemId) return;
   const input = document.querySelector(`#addrow-${itemId} .add-qty-input`);
-  const qty = input ? parseFloat(input.value) : NaN;
-  if (!qty || qty <= 0) { showToast('Quantidade inválida.', 'error'); return; }
   const item = state.catalogo.find(i => i.id === itemId);
   if (!item) { showToast('Item não encontrado.', 'error'); return; }
+  const { n: qty, erro } = numQtd(input ? input.value : '', { unidade: item.unidade });
+  if (erro) { showToast(erro, 'error'); return; }
   const data = document.getElementById('lista-data').value || isoDate(new Date());
   if (!listaManualItens[data]) listaManualItens[data] = [];
   const cat = item.categoria || 'diversos';
@@ -2720,7 +2723,7 @@ function renderCatalogoTable() {
           <option value="peso"${it.pede_por === 'pacote' ? '' : ' selected'}>Peso</option>
           <option value="pacote"${it.pede_por === 'pacote' ? ' selected' : ''}>Pacote</option>
         </select>
-        ${it.pede_por === 'pacote' ? `<input class="input" type="number" step="0.001" min="0"
+        ${it.pede_por === 'pacote' ? `<input class="input" type="text" inputmode="decimal"
           style="width:82px;font-size:11px;padding:4px;margin-top:4px" placeholder="${escapeHtml(it.unidade)}/pct"
           value="${it.peso_medio_pacote ?? ''}" onchange="setPesoPacote('${it.id}',this.value)"
           title="Peso médio de UM pacote. Deixe em branco — o sistema aprende na primeira pesagem.">` : ''}
@@ -3064,8 +3067,8 @@ function msgErroPacote(err) {
 }
 
 async function setPesoPacote(id, valor) {
-  const peso = parseFloat(valor);
-  const patch = { peso_medio_pacote: isNaN(peso) || peso <= 0 ? null : peso };
+  const peso = numBR(valor);
+  const patch = { peso_medio_pacote: peso === null || peso <= 0 ? null : peso };
   const { error } = await sb.from('itens').update(patch).eq('id', id);
   if (error) { showToast(msgErroPacote(error), 'error'); return; }
   const it = state.catalogo.find(x => x.id === id);
@@ -3145,8 +3148,8 @@ async function editarPreco(itemId) {
   const atual = state.precosMap[itemId];
   const valor = prompt(`Preço unitário de "${item.nome}" (${item.unidade})`, atual ? atual.preco_unitario : '');
   if (valor === null) return;
-  const num = parseFloat(String(valor).replace(',', '.'));
-  if (isNaN(num) || num < 0) { showToast('Valor inválido.', 'error'); return; }
+  const num = numBR(valor);
+  if (num === null || num < 0) { showToast('Valor inválido.', 'error'); return; }
   const fornecedor = prompt('Fornecedor (opcional):', atual?.fornecedor || item.fornecedor_principal || '');
 
   const { error } = await sb.from('precos').insert({
@@ -3476,7 +3479,7 @@ function renderItemRowRC(item) {
       <div class="add-item-unit">${item.unidade || '—'}</div>
       <div class="add-item-qty-wrap">
         <button class="add-qty-btn" onclick="changeQtyRC('${item.id}',-1)">−</button>
-        <input class="add-qty-input" type="number" min="0.1" step="0.1" value="${qty}" onclick="this.select()" oninput="setQtyRC('${item.id}',this.value)">
+        <input class="add-qty-input" type="text" inputmode="${modoTeclado(item.unidade)}" value="${qty}" onclick="this.select()" onchange="setQtyRC('${item.id}',this.value)">
         <button class="add-qty-btn" onclick="changeQtyRC('${item.id}',1)">+</button>
         ${sel
           ? `<button class="add-item-btn" style="background:transparent;border-color:var(--border-subtle);color:var(--muted)" onclick="removerItemRC('${item.id}')">Remover</button>`
@@ -3543,22 +3546,28 @@ function renderItensReqCreate() {
 function changeQtyRC(itemId, delta) {
   const input = document.querySelector(`#rcrow-${itemId} .add-qty-input`);
   if (!input) return;
-  const cur = parseFloat(input.value) || 1;
-  const novo = Math.max(0.1, Math.round((cur + delta) * 10) / 10);
+  const item = state.catalogo.find(i => i.id === itemId);
+  const inteiro = !item || !unidadeFracionavel(item.unidade);
+  const cur = numBR(input.value) || 1;
+  const novo = inteiro
+    ? Math.max(1, Math.round(cur) + delta)
+    : Math.max(0.1, Math.round((cur + delta * 0.1) * 10) / 10);
   input.value = novo;
   const s = state.reqNew.selecionados[itemId];
   if (s) { s.qty = novo; atualizarCartBarRC(); }
 }
 function setQtyRC(itemId, val) {
   const s = state.reqNew.selecionados[itemId];
-  const v = parseFloat(val);
-  if (s && !isNaN(v) && v > 0) { s.qty = v; atualizarCartBarRC(); }
+  const item = state.catalogo.find(i => i.id === itemId);
+  const { n: v, erro } = numQtd(val, { unidade: item && item.unidade });
+  if (erro) { showToast(erro, 'error'); return; }
+  if (s) { s.qty = v; atualizarCartBarRC(); }
 }
 function adicionarItemRC(itemId) {
   const input = document.querySelector(`#rcrow-${itemId} .add-qty-input`);
-  const qty = input ? (parseFloat(input.value) || 1) : 1;
-  if (qty <= 0) { showToast('Quantidade inválida.', 'error'); return; }
   const item = state.catalogo.find(i => i.id === itemId);
+  const { n: qty, erro } = numQtd(input ? input.value : '1', { unidade: item && item.unidade });
+  if (erro) { showToast(erro, 'error'); return; }
   if (!item) return;
   state.reqNew.selecionados[itemId] = { item, qty };
   renderItensReqCreate();

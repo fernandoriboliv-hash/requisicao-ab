@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Recebimento — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609251604">
+<link rel="stylesheet" href="style.css?v=202609281537">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609251604"></script>
+<script src="config.js?v=202609281537"></script>
 <style>
   /* Card de PO aguardando chegada */
   .po-card {
@@ -575,7 +575,7 @@ function renderConferencia() {
       <div class="conf-extra">
         <div class="conf-campo">
           <label>TEMPERATURA °C</label>
-          <input type="number" step="0.1" placeholder="—" value="${escapeAttr(it.temperatura)}"
+          <input type="text" inputmode="decimal" placeholder="—" value="${escapeAttr(it.temperatura)}"
                  id="cf-temperatura-${i}" class="${tOk === false ? 'ruim' : ''}"
                  onchange="mudarCampo(${i},'temperatura',this.value)">
         </div>
@@ -612,7 +612,7 @@ function renderConferencia() {
             ${it.preco != null ? ' · ' + fmtMoeda(it.preco) + '/' + escapeHtml(it.unidade || 'un') : ''}</div>
         </div>
         <div class="conf-qtd-wrap">
-          <input class="conf-qtd ${difere ? 'difere' : ''}" type="number" step="0.001" min="0"
+          <input class="conf-qtd ${difere ? 'difere' : ''}" type="text" inputmode="${modoTeclado(it.unidade)}"
                  value="${it.recebida}" id="qtd-${i}" onchange="mudarQtd(${i}, this.value)">
           <span class="conf-pedido">${escapeHtml(it.unidade || '')}</span>
         </div>
@@ -669,7 +669,7 @@ function renderConferencia() {
         </div>
         <div>
           <label class="field-label">Valor da NF (R$)</label>
-          <input class="input" id="nf-valor" type="number" step="0.01" min="0"
+          <input class="input" id="nf-valor" type="text" inputmode="decimal"
                  placeholder="0,00" value="${state.conf.nfValor ?? ''}" oninput="recalcularNF()">
         </div>
       </div>
@@ -794,8 +794,9 @@ function mudarEmissaoNF(valor) {
 function mudarQtd(i, v) {
   guardarCamposVolateis();
   const it = state.conf.itens[i];
-  it.recebida = parseFloat(v);
-  if (isNaN(it.recebida)) it.recebida = 0;
+  // numBR: o conferente pesa e digita "12,4", e parseFloat devolveria 12.
+  it.recebida = numBR(v);
+  if (it.recebida === null) it.recebida = 0;
 
   // Sugere o motivo óbvio; o conferente troca se for outro
   if (!it.motivo) {
@@ -840,7 +841,7 @@ function recalcularNF() {
   const valorPO = parseFloat(state.conf.ordem.valor_total) || 0;
   const valorRec = valorRecebido();
   const campo = document.getElementById('nf-valor');
-  const valorNF = parseFloat(campo?.value);
+  const valorNF = numBR(campo?.value);
 
   const elRec = document.getElementById('m-receb');
   const elSub = document.getElementById('m-receb-sub');

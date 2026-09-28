@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609251604">
+<link rel="stylesheet" href="style.css?v=202609281537">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609251604"></script>
+<script src="config.js?v=202609281537"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -554,7 +554,7 @@
           <option value="hortifruti">Hortifruti</option>
           <option value="diversos">Diversos</option>
         </select>
-        <input class="input qtd" id="compra-livre-qtd" type="number" min="0.1" step="0.1" placeholder="Qtd">
+        <input class="input qtd" id="compra-livre-qtd" type="text" inputmode="decimal" placeholder="Qtd">
         <select class="select unid" id="compra-livre-unid">
           <option value="kg">KG</option>
           <option value="un">UND</option>
@@ -627,7 +627,7 @@
           <option value="hortifruti">Hortifruti</option>
           <option value="diversos">Diversos</option>
         </select>
-        <input class="input qtd" id="req-livre-qtd" type="number" min="0.1" step="0.1" placeholder="Qtd">
+        <input class="input qtd" id="req-livre-qtd" type="text" inputmode="decimal" placeholder="Qtd">
         <select class="select unid" id="req-livre-unid">
           <option value="kg">KG</option>
           <option value="un">UND</option>
@@ -1043,7 +1043,7 @@ function renderItemRow(item, aba) {
       <div class="item-actions-cell">
         <div class="item-qty-wrap">
           <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',-1)">−</button>
-          <input class="qty-input" type="number" min="0.1" step="${pacote ? '1' : '0.1'}" value="${qty}" onchange="setQty('${aba}','${item.id}',this.value)" oninput="atualizarEstimativa('${aba}','${item.id}',this.value)" onclick="this.select()">
+          <input class="qty-input" type="text" inputmode="${modoTeclado(unidadeComoPedido(aba, item), pacote)}" value="${qty}" onchange="setQty('${aba}','${item.id}',this.value)" oninput="atualizarEstimativa('${aba}','${item.id}',this.value)" onclick="this.select()">
           <button class="qty-btn" onclick="changeQty('${aba}','${item.id}',1)">+</button>
         </div>
         ${estimativa}
@@ -1141,10 +1141,13 @@ function setCat(aba, cat) {
 
 function adicionarItem(aba, itemId) {
   const input = document.querySelector(`#row-${aba}-${itemId} .qty-input`);
-  const qty = input ? (parseFloat(input.value) || 1) : 1;
-  if (qty <= 0) { showToast('Quantidade inválida.', 'error'); return; }
   const item = state.catalogo.find(i => i.id === itemId);
   if (!item) return;
+  const { n: qty, erro } = numQtd(input ? input.value : '1', {
+    unidade: unidadeComoPedido(aba, item),
+    pacote: pedidoEmPacote(aba, item),
+  });
+  if (erro) { showToast(erro, 'error'); return; }
   const comentInput = document.querySelector(`#row-${aba}-${itemId} .item-coment input`);
   const comentario = comentInput ? comentInput.value.trim() : '';
   state.selecionados[aba][itemId] = { item, qty, comentario };
@@ -1174,8 +1177,15 @@ function changeQty(aba, itemId, delta) {
   // Sempre atualiza o input do DOM (permite ajustar antes de Adicionar).
   const input = document.querySelector(`#row-${aba}-${itemId} .qty-input`);
   if (!input) return;
-  const cur = parseFloat(input.value) || 1;
-  const novo = Math.max(0.1, Math.round((cur + delta) * 10) / 10);
+  const item = state.catalogo.find(i => i.id === itemId);
+  const inteiro = !item || pedidoEmPacote(aba, item)
+                || !unidadeFracionavel(unidadeComoPedido(aba, item));
+  const cur = numBR(input.value) || 1;
+  // Item contado anda de 1 em 1; item pesado, de 0,1 em 0,1. O + e o −
+  // liam parseFloat direto e perdiam a vírgula do que já estava no campo.
+  const novo = inteiro
+    ? Math.max(1, Math.round(cur) + delta)
+    : Math.max(0.1, Math.round((cur + delta * 0.1) * 10) / 10);
   input.value = novo;
   atualizarEstimativa(aba, itemId, novo);
   // Se já está no carrinho, sincroniza state (sem re-render pra não perder valores digitados em outras linhas).
@@ -1190,7 +1200,7 @@ function atualizarEstimativa(aba, itemId, valor) {
   const el = document.getElementById(`est-${aba}-${itemId}`);
   if (!el) return;
   const item = state.catalogo.find(i => i.id === itemId);
-  el.textContent = estimativaPeso(valor, item?.peso_medio_pacote, unidadePeso(item));
+  el.textContent = estimativaPeso(numBR(valor), item?.peso_medio_pacote, unidadePeso(item));
 }
 
 // =====================================================================
@@ -1242,13 +1252,22 @@ function unidadeComoPedido(aba, item) {
 }
 
 function setQty(aba, itemId, val) {
-  const v = parseFloat(String(val).replace(',', '.'));
   const sel = state.selecionados[aba][itemId];
+  const item = state.catalogo.find(i => i.id === itemId);
   // Zero virava 1 sem avisar: a pessoa digitava 0 para "não quero este"
   // e o pedido saía com 1. Agora o campo volta ao que era e ela decide —
   // para tirar do pedido existe Remover.
-  if (isNaN(v) || v <= 0) {
-    showToast('Quantidade tem que ser maior que zero. Para tirar o item, use Remover.', 'error');
+  //
+  // O número quebrado depende da unidade: kg aceita 1,25; caixa não.
+  // Quem decide é numQtd, que também devolve o motivo da recusa.
+  const { n: v, erro } = numQtd(val, {
+    unidade: item ? unidadeComoPedido(aba, item) : null,
+    pacote: item ? pedidoEmPacote(aba, item) : false,
+  });
+  if (erro) {
+    showToast(erro === 'Quantidade tem que ser maior que zero.'
+      ? 'Quantidade tem que ser maior que zero. Para tirar o item, use Remover.'
+      : erro, 'error');
     const input = document.querySelector(`#row-${aba}-${itemId} .qty-input`);
     if (input) input.value = sel ? sel.qty : 1;
     atualizarEstimativa(aba, itemId, sel ? sel.qty : 1);
@@ -1275,8 +1294,11 @@ function setComentario(aba, itemId, val) {
 // novo o que já está no catálogo.
 function addLivre(aba, forcar) {
   const nome = document.getElementById(`${aba}-livre-nome`).value.trim();
-  const qtd  = parseFloat(document.getElementById(`${aba}-livre-qtd`).value);
   const unid = document.getElementById(`${aba}-livre-unid`).value;
+  // A unidade escolhida aqui e que diz se o numero pode ser quebrado.
+  const lido = numQtd(document.getElementById(`${aba}-livre-qtd`).value, { unidade: unid });
+  if (lido.erro) { showToast(lido.erro, 'error'); return; }
+  const qtd = lido.n;
   // A categoria vem do formulário. Antes vinha da aba aberta, que era chute
   // — e virava vazia na aba "Todas", derrubando o envio inteiro.
   const cat  = document.getElementById(`${aba}-livre-cat`).value
@@ -2227,7 +2249,7 @@ function _renderModalFavorito() {
           ${motivo ? `<span class="cs-cat text-error">${motivo}</span>` : ''}
         </div>
         <div class="cs-qty">
-          <input class="qty-input" type="number" min="0.1" step="0.1" value="${i.quantidade}"
+          <input class="qty-input" type="text" inputmode="${modoTeclado(i.item_unidade)}" value="${i.quantidade}"
                  ${motivo ? 'disabled' : ''}
                  onchange="_favMudarQtd(${idx}, this.value)" onclick="this.select()">
           ${escapeHtml(i.item_unidade || '')}
@@ -2248,8 +2270,10 @@ function _renderModalFavorito() {
 }
 
 function _favMudarQtd(idx, valor) {
-  const q = parseFloat(String(valor).replace(',', '.'));
-  if (!isNaN(q) && q > 0) state.favAberto.modelo_itens[idx].quantidade = q;
+  const linha = state.favAberto.modelo_itens[idx];
+  const { n, erro } = numQtd(valor, { unidade: linha && linha.item_unidade });
+  if (erro) { showToast(erro, 'error'); return; }
+  linha.quantidade = n;
 }
 
 function _favAtualizarEnvio() {

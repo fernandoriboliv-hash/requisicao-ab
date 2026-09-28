@@ -391,7 +391,7 @@ function _renderItensDevolucao() {
           ${i.jaDevolvido ? `<div class="linha-origem">já devolvido: ${i.jaDevolvido}</div>` : ''}
         </div>
         <div class="right">${i.disponivel} ${_escEd(i.item_unidade || '')}</div>
-        <input class="po-inp" type="number" step="0.001" min="0" max="${i.disponivel}"
+        <input class="po-inp" type="text" inputmode="${modoTeclado(i.item_unidade)}" data-max="${i.disponivel}"
                value="${i.devolver}" placeholder="0"
                onchange="_mudarDevolucao(${n}, this.value)">
       </div>`).join('')}`;
@@ -399,14 +399,14 @@ function _renderItensDevolucao() {
 
 function _mudarDevolucao(n, valor) {
   const it = _devRec.itens[n];
-  const v = parseFloat(String(valor).replace(',', '.'));
-  if (!isNaN(v) && v > it.disponivel) {
+  const v = numBR(valor);
+  if (v !== null && v > it.disponivel) {
     showToast(`Só há ${it.disponivel} ${it.item_unidade || ''} disponível deste item.`, 'error');
     it.devolver = it.disponivel;
     _renderItensDevolucao();
     return;
   }
-  it.devolver = isNaN(v) ? '' : v;
+  it.devolver = v === null ? '' : v;
 }
 
 async function salvarDevolucao() {
@@ -564,7 +564,7 @@ function _montarEditorItem() {
             <select class="select" id="ed-rotulo">${
               _ROTULOS_PACOTE.map(r => `<option value="${r}">${r}</option>`).join('')}</select></div>
           <div id="ed-box-peso"><label class="field-label">Peso de 1 pacote (kg)</label>
-            <input class="input" id="ed-peso" type="number" step="0.001" min="0"
+            <input class="input" id="ed-peso" type="text" inputmode="decimal"
                    placeholder="em branco = o sistema aprende pesando"></div>
         </div>
         <div class="ed-nota so-gerente" id="ed-nota-pacote"></div>
@@ -687,7 +687,7 @@ function _edRenderForn() {
       ${_edForn.map((f, n) => f.remover ? '' : `
         <div class="ed-forn-linha">
           <div>${_escEd(f.nome)}</div>
-          <input class="po-inp" type="number" step="0.01" min="0" value="${f.preco}"
+          <input class="po-inp" type="text" inputmode="decimal" value="${f.preco}"
                  onchange="_edMudarForn(${n},'preco',this.value)">
           <input class="po-inp" type="number" step="1" min="0" value="${f.prazo}"
                  placeholder="padrão" onchange="_edMudarForn(${n},'prazo',this.value)">
@@ -720,7 +720,7 @@ function _edMudarForn(n, campo, valor) {
   } else if (campo === 'remover') {
     f.remover = true;
   } else {
-    f[campo] = valor === '' ? '' : parseFloat(String(valor).replace(',', '.'));
+    f[campo] = valor === '' ? '' : numBR(valor);
   }
   _edRenderForn();
 }
@@ -738,7 +738,7 @@ function _edAddFornecedor() {
     <select class="select" id="ed-forn-novo-id">
       ${livres.map(f => `<option value="${f.id}">${_escEd(f.nome)}</option>`).join('')}
     </select>
-    <input class="po-inp" type="number" step="0.01" min="0" id="ed-forn-novo-preco" placeholder="preço">
+    <input class="po-inp" type="text" inputmode="decimal" id="ed-forn-novo-preco" placeholder="preço">
     <input class="po-inp" type="number" step="1" min="0" id="ed-forn-novo-prazo" placeholder="padrão">
     <select class="select" id="ed-forn-novo-pref">
       <option value="1">Principal</option>
@@ -826,14 +826,14 @@ function _edPedePor() {
 // fator. Aqui isso vira aviso antes de virar inventário errado.
 function _edAproveitamento() {
   const el = document.getElementById('ed-aprov');
-  const n = parseFloat(String(el.value).replace(',', '.'));
+  const n = numBR(el.value);
   const nota = document.getElementById('ed-nota-aprov');
   if (!el.value) {
     nota.className = 'ed-nota';
     nota.textContent = 'Deixe em branco quando o item é contado do mesmo jeito que é comprado.';
   // Piso 1, igual ao do banco: 0,62 é o fator digitado no lugar da
   // porcentagem, e passaria por qualquer teste de "maior que zero".
-  } else if (isNaN(n) || n < 1 || n > 100) {
+  } else if (n === null || n < 1 || n > 100) {
     nota.className = 'ed-nota ed-nota-erro';
     nota.textContent = 'Use a porcentagem inteira, de 1 a 100. 62 quer dizer 62%.';
   } else {
@@ -873,9 +873,9 @@ async function salvarEditorItem() {
   if (!nome) { showToast('O nome de compra não pode ficar vazio.', 'error'); return; }
 
   const pacote = document.getElementById('ed-pede').value === 'pacote';
-  const peso   = parseFloat(String(t('ed-peso')).replace(',', '.'));
-  const aprov  = t('ed-aprov') ? parseFloat(String(t('ed-aprov')).replace(',', '.')) : null;
-  if (aprov != null && (isNaN(aprov) || aprov < 1 || aprov > 100)) {
+  const peso   = numBR(t('ed-peso'));
+  const aprov  = t('ed-aprov') ? numBR(t('ed-aprov')) : null;
+  if (aprov != null && (aprov < 1 || aprov > 100)) {
     showToast('Aproveitamento tem que ser uma porcentagem de 1 a 100. '
             + 'Para 62%, escreva 62 — não 0,62.', 'error'); return;
   }
@@ -911,7 +911,7 @@ async function salvarEditorItem() {
       // Fora do regime de pacote o peso médio é inerte — nenhuma tela lê. Não
       // apago: em 9 itens ele foi medido na balança, e apagar medição real
       // para limpar campo que ninguém lê é perda pura.
-      peso_medio_pacote: pacote ? (isNaN(peso) || peso <= 0 ? null : peso) : _edItem.peso_medio_pacote,
+      peso_medio_pacote: pacote ? (peso === null || peso <= 0 ? null : peso) : _edItem.peso_medio_pacote,
       aproveitamento_pct: aprov,
       item_origem_id:     document.getElementById('ed-origem').value || null,
       // Editado à mão resolve a ambiguidade que a carga automática deixou.
@@ -1142,7 +1142,7 @@ const _pbNum = n => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3
 function avisoPesoBruto(itemId, peso, unidade, catalogo) {
   const f = fatorPesoBruto(itemId, catalogo);
   if (!f) return '';
-  const p = parseFloat(peso);
+  const p = numBR(peso);   // a Comissaria digita "1,85"
   const bruto = p > 0 ? p * f.fator : null;
   return '<span class="peso-bruto">aproveitamento ' + f.passos.map(x => _pbNum(x) + '%').join(' · ')
     + ' · fator ' + f.fator.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -1418,6 +1418,18 @@ function tabelaDetalhe(itens, colunas, vazio = 'Nenhum item.') {
 
 const _esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+// Texto que vai PARA DENTRO de um onclick="...('AQUI')..." passa por duas
+// leituras: o parser de HTML desfaz as entidades e só depois o JS lê a
+// string. Escapar só para HTML não basta — em "QUEIJO PONT L' EVEQUE" a
+// aspa vira &#39;, o parser a devolve como aspa simples, o literal fecha
+// no meio e o atributo inteiro deixa de compilar. O botão então não faz
+// nada, e o clique cai na linha de trás: era isso que abria "Onde está"
+// no lugar de corrigir o peso (achado em 28/09/2026, requisição do
+// Le Jardin noite).
+//
+// A ordem é o que resolve: escapa para JS primeiro, para HTML depois.
+const _jsAttr = s => _esc(String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+
 const _data = s => s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
 const _qtd = v => { const n = parseFloat(v) || 0; return n % 1 === 0 ? String(n) : String(n); };
 
@@ -1540,7 +1552,7 @@ function _montarModalPeso() {
           <div><label class="field-label">Peso registrado</label>
             <input class="input" id="pk-antes" disabled></div>
           <div><label class="field-label">Peso correto</label>
-            <input class="input" id="pk-novo" type="number" step="0.001" min="0" autofocus></div>
+            <input class="input" id="pk-novo" type="text" inputmode="decimal" autofocus></div>
         </div>
         <label class="field-label">Por que está sendo corrigido</label>
         <select class="select" id="pk-motivo">
@@ -1579,8 +1591,8 @@ function corrigirPeso(sb, itemId, nome, pesoAtual, unidade, reqId) {
 
 async function salvarCorrecaoPeso() {
   if (!_pkCtx) return;
-  const novo = parseFloat(String(document.getElementById('pk-novo').value).replace(',', '.'));
-  if (isNaN(novo) || novo < 0) {
+  const novo = numBR(document.getElementById('pk-novo').value);
+  if (novo === null || novo < 0) {
     showToast('Informe o peso correto.', 'error'); return;
   }
   const sel = document.getElementById('pk-motivo').value;
@@ -1702,7 +1714,7 @@ async function verRequisicaoInterna(sb, id) {
                  _qtd(i.peso_anterior)} · ${_esc(autorComPerfil(i.corrigido_por) || 'sistema')}</span>` : ''}${
                podeCorrigirPeso() && i.quantidade_entregue != null
                  ? `<br><button class="btn btn-sm btn-outline" style="font-size:10px;padding:2px 7px;margin-top:4px"
-                      onclick="event.stopPropagation();corrigirPeso(sb,'${i.id}','${_esc(i.item_nome).replace(/'/g, "\\'")}',${
+                      onclick="event.stopPropagation();corrigirPeso(sb,'${i.id}','${_jsAttr(i.item_nome)}',${
                         i.quantidade_entregue},'${pct ? uPeso : un}','${r.id}')">corrigir peso</button>` : ''}</td>
              <td data-label="Divergência">${i.motivo_divergencia
                ? '<span class="text-error">' + _esc(i.motivo_divergencia) + '</span>'
@@ -1857,9 +1869,21 @@ const _invChave = (l) => (l.linha_id ? 'L' + l.linha_id : 'I' + l.item_id);
 // celular em português vê o campo esvaziar sem aviso nenhum. Aqui a
 // validação é nossa, e aceita vírgula e ponto.
 function _invNum(v) {
-  const t = String(v == null ? '' : v).trim().replace(',', '.');
+  let t = String(v == null ? '' : v).trim();
   if (t === '') return null;
-  if (!/^[0-9]+(.[0-9]+)?$/.test(t)) return null;
+  // A unidade digitada junto é comum na contagem ("1,5 kg", "3 cx") e
+  // antes virava "Quantidade inválida". O número é o que importa.
+  t = t.replace(/[a-zA-Z\u00C0-\u017F%\s]+$/, '').trim();
+  // "1.250" é mil duzentos e cinquenta para quem conta, não 1,25: quando
+  // há vírgula, o ponto é separador de milhar; quando não há, ponto com
+  // três casas depois também é milhar.
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  else if (/^[0-9]{1,3}(\.[0-9]{3})+$/.test(t)) t = t.replace(/\./g, '');
+  if (/^[.,]/.test(t)) t = '0' + t;       // ",5" é meio quilo
+  t = t.replace(/[.,]$/, '');            // "10," e "10." são 10
+  // O ponto tem que ser escapado: antes era /^[0-9]+(.[0-9]+)?$/, em que
+  // o ponto casava com QUALQUER caractere — "1a5" virava 1 calado.
+  if (!/^[0-9]+(\.[0-9]+)?$/.test(t)) return null;
   const n = parseFloat(t);
   return isNaN(n) || n < 0 ? null : n;
 }
@@ -4907,7 +4931,7 @@ function _dsBuscar(v) {
       <button class="ft-sug-item" onclick="_dsEscolher('${x.tipo}','${x.id}')">${escapeHtml(x.nome)}
         ${x.tipo === 'ficha' ? '<span class="ft-tag ft-tag-rec">produção</span>'
           : `<span class="text-muted">${escapeHtml(x.un || '')}</span>`}</button>`).join('') : '')
-    + `<button class="ft-sug-item" onclick="_dsEscolher('livre','${escapeHtml(q).replace(/'/g, "\\'")}')">
+    + `<button class="ft-sug-item" onclick="_dsEscolher('livre','${_jsAttr(q)}')">
         Registrar como "${escapeHtml(q)}" <span class="ft-tag ft-tag-aberto">fora do catálogo</span></button>`;
 }
 
@@ -5177,6 +5201,49 @@ function numBR(v) {
   const limpo = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t;
   const n = parseFloat(limpo);
   return isFinite(n) ? n : null;
+}
+
+// =====================================================================
+// QUANTIDADE QUEBRADA DEPENDE DA UNIDADE
+// =====================================================================
+// Pedido do Fernando em 28/09/2026: "produtos pesados em KG deveriam
+// poder preencher como números racionais; produtos em unidades, não".
+//
+// O que manda é a UNIDADE do item, não o `pede_por`. MT entra porque
+// tripa se pede por metro e meio. UM fica de fora por decisão dele: são
+// linhas guarda-chuva do catálogo (FRUTAS, FLORES E BROTOS, CONGELADOS).
+const _UN_FRACIONAVEL = ['KG', 'L', 'LT', 'MT'];
+
+function unidadeFracionavel(unidade) {
+  return _UN_FRACIONAVEL.indexOf(String(unidade || '').trim().toUpperCase()) >= 0;
+}
+
+// Lê a quantidade digitada já sabendo o que a unidade permite.
+// Devolve { n, erro }; erro null quer dizer que pode gravar.
+//
+// Isto existe porque <input type="number"> fazia as duas coisas erradas:
+// no celular em português esvaziava o campo na vírgula, e o `step`
+// recusava 0,25 (step=0,1) ou até o 2 (min=0,1 com step=1). A validação
+// passa a ser nossa, e a mensagem diz o motivo.
+function numQtd(valor, opts) {
+  const o = opts || {};
+  const n = numBR(valor);
+  if (n === null) return { n: null, erro: 'Quantidade inválida.' };
+  if (n <= 0) return { n: null, erro: 'Quantidade tem que ser maior que zero.' };
+  // Pacote manda em qualquer unidade: ali o número é quantos pacotes.
+  if ((o.pacote || !unidadeFracionavel(o.unidade)) && n % 1 !== 0) {
+    return { n: null, erro: o.pacote
+      ? 'Pedido por pacote vai em número inteiro de pacotes.'
+      : 'Item contado em ' + String(o.unidade || 'unidade').toUpperCase()
+        + ' não aceita número quebrado.' };
+  }
+  return { n, erro: null };
+}
+
+// O teclado que o celular abre. Quem só pode inteiro não precisa da
+// tecla de vírgula na frente.
+function modoTeclado(unidade, pacote) {
+  return (pacote || !unidadeFracionavel(unidade)) ? 'numeric' : 'decimal';
 }
 
 // =====================================================================
