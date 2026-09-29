@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609291826">
+<link rel="stylesheet" href="style.css?v=202609291906">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609291826"></script>
+<script src="config.js?v=202609291906"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -903,13 +903,15 @@ window.addEventListener('load', async () => {
   state.pdvId = perfil.pdv_id;
   state.pdvNome = pdv?.nome || '—';
 
-  // Bar tira hortifruti da camara e mais nada (migration 89). Some com o
-  // resto do catalogo na requisicao em vez de deixar a pessoa montar um
-  // pedido que o banco vai recusar no fim.
+  // Bar pede hortifruti e mais os itens liberados um a um (migration 90).
+  // Some com o resto do catalogo nas duas abas em vez de deixar a pessoa
+  // montar um pedido que o banco vai recusar no fim.
   state.soHortifruti = pdv?.tipo === 'bar';
   if (state.soHortifruti) {
-    const tabs = document.getElementById('req-cat-tabs');
-    if (tabs) tabs.style.display = 'none';
+    ['req-cat-tabs', 'compra-cat-tabs'].forEach(id => {
+      const t = document.getElementById(id);
+      if (t) t.style.display = 'none';
+    });
 
     // O hortifruti do bar nao passa pela Comissaria (migration 85): vira
     // pedido proprio e quem confirma a saida e o gerente de compras. Os
@@ -918,11 +920,14 @@ window.addEventListener('load', async () => {
     if (nav) nav.innerHTML = '<span class="nav-icon">↔</span> Requisição de Estoque';
     tabTitles.req = ['Requisição de Estoque', 'Hortifruti que o bar retira da câmara'];
     document.getElementById('req-aviso')?.remove();
-    const livreCat = document.getElementById('req-livre-cat');
-    if (livreCat) {
-      [...livreCat.options].forEach(o => { if (o.value !== 'hortifruti') o.remove(); });
-      livreCat.value = 'hortifruti';
-    }
+    // Item escrito a mao nao tem como ser excecao: excecao e marca de item
+    // do catalogo. No texto livre, entao, so cabe hortifruti.
+    ['req-livre-cat', 'compra-livre-cat'].forEach(id => {
+      const c = document.getElementById(id);
+      if (!c) return;
+      [...c.options].forEach(o => { if (o.value !== 'hortifruti') o.remove(); });
+      c.value = 'hortifruti';
+    });
   }
 
   // Emerald Pool e Bela Vista não têm chef: ali quem conta a câmara é o
@@ -965,6 +970,12 @@ window.addEventListener('load', async () => {
 });
 
 function isoDate(d) { return d.toISOString().split('T')[0]; }
+
+// O bar pede hortifruti e mais os itens liberados um a um pelo gerente
+// (itens.bar_pode, migration 90). Vale na requisicao e na compra.
+function barPodePedir(item) {
+  return item.categoria === 'hortifruti' || item.bar_pode === true;
+}
 
 // =====================================================================
 // CATÁLOGO
@@ -1097,8 +1108,8 @@ function renderItens(aba) {
   // Proteína via lista vazia e concluía que o item não existe.
   const daAba = state.catalogo.filter(i =>
     (aba !== 'req' || ehDeRequisicao(i)) &&
-    (aba !== 'req' || !state.soHortifruti || i.categoria === 'hortifruti') &&
     (aba !== 'compra' || ehCompravel(i)) &&
+    (!state.soHortifruti || (aba !== 'req' && aba !== 'compra') || barPodePedir(i)) &&
     (itemAtendeBusca(i, q) || (aba === 'req' && i.nome_curto && itemCasaBusca(i.nome_curto, q)))
   );
   const itens = cat ? daAba.filter(i => i.categoria === cat) : daAba;
@@ -1335,7 +1346,7 @@ function addLivre(aba, forcar) {
   if (!forcar) {
     const daAba = state.catalogo.filter(i =>
       (aba !== 'req' || ehDeRequisicao(i)) && (aba !== 'compra' || ehCompravel(i)) &&
-      (aba !== 'req' || !state.soHortifruti || i.categoria === 'hortifruti'));
+      (!state.soHortifruti || barPodePedir(i)));
     const parecidos = itensParecidos(nome, daAba);
     if (parecidos.length) { mostrarParecidos(aba, nome, qtd, parecidos); return; }
   }
