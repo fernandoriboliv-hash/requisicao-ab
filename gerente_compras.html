@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609291102">
+<link rel="stylesheet" href="style.css?v=202609291545">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609291102"></script>
+<script src="config.js?v=202609291545"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -566,11 +566,6 @@
           <option value="laticinios">Laticínios</option>
           <option value="hortifruti">Hortifruti</option>
           <option value="diversos">Diversos</option>
-        </select>
-        <select class="select" id="rel-granul" style="max-width:140px">
-          <option value="dia">Por dia</option>
-          <option value="semana">Por semana</option>
-          <option value="mes" selected>Por mês</option>
         </select>
         <button class="btn btn-outline" onclick="gerarRelatorio()">Gerar</button>
         <button class="btn btn-outline" onclick="exportarRelatorio()" style="margin-left:auto">⤓ Exportar Excel</button>
@@ -1788,7 +1783,6 @@ async function gerarRelatorio() {
   const ate = document.getElementById('rel-ate').value;
   const cat = document.getElementById('rel-cat').value;
   const fonte = document.getElementById('rel-fonte').value;
-  const granul = document.getElementById('rel-granul').value;
   const pdvIds = state.relPdvsSel.size > 0 ? [...state.relPdvsSel] : null; // null = todos
   if (!de || !ate) { showToast('Preencha o período.', 'error'); return; }
   if (de > ate) { showToast('Data inicial maior que a final.', 'error'); return; }
@@ -1852,34 +1846,18 @@ async function gerarRelatorio() {
     });
   }
 
-  // Agrupamento por granularidade
-  const bucketKey = (d) => {
-    const date = new Date(d + 'T12:00:00');
-    if (granul === 'dia') return d;
-    if (granul === 'semana') {
-      const dow = (date.getDay() + 6) % 7;
-      const ini = new Date(date); ini.setDate(date.getDate() - dow);
-      return 'sem ' + isoDate(ini);
-    }
-    return date.toISOString().slice(0, 7);
-  };
-
-  // Pivot: linhas = item, colunas = bucket; totais por PDV e categoria
+  // Uma linha por item no periodo escolhido; totais por PDV e categoria.
   const totaisItem = {};
   const totaisPdv = {};
   const totaisCat = {};
-  const buckets = new Set();
   for (const r of rows) {
-    const b = bucketKey(r.data);
-    buckets.add(b);
     const key = `${r.categoria}__${r.item}__${r.unidade}`;
     if (!totaisItem[key]) {
       const preco = r.itemId ? (state.precosMap[r.itemId]?.preco_unitario || 0) : 0;
       totaisItem[key] = { categoria: r.categoria, item: r.item, itemId: r.itemId, unidade: r.unidade,
-                          preco: parseFloat(preco) || 0, buckets: {}, total: 0,
+                          preco: parseFloat(preco) || 0, total: 0,
                           qtdFicha: 0, valorFicha: 0, fichaParcial: 0 };
     }
-    totaisItem[key].buckets[b] = (totaisItem[key].buckets[b] || 0) + r.qtd;
     totaisItem[key].total += r.qtd;
     if (r.ficha?.temFicha) {
       totaisItem[key].qtdFicha += r.qtd;
@@ -1896,8 +1874,7 @@ async function gerarRelatorio() {
     x.porFicha = x.qtdFicha > 0;
     if (x.porFicha && x.total > 0) x.preco = x.valorTotal / x.total;
   });
-  const bucketsOrd = [...buckets].sort();
-  relatorioDados = { rows, totaisItem, totaisPdv, totaisCat, buckets: bucketsOrd, fonte, granul };
+  relatorioDados = { rows, totaisItem, totaisPdv, totaisCat, fonte };
 
   renderRelatorioKPIs();
   renderRelatorio();
@@ -1933,7 +1910,7 @@ function renderRelatorioKPIs() {
 
 function renderRelatorio() {
   if (!relatorioDados) return;
-  const { totaisItem, totaisPdv, totaisCat, buckets, fonte } = relatorioDados;
+  const { totaisItem, totaisPdv, totaisCat, fonte } = relatorioDados;
   const cont = document.getElementById('relContainer');
   const itensArr = Object.values(totaisItem).sort((a,b) => b.total - a.total);
   if (itensArr.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum dado para os filtros selecionados.</div>'; return; }
@@ -1965,7 +1942,6 @@ function renderRelatorio() {
     <table class="data-table tabela-cards">
       <thead><tr>
         <th>Categoria</th><th>Item</th><th>Unid.</th>
-        ${buckets.map(b => `<th class="center">${escapeHtml(b)}</th>`).join('')}
         <th class="center">Total</th>
         <th class="num">Preço un.</th>
         <th class="num">Valor total</th>
@@ -1975,7 +1951,6 @@ function renderRelatorio() {
         <td class="td-titulo">${escapeHtml(it.item)}</td>
         <td data-label="Categoria"><span class="cat-pill cat-${it.categoria}">${CAT_LABEL_REL[it.categoria]||it.categoria}</span></td>
         <td class="text-muted" data-label="Unidade">${it.unidade}</td>
-        ${buckets.map(b => `<td class="center num" data-label="${escapeHtml(b)}">${fmtQtyRel(it.buckets[b]||0)}</td>`).join('')}
         <td class="center num text-gold" style="font-weight:500" data-label="Total">${fmtQtyRel(it.total)}</td>
         <td class="num text-muted" data-label="Preço un.">${it.preco > 0 ? fmtBRL(it.preco) : '—'}${
           it.porFicha ? `<br><span class="ficha-tag${it.fichaParcial ? ' parcial' : ''}" title="${
@@ -1993,14 +1968,13 @@ function renderRelatorio() {
 
 function exportarRelatorio() {
   if (!relatorioDados) { showToast('Gere o relatório primeiro.', 'error'); return; }
-  const { totaisItem, buckets, fonte } = relatorioDados;
-  const linhas = [['Categoria','Item','Unidade', ...buckets, 'Total', 'Preço unit.', 'Valor total']];
+  const { totaisItem, fonte } = relatorioDados;
+  const linhas = [['Categoria','Item','Unidade', 'Total', 'Preço unit.', 'Valor total']];
   Object.values(totaisItem).sort((a,b)=>b.total-a.total).forEach(it => {
     linhas.push([
       CAT_LABEL_REL[it.categoria] || it.categoria,
       it.item,
       it.unidade,
-      ...buckets.map(b => (it.buckets[b]||0).toFixed(2)),
       it.total.toFixed(2),
       it.preco ? it.preco.toFixed(2) : '',
       it.preco ? it.valorTotal.toFixed(2) : '',

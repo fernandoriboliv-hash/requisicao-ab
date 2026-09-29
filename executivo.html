@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609291102">
+<link rel="stylesheet" href="style.css?v=202609291545">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609291102"></script>
+<script src="config.js?v=202609291545"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -1324,7 +1324,7 @@ async function gerarRel() {
 
   if (fonte === 'ambos' || fonte === 'req') {
     let q = sb.from('requisicoes')
-      .select('id, data_competencia, status, pdv_id, requisicao_itens(id, item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, pacotes_entregues, pedido_por, peso_medio_pacote, itens(fornecedor_principal))')
+      .select('id, data_competencia, status, pdv_id, requisicao_itens(id, item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, pacotes_entregues, pedido_por, peso_medio_pacote, itens!requisicao_itens_item_id_fkey(fornecedor_principal))')
       .eq('status', 'entregue')
       .gte('data_competencia', de)
       .lte('data_competencia', ate);
