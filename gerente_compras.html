@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609281548">
+<link rel="stylesheet" href="style.css?v=202609291004">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609281548"></script>
+<script src="config.js?v=202609291004"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -389,6 +389,7 @@
         <input class="input" id="rq-item" oninput="renderHistoricoReqs()"
                placeholder="Buscar item dentro das requisições — ex.: file mignon, morango...">
       </div>
+      <div id="saidaEstoque"></div>
       <div id="reqsContainer"><div class="loading-text">Carregando...</div></div>
     </div>
   </div>
@@ -1661,7 +1662,73 @@ function exportarHistoricoCompras() {
 // =====================================================================
 // HISTÓRICO REQUISIÇÕES
 // =====================================================================
+// =====================================================================
+// SAIDA DE ESTOQUE — o que a Comissaria nao separa
+// =====================================================================
+// Hortifruti sai da camara na mao de quem pediu; a Comissaria nao entra
+// nessa. A requisicao nasce em nome de compras (migration 85) e para aqui,
+// esperando a confirmacao de que saiu mesmo — e de quanto saiu.
+//
+// O botao confirma tudo como pedido, que e o caso normal: a pessoa levou
+// o que anotou. Quem quiser mudar o numero de uma linha abre a requisicao
+// e corrige o peso, como em qualquer outra.
+async function carregarSaidaEstoque() {
+  const box = document.getElementById('saidaEstoque');
+  if (!box) return;
+  const { data, error } = await sb.from('requisicoes')
+    .select('*, pdvs(nome), requisicao_itens(*)')
+    .eq('atendida_por', 'compras')
+    .in('status', ['enviado', 'separacao'])
+    .order('created_at');
+  if (error) { box.innerHTML = ''; return; }
+  state.saidaEstoque = data || [];
+  renderSaidaEstoque();
+}
+
+function renderSaidaEstoque() {
+  const box = document.getElementById('saidaEstoque');
+  const lista = state.saidaEstoque || [];
+  if (!lista.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <div class="form-panel" style="display:block;margin-bottom:18px">
+      <div class="section-title" style="margin-top:0">
+        <span>Aguardando sua confirmação · ${lista.length}</span>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>PDV</th><th>Pedido em</th><th class="num">Itens</th><th>O que saiu</th><th></th></tr></thead>
+        <tbody>${lista.map(r => {
+          const itens = r.requisicao_itens || [];
+          return `<tr>
+            <td data-label="PDV">${escapeHtml(r.pdvs?.nome || '—')}</td>
+            <td data-label="Pedido em">${_dataHoraCurta(r.created_at)}</td>
+            <td class="num" data-label="Itens">${itens.length}</td>
+            <td data-label="O que saiu" class="text-muted" style="font-size:12px">${
+              escapeHtml(itens.slice(0, 3).map(i => i.item_nome).join(' · '))}${
+              itens.length > 3 ? ' · +' + (itens.length - 3) : ''}</td>
+            <td style="text-align:right;white-space:nowrap">
+              <button class="btn btn-sm btn-outline" onclick="verRequisicaoInterna(sb,'${r.id}')">Ver</button>
+              <button class="btn btn-sm btn-primary" onclick="confirmarSaida('${r.id}')">Confirmar saída</button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+async function confirmarSaida(id) {
+  const r = (state.saidaEstoque || []).find(x => x.id === id);
+  const n = (r?.requisicao_itens || []).length;
+  if (!confirm('Confirmar que os ' + n + ' itens saíram do estoque como foram pedidos?\n\n'
+             + 'Se alguma quantidade for diferente, abra a requisição e corrija o peso depois.')) return;
+  const { error } = await sb.rpc('confirmar_saida_estoque', { p_req_id: id });
+  if (error) { showToast('Não confirmou: ' + error.message, 'error'); return; }
+  showToast('Saída confirmada.', 'success');
+  await carregarSaidaEstoque();
+  await carregarHistoricoReqs();
+}
+
 async function carregarHistoricoReqs() {
+  await carregarSaidaEstoque();
   const de = document.getElementById('rq-de').value;
   const ate = document.getElementById('rq-ate').value;
   const pdv = document.getElementById('rq-pdv').value;

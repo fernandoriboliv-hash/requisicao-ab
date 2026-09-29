@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609281548">
+<link rel="stylesheet" href="style.css?v=202609291004">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609281548"></script>
+<script src="config.js?v=202609291004"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -1589,11 +1589,16 @@ async function abrirTelaFichas() {
 async function carregarFila() {
   const data = document.getElementById('f-data').value;
   const [pend, fech] = await Promise.all([
+    // Hortifruti nao passa por aqui (migration 85): quem pega o produto e
+    // a propria cozinha, e quem confirma a saida e o gerente de compras.
+    // Sem este filtro a fila encheria de linha que ninguem vai separar.
     sb.from('requisicoes')
       .select('*, pdvs(nome,tipo), requisicao_itens(*)')
+      .eq('atendida_por', 'comissaria')
       .in('status', ['enviado', 'separacao']),
     sb.from('requisicoes')
       .select('*, pdvs(nome,tipo), requisicao_itens(*)')
+      .eq('atendida_por', 'comissaria')
       .in('status', ['entregue', 'cancelada'])
       .eq('data_competencia', data),
   ]);
