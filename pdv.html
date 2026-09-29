@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609291759">
+<link rel="stylesheet" href="style.css?v=202609291826">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609291759"></script>
+<script src="config.js?v=202609291826"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -583,7 +583,7 @@
   <!-- ========================================================== -->
   <div class="tab-content" id="tab-req">
 
-    <div class="aviso aviso-info">
+    <div class="aviso aviso-info" id="req-aviso">
       <span>Requisição da Comissaria — sem corte de horário. Cada cozinha solicita conforme sua necessidade.</span>
     </div>
 
@@ -848,7 +848,7 @@ const state = {
   user: null,
   perfil: null,
   pdvId: null,
-  pdvNome: '',
+  pdvNome: '', soHortifruti: false,
   catalogo: [],          // todos os itens ativos
   abaAtual: 'inicio',    // 'inicio' | 'req' | 'compra' | 'favoritos' | 'rascunhos' | 'historico' | 'relatorios'
   favoritos: [],                           // modelos do PDV, os dois tipos juntos
@@ -899,9 +899,31 @@ window.addEventListener('load', async () => {
   }
 
   const { data: pdv } = await sb.from('pdvs')
-    .select('nome, inventario_pelo_pdv').eq('id', perfil.pdv_id).single();
+    .select('nome, tipo, inventario_pelo_pdv').eq('id', perfil.pdv_id).single();
   state.pdvId = perfil.pdv_id;
   state.pdvNome = pdv?.nome || '—';
+
+  // Bar tira hortifruti da camara e mais nada (migration 89). Some com o
+  // resto do catalogo na requisicao em vez de deixar a pessoa montar um
+  // pedido que o banco vai recusar no fim.
+  state.soHortifruti = pdv?.tipo === 'bar';
+  if (state.soHortifruti) {
+    const tabs = document.getElementById('req-cat-tabs');
+    if (tabs) tabs.style.display = 'none';
+
+    // O hortifruti do bar nao passa pela Comissaria (migration 85): vira
+    // pedido proprio e quem confirma a saida e o gerente de compras. Os
+    // rotulos precisam dizer o caminho certo.
+    const nav = document.querySelector('.nav-item[data-proc=req]');
+    if (nav) nav.innerHTML = '<span class="nav-icon">↔</span> Requisição de Estoque';
+    tabTitles.req = ['Requisição de Estoque', 'Hortifruti que o bar retira da câmara'];
+    document.getElementById('req-aviso')?.remove();
+    const livreCat = document.getElementById('req-livre-cat');
+    if (livreCat) {
+      [...livreCat.options].forEach(o => { if (o.value !== 'hortifruti') o.remove(); });
+      livreCat.value = 'hortifruti';
+    }
+  }
 
   // Emerald Pool e Bela Vista não têm chef: ali quem conta a câmara é o
   // cozinheiro. Nas outras cozinhas o menu nem aparece — o inventário é
@@ -1075,6 +1097,7 @@ function renderItens(aba) {
   // Proteína via lista vazia e concluía que o item não existe.
   const daAba = state.catalogo.filter(i =>
     (aba !== 'req' || ehDeRequisicao(i)) &&
+    (aba !== 'req' || !state.soHortifruti || i.categoria === 'hortifruti') &&
     (aba !== 'compra' || ehCompravel(i)) &&
     (itemAtendeBusca(i, q) || (aba === 'req' && i.nome_curto && itemCasaBusca(i.nome_curto, q)))
   );
@@ -1311,7 +1334,8 @@ function addLivre(aba, forcar) {
 
   if (!forcar) {
     const daAba = state.catalogo.filter(i =>
-      (aba !== 'req' || ehDeRequisicao(i)) && (aba !== 'compra' || ehCompravel(i)));
+      (aba !== 'req' || ehDeRequisicao(i)) && (aba !== 'compra' || ehCompravel(i)) &&
+      (aba !== 'req' || !state.soHortifruti || i.categoria === 'hortifruti'));
     const parecidos = itensParecidos(nome, daAba);
     if (parecidos.length) { mostrarParecidos(aba, nome, qtd, parecidos); return; }
   }
@@ -1803,7 +1827,7 @@ function abrirRevisao() {
   // Ponto sem volta: o botão diz para ONDE vai, não só que envia. É a
   // última chance de perceber que montou a lista na tela errada.
   document.getElementById('btn-confirmar').textContent =
-    aba === 'compra' ? 'Confirmar e Enviar' : 'Enviar para Comissaria';
+    (aba === 'compra' || state.soHortifruti) ? 'Confirmar e Enviar' : 'Enviar para Comissaria';
   document.getElementById('revisaoBody').innerHTML = html;
   abrirModal('revisaoModal');
 }
