@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609291004">
+<link rel="stylesheet" href="style.css?v=202609291039">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609291004"></script>
+<script src="config.js?v=202609291039"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -477,7 +477,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const state = {
   user: null, perfil: null,
-  pdvs: [], pdvsMap: {},
+  pdvs: [], pdvsMap: {}, escopoPdvs: null,
   catalogo: [],
   abaAtual: 'criar',
   subAtual: 'compra',
@@ -508,8 +508,20 @@ window.addEventListener('load', async () => {
   }
 
   const { data: pdvs } = await sb.from('pdvs').select('*').eq('ativo', true).order('ordem');
-  state.pdvs = pdvs || [];
-  state.pdvsMap = Object.fromEntries(state.pdvs.map(p => [p.id, p]));
+
+  // O escopo (migration 87) diz quais PDVs este chef comanda. O Chef de
+  // Bares tem os bares; o chef executivo do hotel nao tem escopo nenhum e
+  // por isso enxerga tudo, como sempre. Se a chamada falhar, cai no
+  // comportamento antigo — melhor mostrar demais que deixar a tela vazia.
+  const { data: escopo, error: erroEscopo } = await sb.rpc('pdvs_do_usuario');
+  const ids = erroEscopo ? null : (escopo || []).map(r => r.pdv_id);
+  const limitado = ids && ids.length && ids.length < (pdvs || []).length;
+  state.escopoPdvs = limitado ? ids : null;
+
+  state.pdvs = limitado ? (pdvs || []).filter(p => ids.includes(p.id)) : (pdvs || []);
+  // O mapa fica com todos: ele so resolve nome, e uma linha que chegou de
+  // fora do escopo precisa aparecer com nome, nao com travessao.
+  state.pdvsMap = Object.fromEntries((pdvs || []).map(p => [p.id, p]));
 
   ['pdvSel','vc-pdv','vr-pdv'].forEach(id => {
     const sel = document.getElementById(id);
@@ -1122,6 +1134,12 @@ function limparEnvioExec(modo) {
 // =====================================================================
 // VISÃO AMPLA — COMPRAS E REQUISIÇÕES
 // =====================================================================
+// Prende a consulta ao escopo do chef. Sem escopo devolve a consulta
+// intacta, que e o caso do chef executivo do hotel.
+function noEscopo(q) {
+  return state.escopoPdvs ? q.in('pdv_id', state.escopoPdvs) : q;
+}
+
 async function carregarComprasGeral() {
   const de = document.getElementById('vc-de').value;
   const ate = document.getElementById('vc-ate').value;
@@ -1133,6 +1151,7 @@ async function carregarComprasGeral() {
     .select('*, pdvs(nome), solicitacao_compra_itens(*)')
     .gte('created_at', inicioDoDiaISO(de)).lte('created_at', fimDoDiaISO(ate))
     .order('created_at', { ascending: false });
+  q = noEscopo(q);
   if (pdv) q = q.eq('pdv_id', pdv);
   if (status) q = q.eq('status', status);
   const { data } = await q;
@@ -1181,6 +1200,7 @@ async function carregarReqsGeral() {
     .select('*, pdvs(nome), requisicao_itens(*)')
     .gte('created_at', inicioDoDiaISO(de)).lte('created_at', fimDoDiaISO(ate))
     .order('created_at', { ascending: false });
+  q = noEscopo(q);
   if (pdv) q = q.eq('pdv_id', pdv);
   if (status) q = q.eq('status', status);
   const { data } = await q;
@@ -1290,6 +1310,7 @@ async function gerarRel() {
       .in('status', ['aprovada','entregue'])
       .gte('data_competencia', de)
       .lte('data_competencia', ate);
+    q = noEscopo(q);
     if (pdvIds) q = q.in('pdv_id', pdvIds);
     const { data, error } = await q;
     if (error) { showToast('Erro (compras): ' + error.message, 'error'); cont.innerHTML = ''; return; }
@@ -1307,6 +1328,7 @@ async function gerarRel() {
       .eq('status', 'entregue')
       .gte('data_competencia', de)
       .lte('data_competencia', ate);
+    q = noEscopo(q);
     if (pdvIds) q = q.in('pdv_id', pdvIds);
     const { data, error } = await q;
     if (error) { showToast('Erro (requisições): ' + error.message, 'error'); cont.innerHTML = ''; return; }
