@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609291545">
+<link rel="stylesheet" href="style.css?v=202609291547">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609291545"></script>
+<script src="config.js?v=202609291547"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -2698,6 +2698,9 @@ async function gerarRelatorio() {
 
   if (fonte === 'ambos' || fonte === 'req') {
     const { data, error } = await sb.from('requisicoes')
+      // A chave vai explicita: requisicao_itens aponta para itens duas vezes
+      // (item_id e item_id_original, da troca de item), e sem dizer qual o
+      // PostgREST recusa a consulta inteira. Aqui queremos o item pedido.
       .select('id, data_competencia, status, requisicao_itens(item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, pacotes_entregues, pedido_por, peso_medio_pacote, itens!requisicao_itens_item_id_fkey(fornecedor_principal))')
       .eq('status', 'entregue')
       .gte('data_competencia', de)
