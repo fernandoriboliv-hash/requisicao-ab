@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609291906">
+<link rel="stylesheet" href="style.css?v=202610021856">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609291906"></script>
+<script src="config.js?v=202610021856"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -876,6 +876,9 @@ const state = {
   user: null, perfil: null,
   pdvs: [], pdvsMap: {},
   catalogo: [],
+  // Competencia a partir da qual a Comissaria digita o peso liquido e o
+  // sistema converte. null = ninguem converte nada. Mesma chave da planilha.
+  pesoBrutoDesde: null,
   // dashboard
   dashCompras: [], dashReqs: [],
   // aprovacao
@@ -1002,11 +1005,15 @@ function togglePdvChipRel(btn, pdvId) {
 }
 
 async function carregarCatalogoEPrecos() {
-  const [{ data: itens }, { data: precos }] = await Promise.all([
+  const [{ data: itens }, { data: precos }, desdeR] = await Promise.all([
     sb.from('itens').select('*').order('nome'),
     sb.from('precos').select('*').eq('vigente', true),
+    sb.rpc('aproveitamento_desde'),
   ]);
   state.catalogo = itens || [];
+  // Banco sem a migration 82 devolve erro, nao data: ai fica null e o
+  // relatorio sai como sempre saiu, em vez de quebrar a tela inteira.
+  state.pesoBrutoDesde = desdeR?.error ? null : (desdeR?.data || null);
   state.precosMap = {};
   (precos || []).forEach(p => { state.precosMap[p.item_id] = p; });
 }
@@ -1830,9 +1837,13 @@ async function gerarRelatorio() {
     // Item de pacote entra em PESO, nunca em número de pacotes — este
     // relatório alimenta o inventário. Ver qtdInventario() em config.js.
     (data || []).forEach(it => {
-      const inv = qtdInventario(it);
+      // Peso bruto a partir do corte, pela competencia DESTA linha — o
+      // relatorio e a planilha do fechamento tem de dar o mesmo numero.
+      const inv = qtdPesoBruto(qtdInventario(it), it.item_id,
+        it.requisicoes.data_competencia, state.catalogo, state.pesoBrutoDesde);
       rows.push({
         fonte: 'req',
+        pesoBruto: inv.pesoBruto === true,
         data: it.requisicoes.data_competencia,
         pdv: it.requisicoes.pdvs?.nome || '—',
         categoria: it.item_categoria,
@@ -1874,7 +1885,8 @@ async function gerarRelatorio() {
     x.porFicha = x.qtdFicha > 0;
     if (x.porFicha && x.total > 0) x.preco = x.valorTotal / x.total;
   });
-  relatorioDados = { rows, totaisItem, totaisPdv, totaisCat, fonte };
+  relatorioDados = { rows, totaisItem, totaisPdv, totaisCat, fonte,
+                     convertidas: rows.filter(r => r.pesoBruto).length };
 
   renderRelatorioKPIs();
   renderRelatorio();
@@ -1910,7 +1922,7 @@ function renderRelatorioKPIs() {
 
 function renderRelatorio() {
   if (!relatorioDados) return;
-  const { totaisItem, totaisPdv, totaisCat, fonte } = relatorioDados;
+  const { totaisItem, totaisPdv, totaisCat, fonte, convertidas } = relatorioDados;
   const cont = document.getElementById('relContainer');
   const itensArr = Object.values(totaisItem).sort((a,b) => b.total - a.total);
   if (itensArr.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhum dado para os filtros selecionados.</div>'; return; }
@@ -1920,7 +1932,20 @@ function renderRelatorio() {
                                          : 'Compras + Requisições';
 
   const pdvsArr = Object.entries(totaisPdv).sort((a,b)=>b[1]-a[1]);
-  let html = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+  // Sem este aviso ele ve o total de outubro subir e nao sabe se foi consumo
+  // ou conversao. So aparece quando o periodo pedido tem linha convertida.
+  const avisoBruto = convertidas > 0
+    ? `<div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
+        <div class="text-muted" style="font-size:12px;line-height:1.5">
+          <strong>${convertidas}</strong> linha${convertidas > 1 ? 's' : ''} saiu em
+          <strong>peso bruto</strong>: a Comissaria pesou o produto limpo e o
+          sistema multiplicou pelo fator de aproveitamento do item. E o peso
+          comprado — o numero do Cost Controller. Competencias anteriores a
+          ${ptDate(state.pesoBrutoDesde)} saem como sempre sairam.
+        </div>
+      </div>`
+    : '';
+  let html = avisoBruto + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
     <div class="card">
       <div class="uppercase-label mb-3">Total por PDV — ${fonteLabel}</div>
       ${pdvsArr.map(([p,t]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">

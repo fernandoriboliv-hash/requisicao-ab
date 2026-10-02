@@ -1152,6 +1152,22 @@ function avisoPesoBruto(itemId, peso, unidade, catalogo) {
     + '</span>';
 }
 
+// O relatorio da tela sai na mesma grandeza que a planilha do fechamento.
+// A Comissaria digitava o peso bruto, calculado na calculadora, ate o corte;
+// a partir dele digita o liquido e quem multiplica e o sistema. Por isso a
+// conversao e decidida LINHA A LINHA pela competencia da requisicao, igual ao
+// CASE do exportador (migration 82) — um relatorio que atravessa o corte
+// converte so a parte de depois, e o que foi digitado em bruto fica como esta.
+//
+// Se este calculo divergir do SQL, a planilha e a tela mostram numeros
+// diferentes do mesmo mes, e nao ha como saber qual esta certo.
+function qtdPesoBruto(inv, itemId, competencia, catalogo, desde) {
+  if (!desde || !competencia || String(competencia) < String(desde)) return inv;
+  const f = fatorPesoBruto(itemId, catalogo);
+  if (!f) return inv;
+  return Object.assign({}, inv, { qtd: inv.qtd * f.fator, pesoBruto: true, fator: f.fator });
+}
+
 // Congela no item do pedido como ele era na hora: se o catálogo mudar de
 // regime depois, o pedido antigo continua sendo lido do jeito que foi feito.
 //

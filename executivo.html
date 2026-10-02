@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202609291906">
+<link rel="stylesheet" href="style.css?v=202610021856">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202609291906"></script>
+<script src="config.js?v=202610021856"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -479,6 +479,9 @@ const state = {
   user: null, perfil: null,
   pdvs: [], pdvsMap: {}, escopoPdvs: null,
   catalogo: [],
+  // Competencia a partir da qual o relatorio sai em peso bruto. Mesma chave
+  // da planilha do fechamento e da tela da Comissaria (migration 79/82).
+  pesoBrutoDesde: null,
   abaAtual: 'criar',
   subAtual: 'compra',
   catAtual: { compra:'', req:'' },
@@ -714,12 +717,16 @@ function switchSub(sub) {
 }
 
 async function carregarCatalogo() {
-  const [catR, prazoR] = await Promise.all([
+  const [catR, prazoR, desdeR] = await Promise.all([
     sb.from('itens').select('*').eq('ativo', true).order('nome'),
     sb.from('configuracoes_categoria').select('categoria, prazo_reposicao_horas'),
+    sb.rpc('aproveitamento_desde'),
   ]);
   if (catR.error) { showToast('Erro: ' + catR.error.message, 'error'); return; }
   state.catalogo = catR.data || [];
+  // Erro aqui nao pode derrubar a tela: fica null e o relatorio sai como
+  // sempre saiu, sem converter nada.
+  state.pesoBrutoDesde = desdeR?.error ? null : (desdeR?.data || null);
   state.prazoPorCategoria = {};
   (prazoR.data || []).forEach(c => { state.prazoPorCategoria[c.categoria] = c.prazo_reposicao_horas; });
 }
@@ -1344,10 +1351,13 @@ async function gerarRel() {
       if (cat && it.item_categoria !== cat) return;
       // Ver o comentário em qtdInventario(): pacote entra em peso, e falta
       // de peso entra como zero com aviso — nunca como contagem de pacotes.
-      const inv = qtdInventario(it);
+      // Peso bruto a partir do corte, pela competencia DESTA requisicao: o
+      // mesmo numero que o gerente de compras ve e que vai para a planilha.
+      const inv = qtdPesoBruto(qtdInventario(it), it.item_id,
+        r.data_competencia, state.catalogo, state.pesoBrutoDesde);
       const ficha = custos[it.id];
       rows.push({ fonte:'req', itemId:it.item_id, nome:it.item_nome, cat:it.item_categoria, unid:inv.unidade,
-                  qty: inv.qtd, semPeso: inv.semPeso, ficha,
+                  qty: inv.qtd, semPeso: inv.semPeso, ficha, pesoBruto: inv.pesoBruto === true,
                   forn: it.itens?.fornecedor_principal || '—' });
     }));
   }
@@ -1379,7 +1389,8 @@ async function gerarRel() {
              valorTotal, porFicha };
   }).sort((a,b) => b.valorTotal - a.valorTotal);
 
-  relCache = { itens, de, ate, fonte, cat, pdvIds };
+  relCache = { itens, de, ate, fonte, cat, pdvIds,
+               convertidas: rows.filter(r => r.pesoBruto).length };
   renderRelKPIs(itens);
   renderRelTabela(itens, fonte);
   document.getElementById('btnExportarRel').style.display = itens.length ? 'inline-block' : 'none';
@@ -1414,12 +1425,25 @@ function renderRelKPIs(itens) {
 function renderRelTabela(itens, fonte) {
   const cont = document.getElementById('relCont');
   if (itens.length === 0) { cont.innerHTML = '<div class="empty-text">Nenhuma aquisição finalizada no período.</div>'; return; }
+  // Sem isto o total da cozinha sobe e parece consumo novo. So aparece
+  // quando o periodo pedido tem linha convertida.
+  const n = relCache?.convertidas || 0;
+  const avisoBruto = n > 0
+    ? `<div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
+        <div class="text-muted" style="font-size:12px;line-height:1.5">
+          <strong>${n}</strong> linha${n > 1 ? 's' : ''} saiu em <strong>peso bruto</strong>:
+          a Comissaria pesou o produto limpo e o sistema multiplicou pelo fator
+          de aproveitamento do item. E o peso comprado. Competencias anteriores
+          a ${ptDate(state.pesoBrutoDesde)} saem como sempre sairam.
+        </div>
+      </div>`
+    : '';
   const grupos = {};
   itens.forEach(x => { (grupos[x.cat] = grupos[x.cat] || []).push(x); });
   const ordemCat = ['proteina','laticinios','hortifruti','diversos'];
   const showC = fonte === 'ambos' || fonte === 'compra';
   const showR = fonte === 'ambos' || fonte === 'req';
-  cont.innerHTML = ordemCat.filter(c => grupos[c]).map(c => {
+  cont.innerHTML = avisoBruto + ordemCat.filter(c => grupos[c]).map(c => {
     const lista = grupos[c];
     const subtotalQty = lista.reduce((s,x) => s + x.qtyTotal, 0);
     const subtotalVal = lista.reduce((s,x) => s + x.valorTotal, 0);
