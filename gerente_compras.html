@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610021856">
+<link rel="stylesheet" href="style.css?v=202610021859">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610021856"></script>
+<script src="config.js?v=202610021859"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -1937,11 +1937,12 @@ function renderRelatorio() {
   const avisoBruto = convertidas > 0
     ? `<div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
         <div class="text-muted" style="font-size:12px;line-height:1.5">
-          <strong>${convertidas}</strong> linha${convertidas > 1 ? 's' : ''} saiu em
-          <strong>peso bruto</strong>: a Comissaria pesou o produto limpo e o
-          sistema multiplicou pelo fator de aproveitamento do item. E o peso
-          comprado — o numero do Cost Controller. Competencias anteriores a
-          ${ptDate(state.pesoBrutoDesde)} saem como sempre sairam.
+          <strong>${convertidas}</strong> linha${convertidas > 1 ? 's' : ''}
+          ${convertidas > 1 ? 'saíram' : 'saiu'} em <strong>peso bruto</strong>:
+          a Comissária pesou o produto limpo e o sistema multiplicou pelo fator
+          de aproveitamento do item. É o peso comprado — o número do Cost
+          Controller. Competências anteriores a
+          ${ptDate(state.pesoBrutoDesde)} saem como sempre saíram.
         </div>
       </div>`
     : '';

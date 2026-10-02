@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610021856">
+<link rel="stylesheet" href="style.css?v=202610021859">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610021856"></script>
+<script src="config.js?v=202610021859"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -1431,10 +1431,11 @@ function renderRelTabela(itens, fonte) {
   const avisoBruto = n > 0
     ? `<div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
         <div class="text-muted" style="font-size:12px;line-height:1.5">
-          <strong>${n}</strong> linha${n > 1 ? 's' : ''} saiu em <strong>peso bruto</strong>:
-          a Comissaria pesou o produto limpo e o sistema multiplicou pelo fator
-          de aproveitamento do item. E o peso comprado. Competencias anteriores
-          a ${ptDate(state.pesoBrutoDesde)} saem como sempre sairam.
+          <strong>${n}</strong> linha${n > 1 ? 's' : ''} ${n > 1 ? 'saíram' : 'saiu'}
+          em <strong>peso bruto</strong>: a Comissária pesou o produto limpo e o
+          sistema multiplicou pelo fator de aproveitamento do item. É o peso
+          comprado. Competências anteriores a
+          ${ptDate(state.pesoBrutoDesde)} saem como sempre saíram.
         </div>
       </div>`
     : '';
