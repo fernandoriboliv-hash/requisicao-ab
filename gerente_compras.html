@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610050715">
+<link rel="stylesheet" href="style.css?v=202610050740">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610050715"></script>
+<script src="config.js?v=202610050740"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -269,11 +269,16 @@
   <!-- ====================== DASHBOARD ====================== -->
   <div class="tab-content active" id="tab-dashboard">
     <div class="main full">
+      <!-- So aparece quando ha saida esperando. Hortifruti nao passa pela
+           Comissaria (migration 85): sai da camara na mao da cozinha e para
+           aqui, esperando a confirmacao de quem levou e quanto. -->
+      <div id="dashSaida"></div>
       <div class="stats-grid">
         <div class="stat-card"><div class="stat-label">Compras pendentes</div><div class="stat-val orange" id="d-cp-pend">—</div><div class="stat-sub">aguardando sua aprovação</div></div>
         <div class="stat-card"><div class="stat-label">Compras aprovadas hoje</div><div class="stat-val green" id="d-cp-apr">—</div></div>
         <div class="stat-card"><div class="stat-label">Requisições pendentes</div><div class="stat-val" id="d-rq-pend">—</div><div class="stat-sub">na fila do estoque</div></div>
         <div class="stat-card"><div class="stat-label">Itens livres</div><div class="stat-val gold" id="d-pend-itens">—</div><div class="stat-sub">aguardando revisão</div></div>
+        <div class="stat-card"><div class="stat-label">Saídas a confirmar</div><div class="stat-val" id="d-saida">—</div><div class="stat-sub">hortifruti retirado da câmara</div></div>
       </div>
 
       <div class="section-title">Solicitações do Dia (todas)</div>
@@ -1112,10 +1117,15 @@ function setBadge(id, n) {
 // =====================================================================
 async function carregarDashboard() {
   const hoje = isoDate(new Date());
-  const [comprasResp, reqsResp, pendResp] = await Promise.all([
+  const [comprasResp, reqsResp, pendResp, saidaResp] = await Promise.all([
     sb.from('solicitacoes_compra').select('*, pdvs(nome), solicitacao_compra_itens(*)').eq('data_competencia', hoje).order('created_at', { ascending:false }),
     sb.from('requisicoes').select('*, pdvs(nome), requisicao_itens(*)').eq('data_competencia', hoje).order('created_at', { ascending:false }),
     sb.from('itens_pendentes').select('id', { count:'exact', head:true }).eq('status','pendente'),
+    // Sem filtro de data, de proposito: o que atrasa e exatamente o que o
+    // recorte de hoje esconderia.
+    sb.from('requisicoes').select('id, data_competencia, pdvs(nome)')
+      .eq('atendida_por', 'compras').in('status', ['enviado','separacao'])
+      .order('data_competencia'),
   ]);
   const compras = comprasResp.data || [];
   const reqs    = reqsResp.data || [];
@@ -1132,6 +1142,44 @@ async function carregarDashboard() {
   document.getElementById('dashReqs').innerHTML = reqs.length === 0
     ? '<div class="empty-text">Nenhuma requisição interna hoje.</div>'
     : tabelaRequisicoes(reqs);
+
+  renderAvisoSaida(saidaResp.data || [], hoje);
+}
+
+// Aviso de saida de estoque esperando confirmacao. So desenha quando ha
+// alguma — aviso sobre fila vazia e ruido.
+function renderAvisoSaida(lista, hoje) {
+  document.getElementById('d-saida').textContent = lista.length;
+  const box = document.getElementById('dashSaida');
+  if (!lista.length) { box.innerHTML = ''; return; }
+
+  const atrasadas = lista.filter(r => r.data_competencia < hoje);
+  const maisAntiga = lista[0].data_competencia;
+  const pdvs = [...new Set(lista.map(r => r.pdvs?.nome).filter(Boolean))];
+  const cor = atrasadas.length ? 'var(--orange, #E08A3C)' : 'var(--gold, #B8963E)';
+
+  box.innerHTML = `
+    <div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid ${cor}">
+      <div class="section-title" style="margin-top:0">
+        <span>${lista.length} saída${lista.length > 1 ? 's' : ''} de hortifruti esperando sua confirmação</span>
+      </div>
+      <div class="text-muted" style="font-size:13px;line-height:1.6">
+        ${atrasadas.length
+          ? `<strong style="color:${cor}">${atrasadas.length} de dia${atrasadas.length > 1 ? 's' : ''} anterior${atrasadas.length > 1 ? 'es' : ''}</strong> — a mais antiga é de ${ptDate(maisAntiga)}.`
+          : `Todas de hoje.`}
+        ${pdvs.length ? '<br>' + escapeHtml(pdvs.join(' · ')) : ''}
+        <button class="btn btn-sm btn-outline" style="margin-top:10px;display:block"
+                onclick="irParaSaidaEstoque()">Ver e confirmar</button>
+      </div>
+    </div>`;
+}
+
+// O painel de confirmacao vive na aba de Requisicoes Internas; o aviso leva
+// ate la em vez de repetir a tabela no dashboard.
+function irParaSaidaEstoque() {
+  goTab('requisicoes', document.querySelector('.nav-item[data-proc="req"]'));
+  setTimeout(() => document.getElementById('saidaEstoque')
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350);
 }
 
 // `termo` só chega quando a lista veio de uma busca por item: nesse caso
