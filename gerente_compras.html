@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610050800">
+<link rel="stylesheet" href="style.css?v=202610050831">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610050800"></script>
+<script src="config.js?v=202610050831"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -1162,12 +1162,18 @@ async function carregarDashboard() {
   renderFaltaEstoque();
 }
 
-// "Ajuste de Peso" NAO e falta: e a peca que pesou diferente do pedido —
-// pediu 5 kg de queijo, o pedaco deu 4,3. Sao 421 das 525 divergencias do
-// sistema; sem tirar elas, as que importam somem no meio.
-// O motivo e gravado com sufixo livre ("Ajuste de Peso — 20kg"), por isso a
-// comparacao e por prefixo e nao por igualdade.
-const ehAjustePeso = m => /^s*ajuste de peso/i.test(String(m || ''));
+// Decisao dele em 05/10/2026: so estes dois motivos. Lista de INCLUSAO, nao
+// de exclusao — assim motivo novo, motivo antigo em texto livre ("Qtd", "Ok")
+// e motivo em branco ficam de fora por padrao, em vez de entrarem sozinhos.
+//
+// "Ajuste de Peso" fica fora de proposito: e a peca que pesou diferente do
+// pedido (pediu 5 kg de queijo, o pedaco deu 4,3), nao falta de estoque. Sao
+// 421 das 525 divergencias do sistema.
+//
+// Prefixo e nao igualdade: a tela grava com sufixo livre, tipo
+// "Quantidade Insuficiente — Ajuste de peso".
+const MOTIVOS_DE_FALTA = [/^s*estoque zerado/i, /^s*quantidade insuficiente/i];
+const ehFaltaDeEstoque = m => MOTIVOS_DE_FALTA.some(re => re.test(String(m || '')));
 
 function renderFaltaEstoque() {
   const box = document.getElementById('dashFalta');
@@ -1177,7 +1183,7 @@ function renderFaltaEstoque() {
 
   const linhas = (state.faltaEstoque || []).filter(l =>
     l.requisicoes.data_competencia >= corte
-    && !ehAjustePeso(l.motivo_divergencia)
+    && ehFaltaDeEstoque(l.motivo_divergencia)
     && Number(l.quantidade_entregue || 0) < Number(l.quantidade_solicitada));
 
   const porItem = {};
@@ -1217,7 +1223,7 @@ function renderFaltaEstoque() {
       <span style="display:flex;gap:6px">${seletor}</span>
     </div>
     <div class="text-muted" style="font-size:12px;margin:-6px 0 10px">
-      Não entram os ajustes de peso — só o que a cozinha pediu e o estoque não tinha.
+      Estoque zerado e quantidade insuficiente. Ajuste de peso não entra.
     </div>
     <table class="data-table tabela-cards"><thead><tr>
       <th>Item</th><th>Categoria</th><th class="num">Pediram</th><th class="num">Entregue</th>
