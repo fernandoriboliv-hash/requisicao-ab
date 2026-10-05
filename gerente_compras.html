@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610050831">
+<link rel="stylesheet" href="style.css?v=202610051452">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610050831"></script>
+<script src="config.js?v=202610051452"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -798,7 +798,7 @@
         <label class="field-label">Em quais listas este item entra</label>
         <div class="pm-listas">
           <label><input type="checkbox" id="pm-compra" checked> Solicitar compra</label>
-          <label><input type="checkbox" id="pm-req" checked> Requisição da Comissária</label>
+          <label><input type="checkbox" id="pm-req" checked> Requisição de Estoque</label>
           <label><input type="checkbox" id="pm-inv"> Inventário</label>
         </div>
       </div>
@@ -854,7 +854,7 @@ const tabTitles = {
   lista:        ['Lista do Dia', 'Compras aprovadas consolidadas — pronto para passar ao comprador'],
   reqCreate:    ['Solicitar Requisição', 'Criar requisição de estoque em nome de qualquer PDV'],
   compras:      ['Solicitações de Compra', 'Histórico completo de solicitações'],
-  requisicoes:  ['Requisições Internas', 'Histórico de transferências da Comissaria para PDVs'],
+  requisicoes:  ['Requisições Internas', 'Histórico de requisições de estoque por PDV'],
   niveis:       ['Consultar Estoque', 'Saldo teórico atual dos itens de câmara'],
   divergencias: ['Divergências de Estoque', 'Diferenças entre contagem física e saldo teórico'],
   relatorios:   ['Relatórios', 'Visibilidade quantitativa por PDV/período/categoria'],
@@ -4115,7 +4115,7 @@ async function enviarReqCreate() {
     const { error: ei } = await sb.from('requisicao_itens').insert(itensPayload);
     if (ei) { showToast('Erro ao gravar itens: ' + ei.message, 'error'); return; }
     const pdvNome = state.pdvs.find(p => p.id === state.reqNew.pdvId)?.nome || 'PDV';
-    showToast(`Requisição enviada para a Comissaria (destino: ${pdvNome}).`, 'success');
+    showToast(`Requisição de estoque criada para ${pdvNome}.`, 'success');
     limparReqCreate();
   } finally {
     _enviandoReqCreate = false;

@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610050831">
+<link rel="stylesheet" href="style.css?v=202610051452">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610050831"></script>
+<script src="config.js?v=202610051452"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -423,7 +423,7 @@
   <div class="sidebar-nav">
     <div class="nav-item" onclick="goTab('inicio',this)"><span class="nav-icon">⌂</span> Início</div>
     <div class="nav-item" data-proc="compra" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
-    <div class="nav-item" data-proc="req" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição Comissaria</div>
+    <div class="nav-item" data-proc="req" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição de Estoque</div>
     <div class="nav-item" onclick="goTab('favoritos',this)">
       <span class="nav-icon">★</span> Favoritos
       <span class="nav-badge" id="badgeFavoritos"></span>
@@ -469,7 +469,7 @@
         <span class="glifo">▤</span>
         <span class="txt">
           <span class="rot">Fazer Requisição</span>
-          <span class="desc">Pedir para a Comissaria</span>
+          <span class="desc">Pedir itens do estoque</span>
         </span>
       </button>
       <button class="card-acao" data-proc="compra" onclick="switchAba('compra')">
@@ -584,7 +584,7 @@
   <div class="tab-content" id="tab-req">
 
     <div class="aviso aviso-info" id="req-aviso">
-      <span>Requisição da Comissaria — sem corte de horário. Cada cozinha solicita conforme sua necessidade.</span>
+      <span>Requisição de Estoque — sem corte de horário. Cada cozinha solicita conforme sua necessidade.</span>
     </div>
 
     <div class="form-row col2">
@@ -670,7 +670,7 @@
   <!-- ========================================================== -->
   <div class="tab-content" id="tab-favoritos">
     <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-      <button class="btn btn-sm btn-primary"   id="fav-tipo-req"    onclick="setTipoFav('requisicao')">Requisição da Comissaria</button>
+      <button class="btn btn-sm btn-primary"   id="fav-tipo-req"    onclick="setTipoFav('requisicao')">Requisição de Estoque</button>
       <button class="btn btn-sm btn-secondary" id="fav-tipo-compra" onclick="setTipoFav('compra')">Solicitação de Compra</button>
       <span id="fav-count" class="text-muted" style="font-size:12px;margin-left:auto"></span>
     </div>
@@ -916,9 +916,9 @@ window.addEventListener('load', async () => {
     // O hortifruti do bar nao passa pela Comissaria (migration 85): vira
     // pedido proprio e quem confirma a saida e o gerente de compras. Os
     // rotulos precisam dizer o caminho certo.
-    const nav = document.querySelector('.nav-item[data-proc=req]');
-    if (nav) nav.innerHTML = '<span class="nav-icon">↔</span> Requisição de Estoque';
-    tabTitles.req = ['Requisição de Estoque', 'Hortifruti que o bar retira da câmara'];
+    // O nome da aba ja e "Requisição de Estoque" para todo mundo; aqui so
+    // o subtitulo muda, porque o bar nao pede, ele aponta o que levou.
+    tabTitles.req = [tabTitles.req[0], 'Hortifruti que o bar retira da câmara'];
     document.getElementById('req-aviso')?.remove();
     // Item escrito a mao nao tem como ser excecao: excecao e marca de item
     // do catalogo. No texto livre, entao, so cabe hortifruti.
@@ -1510,7 +1510,7 @@ const tabTitles = {
   inventario:  ['Inventário', 'Contagem do mês, item por item'],
   inicio:     ['Início', 'O que você quer fazer?'],
   compra:     ['Solicitar Compra', 'Pedido para compra externa (aprovação do Gerente)'],
-  req:        ['Requisição da Comissaria', 'Pedido de itens do estoque interno — sem aprovação'],
+  req:        ['Requisição de Estoque', 'Pedido de itens do estoque interno — sem aprovação'],
   favoritos:  ['Favoritos', 'Pedidos que se repetem — abra, confira e envie'],
   rascunhos:  ['Rascunhos', 'Solicitações salvas pra continuar depois'],
   historico:  ['Histórico', 'Tudo o que o seu PDV já pediu'],
@@ -1841,7 +1841,7 @@ function abrirRevisao() {
   document.getElementById('btn-confirmar').textContent =
       (aba === 'compra' || state.soHortifruti) ? 'Confirmar e Enviar'
     : destino === 'compras' ? 'Confirmar e Enviar'
-    : 'Enviar para Comissaria';
+    : 'Enviar Requisição';
   document.getElementById('revisaoBody').innerHTML = html;
   abrirModal('revisaoModal');
 }
@@ -2218,7 +2218,7 @@ function _favItemIndisponivel(mi, tipo) {
   const it = mi.itens;
   if (!mi.item_id || !it) return 'saiu do catálogo';
   if (it.ativo === false) return 'item desativado';
-  if (tipo === 'requisicao' && it.req_ativo === false) return 'saiu da lista da Comissaria';
+  if (tipo === 'requisicao' && it.req_ativo === false) return 'saiu da lista de estoque';
   if (tipo === 'compra' && !ehCompravel(it)) return 'não é item de compra';
   return null;
 }
@@ -2323,7 +2323,7 @@ function _renderModalFavorito() {
 
   const fora = itens.filter(i => _favItemIndisponivel(i, m.tipo)).length;
   document.getElementById('fav-corpo').innerHTML = `
-    <div class="ed-secao">${m.tipo === 'compra' ? 'Solicitação de compra' : 'Requisição da Comissaria'}
+    <div class="ed-secao">${m.tipo === 'compra' ? 'Solicitação de compra' : 'Requisição de Estoque'}
       · ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}</div>
     ${fora ? `<div class="aviso aviso-warn">${fora} ${fora === 1 ? 'item não está disponível e não será enviado' : 'itens não estão disponíveis e não serão enviados'}.</div>` : ''}
     ${linhas}
@@ -2532,7 +2532,7 @@ function setTipoHist(tipo) {
   document.getElementById('h-status').innerHTML = STATUS_HIST_PDV[tipo]
     .map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   document.getElementById('histTitle').textContent =
-    tipo === 'req' ? 'Requisições da Comissaria' : 'Solicitações de compra';
+    tipo === 'req' ? 'Requisições de Estoque' : 'Solicitações de compra';
   carregarHistoricoTab();
 }
 

@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610050831">
+<link rel="stylesheet" href="style.css?v=202610051452">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610050831"></script>
+<script src="config.js?v=202610051452"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -150,7 +150,7 @@
   </div>
   <div class="sidebar-nav">
     <div class="nav-item active" data-proc="compra" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
-    <div class="nav-item" data-proc="req" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição da Comissaria</div>
+    <div class="nav-item" data-proc="req" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição de Estoque</div>
     <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas</div>
     <div class="nav-item" onclick="goTab('descartes',this)"><span class="nav-icon">⊘</span> Descartes</div>
     <div class="nav-item" onclick="goTab('inventario',this)"><span class="nav-icon">▦</span> Inventário</div>
@@ -234,7 +234,7 @@
 
     <!-- SUB-ABA REQ -->
     <div class="tab-content" id="sub-req">
-      <div class="aviso aviso-info">Requisição da Comissaria — sem corte de horário.</div>
+      <div class="aviso aviso-info">Requisição de Estoque — sem corte de horário.</div>
       <div class="form-row col2">
         <div class="field"><label class="field-label">Data de Entrega Desejada</label><input class="input" type="date" id="req-data-entrega"></div>
         <div class="field"><label class="field-label">Observação</label><input class="input" id="req-obs" placeholder="Detalhe..."></div>
@@ -567,9 +567,9 @@ const tabTitles = {
   inventario:   ['Inventário', 'Contagem do mês, item por item'],
   criar:        ['Solicitar / Requisitar', 'Criar compra ou requisição em nome de qualquer PDV'],
   compra:       ['Solicitar Compra', 'Compra externa, em nome de qualquer PDV'],
-  req:          ['Requisição da Comissaria', 'Retirada da câmara, em nome de qualquer PDV'],
+  req:          ['Requisição de Estoque', 'Retirada da câmara, em nome de qualquer PDV'],
   compras:      ['Compras (todos os PDVs)', 'Histórico consolidado de solicitações de compra'],
-  reqs:         ['Requisições (todos os PDVs)', 'Histórico consolidado de requisições da Comissaria'],
+  reqs:         ['Requisições (todos os PDVs)', 'Histórico consolidado de requisições de estoque'],
   niveis:       ['Consultar Estoque', 'Saldo teórico atual dos itens de câmara'],
   divergencias: ['Divergências de Estoque', 'Diferenças entre contagem física e saldo teórico'],
   rel:          ['Relatório por PDV', 'Aquisições finalizadas consolidadas'],
@@ -1122,7 +1122,7 @@ async function enviar(modo) {
         ...snapshotPacote(s.item),
       }));
       await sb.from('requisicao_itens').insert(itens);
-      showToast('Requisição enviada para a Comissaria.', 'success');
+      showToast('Requisição de estoque enviada.', 'success');
     }
     limparEnvioExec(modo);
   } finally {
