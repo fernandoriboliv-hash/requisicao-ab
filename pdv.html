@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610021859">
+<link rel="stylesheet" href="style.css?v=202610050715">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610021859"></script>
+<script src="config.js?v=202610050715"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -1837,8 +1837,11 @@ function abrirRevisao() {
   document.getElementById('revisaoTitle').textContent = aba === 'compra' ? 'Revisar Solicitação de Compra' : 'Revisar Requisição';
   // Ponto sem volta: o botão diz para ONDE vai, não só que envia. É a
   // última chance de perceber que montou a lista na tela errada.
+  const destino = aba === 'compra' ? null : destinoDoCarrinho(aba);
   document.getElementById('btn-confirmar').textContent =
-    (aba === 'compra' || state.soHortifruti) ? 'Confirmar e Enviar' : 'Enviar para Comissaria';
+      (aba === 'compra' || state.soHortifruti) ? 'Confirmar e Enviar'
+    : destino === 'compras' ? 'Confirmar e Enviar'
+    : 'Enviar para Comissaria';
   document.getElementById('revisaoBody').innerHTML = html;
   abrirModal('revisaoModal');
 }
@@ -1949,8 +1952,11 @@ async function enviarRequisicao() {
   if (error) throw error;
 
   await marcarUsoFavorito();
+  // Antes de limpar: depois disso o carrinho esta vazio e nao da mais para
+  // saber para onde o pedido foi.
+  const destino = destinoDoCarrinho('req');
   limparCarrinho('req');
-  mostrarSucesso(reqId, 'req', isoDate(new Date()));
+  mostrarSucesso(reqId, 'req', isoDate(new Date()), destino);
 }
 
 // Conta o uso só quando o pedido saiu de verdade — abrir para olhar não é
@@ -2035,12 +2041,35 @@ function itensSolicitacaoPayload(aba) {
 // é a função criar_requisicao no banco, junto com o cabeçalho — inclusive a
 // fila de itens_pendentes dos itens digitados à mão.
 
-function mostrarSucesso(id, aba, competencia) {
+// Para onde a requisicao vai de verdade. Espelha a divisao da migration 85,
+// que e feita no banco DEPOIS que o pedido e gravado: se sobrar alguma linha
+// que nao seja hortifruti, essa parte fica com a Comissaria e o hortifruti se
+// muda para uma requisicao propria; se for so hortifruti, nada vai para ela.
+//
+// Sem isto a tela dizia "enviada para a Comissaria" em todo pedido, inclusive
+// nos que nunca chegam na fila dela — foi o que fez a cozinha cobrar dela em
+// 05/10/2026 um pedido de hortifruti que ela nao tinha como ter recebido.
+//
+// Categoria vazia conta como NAO hortifruti, igual ao IS DISTINCT FROM do SQL.
+function destinoDoCarrinho(aba) {
+  const cats = [
+    ...Object.values(state.selecionados[aba] || {}).map(s => s.item?.categoria),
+    ...(state.livres[aba] || []).map(l => l.categoria),
+  ];
+  if (!cats.length) return 'comissaria';
+  const horti = cats.some(c => c === 'hortifruti');
+  const outros = cats.some(c => c !== 'hortifruti');
+  return horti ? (outros ? 'ambos' : 'compras') : 'comissaria';
+}
+
+function mostrarSucesso(id, aba, competencia, destino) {
   const numStr = '#' + String(id).slice(0, 8);
   document.getElementById('sucessoNum').textContent = numStr;
-  document.getElementById('sucessoSub').textContent = aba === 'compra'
-    ? `Solicitação de compra entra na lista de ${ptDate(competencia)}.`
-    : `Requisição enviada para a Comissaria.`;
+  document.getElementById('sucessoSub').textContent =
+      aba === 'compra'    ? `Solicitação de compra entra na lista de ${ptDate(competencia)}.`
+    : destino === 'compras' ? 'Hortifruti você retira na câmara — não passa pela Comissaria.'
+    : destino === 'ambos'   ? 'A Comissaria separa o que não é hortifruti. O hortifruti você retira na câmara.'
+    :                         'Requisição enviada para a Comissaria.';
   abrirModal('sucessoModal');
 }
 
