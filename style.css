@@ -2032,3 +2032,8 @@ body[data-processo] #execCartBtn:disabled { background: var(--muted2); color: va
   color: var(--gold-light); font-size: 11px; cursor: pointer;
 }
 .inv-incluir:hover { background: rgba(184,150,62,0.12); }
+
+/* Linha de item que zerou no estoque (dashboard do gerente). O fundo e de
+   propósito discreto: a tabela inteira ja e "faltou", o realce so separa o
+   que acabou do que veio parcial. */
+.data-table tr.falta-zerou > td { background: rgba(224, 108, 108, 0.07); }
