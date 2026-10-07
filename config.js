@@ -2542,6 +2542,70 @@ const _DESP_MOTIVOS = [
 ];
 const _FT_UNIDADES = ['g', 'kg', 'ml', 'L', 'un'];
 
+// ---------------------------------------------------------------------
+// CATEGORIAS DA FICHA, E A COR DE CADA UMA
+// ---------------------------------------------------------------------
+// Antes de 06/10/2026 a categoria era texto livre: as 291 fichas da casa
+// tinham 80 valores diferentes, metade deles anotacao solta do modelo
+// ("Janeiro/2026", "Acompanhamento Croqueta", "Croqueta/Schnitzel"). Isso
+// nao filtra e nao organiza nada.
+//
+// A lista abaixo e fechada. Cinco categorias para o que vai ao hospede e
+// seis para o que a cozinha produz, na ordem em que a cozinha pensa: do
+// cafe da manha a sobremesa, depois da base mais acabada para a mais crua.
+// A cor sai dessa ordem; quem diz se e prato ou base e o preenchimento da
+// tarja do card (cheia = prato, tracejada = base), nao a cor.
+//
+// `cor` e so documentacao aqui — o valor mora em .ft-cat-<classe> no CSS,
+// senao a cor ficaria em dois lugares.
+const _FT_CATEGORIAS = [
+  { nome: 'Café da manhã',                classe: 'ft-cat-cafe',      tipo: 'prato', cor: '#F0C44A' },
+  { nome: 'Entradas e saladas',           classe: 'ft-cat-entrada',   tipo: 'prato', cor: '#6FBF73' },
+  { nome: 'Pratos principais',            classe: 'ft-cat-principal', tipo: 'prato', cor: '#D14B3F' },
+  { nome: 'Sanduíches e pizzetas',        classe: 'ft-cat-sanduiche', tipo: 'prato', cor: '#E9842F' },
+  { nome: 'Sobremesas',                   classe: 'ft-cat-sobremesa', tipo: 'prato', cor: '#D96BA0' },
+  { nome: 'Proteínas preparadas',         classe: 'ft-cat-proteina',  tipo: 'base',  cor: '#B5744C' },
+  { nome: 'Guarnições e purês',           classe: 'ft-cat-guarnicao', tipo: 'base',  cor: '#9BB04B' },
+  { nome: 'Molhos e emulsões',            classe: 'ft-cat-molho',     tipo: 'base',  cor: '#3FA7A0' },
+  { nome: 'Temperos, vinagretes e óleos', classe: 'ft-cat-tempero',   tipo: 'base',  cor: '#5B9BD5' },
+  { nome: 'Conservas, picles e compotas', classe: 'ft-cat-conserva',  tipo: 'base',  cor: '#9B7FD4' },
+  { nome: 'Massas, pães e bases',         classe: 'ft-cat-massa',     tipo: 'base',  cor: '#8E9AA8' },
+  { nome: 'Doces e sorvetes',             classe: 'ft-cat-doce',      tipo: 'base',  cor: '#B06A89' },
+];
+
+// As categorias da Comissaria sao outras e ja estavam em uso nas 28 fichas
+// de embutidos. Elas reaproveitam as cores: a lista e sempre de uma cozinha
+// so, entao a mesma cor em dois PDVs nunca aparece junta na tela.
+const _FT_CATEGORIAS_COMISSARIA = [
+  { nome: 'Peças curadas',       classe: 'ft-cat-proteina' },
+  { nome: 'Embutidos curados',   classe: 'ft-cat-principal' },
+  { nome: 'Embutidos frescos',   classe: 'ft-cat-sanduiche' },
+  { nome: 'Cozidos e defumados', classe: 'ft-cat-guarnicao' },
+];
+
+// Categoria antiga, de texto livre, nao casa com nenhuma das listas: fica
+// sem classe e o card continua com a tarja dourada de antes.
+const _FT_CLASSE_CAT = (() => {
+  const m = {};
+  [..._FT_CATEGORIAS, ..._FT_CATEGORIAS_COMISSARIA].forEach(c => { m[_ftNormCat(c.nome)] = c.classe; });
+  return m;
+})();
+
+function _ftNormCat(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function _ftClasseCat(categoria) {
+  return _FT_CLASSE_CAT[_ftNormCat(categoria)] || '';
+}
+
+// Categoria que a cozinha usa e nao esta na lista de cima. Entra no editor
+// como opcao propria: as da Comissaria tem cor mas nao estao em
+// _FT_CATEGORIAS, e sem isso salvar a ficha apagaria a categoria dela.
+const _FT_CAT_NOMES = new Set(_FT_CATEGORIAS.map(c => _ftNormCat(c.nome)));
+function _ftCatForaDaLista(c) { return c && !_FT_CAT_NOMES.has(_ftNormCat(c)); }
+
 // Aceita vírgula: <input type="number"> recusa "1,8" e a cozinha digita
 // com vírgula. Mesma correção que o inventário precisou.
 function _ftNum(v) {
@@ -2722,7 +2786,15 @@ async function _ftAbrirDaFila(pdvId, fichaId, alteracao) {
 // A LISTA
 // ---------------------------------------------------------------------
 function _ftRenderLista() {
-  const cats = [...new Set(_FT.lista.map(f => f.categoria).filter(Boolean))].sort();
+  // Na ordem da cozinha (cafe da manha -> sobremesa -> bases), nao alfabetica.
+  // O que nao esta na lista fechada vai para o fim, em ordem de nome.
+  const usadas = new Set(_FT.lista.map(f => f.categoria).filter(Boolean));
+  const cats = [
+    ..._FT_CATEGORIAS.map(c => c.nome).filter(n => usadas.has(n)),
+    ..._FT_CATEGORIAS_COMISSARIA.map(c => c.nome).filter(n => usadas.has(n)),
+    ...[...usadas].filter(n => !_FT_CATEGORIAS.some(c => c.nome === n)
+      && !_FT_CATEGORIAS_COMISSARIA.some(c => c.nome === n)).sort(),
+  ];
   const q = _ftNorm(_FT.busca);
   const emAprovacao = f => ['degustacao', 'validacao_custo'].includes(_ftEtapa(f));
   const passaStatus = f => {
@@ -2738,7 +2810,7 @@ function _ftRenderLista() {
     (!_FT.categoria || f.categoria === _FT.categoria) && passaStatus(f) &&
     (!q || _ftNorm(f.nome).includes(q)));
 
-  const chip = (rot, val, n, fn) => `<button class="filter-chip${
+  const chip = (rot, val, n, fn) => `<button class="filter-chip${fn === '_ftFiltrar' && val ? ' ' + _ftClasseCat(val) : ''}${
     (fn === '_ftFiltrarStatus' ? _FT.filtroStatus : _FT.categoria) === val ? ' active' : ''}"
     onclick="${fn}(${val === null ? 'null' : "'" + String(val).replace(/'/g, "\\'") + "'"})"
     >${escapeHtml(rot)}${n != null ? ` <span class="text-muted">${n}</span>` : ''}</button>`;
@@ -2787,13 +2859,14 @@ function _ftRenderLista() {
       const rev = _FT.revisoes[f.id];
       const pdfVelho = f.status === 'publicada' && f.sharepoint_versao != null && f.sharepoint_versao !== f.versao;
       return `
-      <div class="ft-card" onclick="_ftAbrir('${f.id}')">
+      <div class="ft-card ${f.tipo === 'prato' ? 'ft-prato' : 'ft-base'} ${_ftClasseCat(f.categoria)}"
+           onclick="_ftAbrir('${f.id}')">
         <div class="ft-card-nome">${escapeHtml(f.nome)}</div>
         <div class="ft-card-meta">
           ${f.status !== 'publicada' ? _ftStatusPill(f.status) : ''}
           ${rev ? _ftStatusPill(rev.status, 'alteração:') : ''}
           ${f.tipo === 'prato' ? '<span class="ft-tag ft-tag-prato">prato</span>' : ''}
-          ${f.categoria ? `<span class="ft-tag">${escapeHtml(f.categoria)}</span>` : ''}
+          ${f.categoria ? `<span class="ft-tag ft-tag-cat">${escapeHtml(f.categoria)}</span>` : ''}
           ${f.rendimento ? `<span>rende ${_ftFmt(f.rendimento)} ${escapeHtml(f.rendimento_un)}</span>` : ''}
           ${f.porcoes ? `<span>${f.porcoes} porç.</span>` : ''}
           ${pdfVelho ? '<span class="ft-tag ft-tag-aberto">PDF desatualizado</span>' : ''}
@@ -3245,10 +3318,17 @@ function _ftRenderEditor() {
           <input class="input" id="ft-nome" value="${escapeHtml(f.nome)}" autocomplete="off">
         </div>
         <div class="form-group">
-          <label>Categoria de Menu</label>
-          <input class="input" id="ft-cat" value="${escapeHtml(f.categoria || '')}"
-                 list="ft-cats" autocomplete="off" placeholder="Entrada, Principal, Sobremesa...">
-          <datalist id="ft-cats">${cats.map(c => `<option value="${escapeHtml(c)}">`).join('')}</datalist>
+          <label>Categoria</label>
+          <select class="select" id="ft-cat">
+            <option value=""${f.categoria ? '' : ' selected'}>— sem categoria —</option>
+            <optgroup label="Vai para o hóspede">${_FT_CATEGORIAS.filter(c => c.tipo === 'prato')
+              .map(c => `<option${c.nome === f.categoria ? ' selected' : ''}>${escapeHtml(c.nome)}</option>`).join('')}</optgroup>
+            <optgroup label="A cozinha produz">${_FT_CATEGORIAS.filter(c => c.tipo === 'base')
+              .map(c => `<option${c.nome === f.categoria ? ' selected' : ''}>${escapeHtml(c.nome)}</option>`).join('')}</optgroup>
+            ${cats.filter(_ftCatForaDaLista).length ? `<optgroup label="Em uso nesta cozinha, fora da lista">${
+              cats.filter(_ftCatForaDaLista)
+                .map(c => `<option${c === f.categoria ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</optgroup>` : ''}
+          </select>
         </div>
       </div>
 
@@ -4306,8 +4386,8 @@ function _ftImpLerAba(ws, nomeAba, XLSX) {
   const iCab = rows.findIndex(r => String(r[1]).trim().toUpperCase() === 'INGREDIENT');
   if (iCab < 0) return { ignorada: 'sem a tabela de ingredientes' };
   const cabQtd = String(rows[iCab][4] || '').toUpperCase();
-  if (!/\bGR\b|GRAMA/.test(cabQtd)) {
-    return { ignorada: `a coluna de quantidade diz "${String(rows[iCab][4]).trim()}", não gramas — conferir à mão` };
+  if (!/\bGR\b|GRAMA|QUANTIT|QUANTID/.test(cabQtd)) {
+    return { ignorada: `a coluna de quantidade diz "${String(rows[iCab][4]).trim()}", não quantidade — conferir à mão` };
   }
   let iRend = rows.findIndex((r, i) => i > iCab && /rendimento/i.test(String(r[3])));
   const fimLinhas = iRend > 0 ? iRend : Math.min(rows.length, iCab + 16);
@@ -4337,6 +4417,24 @@ function _ftImpLerAba(ws, nomeAba, XLSX) {
   const alergTexto = String(valorDe(/^alerg/i)).trim();
   const alerg = _ftImpAlergenos(alergTexto);
 
+  // A coluna UNIT dizendo KG: nas fichas do Le Jardin (06/10) ela vale, e
+  // sao 153 linhas — "Hamburger de Wagyu · KG · 0,18" e 180 g, "Ossobuco ·
+  // KG · 150" sao 150 kg de uma producao que rende 90 kg. Mas no arquivo da
+  // Kosher havia "Focaccia · Kg · 120", que e 120 g. O que separa os dois e
+  // a propria coluna: quem escreveu em quilo usa decimal (0,18 / 2,5 / 0,5)
+  // ou valor pequeno. Aba em que TODO valor em kg e inteiro e >= 50 e a
+  // excecao da Kosher — ali o kg nao vale e a coluna continua em gramas.
+  const valoresKg = [];
+  for (let i = iCab + 1; i < fimLinhas; i++) {
+    const r = rows[i] || [];
+    if (!String(r[1] || '').trim()) continue;
+    if (!/^(kg|k)$/.test(String(r[2] || '').trim().toLowerCase())) continue;
+    const n = _ftImpNumero(r[4]);
+    if (n != null && n > 0) valoresKg.push(n);
+  }
+  const kgEhGrama = valoresKg.length > 0
+    && valoresKg.every(n => Number.isInteger(n) && n >= 50);
+
   const linhas = [];
   for (let i = iCab + 1; i < fimLinhas; i++) {
     const r = rows[i] || [];
@@ -4350,23 +4448,60 @@ function _ftImpLerAba(ws, nomeAba, XLSX) {
       aCompletar = true; obs = 'qb na planilha';
     } else {
       if (un === 'ml') unidade = 'ml';
-      else if (un === 'l' || un === 'lt') { unidade = 'L'; obs = 'conferir: a planilha diz L numa coluna em gramas'; }
+      else if (un === 'l' || un === 'lt' || un === 'litro') unidade = 'L';
+      else if (/^(kg|k)$/.test(un)) {
+        if (kgEhGrama) obs = 'a planilha diz kg, mas todos os valores em kg desta aba são inteiros ≥ 50 — lido em gramas, conferir';
+        else unidade = 'kg';
+      }
       else if (/^(und|un|um|unid|unit|unidade)$/.test(un)) unidade = 'un';
       else if (/fava/i.test(brutoTxt)) unidade = 'un';
       quantidade = _ftImpNumero(bruto);
-      if (quantidade == null || quantidade <= 0) { quantidade = null; aCompletar = true; }
+      if (quantidade == null || quantidade <= 0) {
+        quantidade = null; aCompletar = true;
+        // "," 50" e ",0,02" aparecem na Fraldinha: guardar o que estava
+        // escrito, senao o cozinheiro nao sabe o que completar.
+        if (brutoTxt) obs = `a planilha trazia "${brutoTxt}" na quantidade`;
+      }
     }
     linhas.push({ nome: ing, quantidade, unidade, aCompletar, observacao: obs });
   }
   if (!linhas.length) return { ignorada: 'nenhum ingrediente preenchido' };
 
-  let rendimento = null;
+  // O rendimento vem com a unidade dentro do texto: "90kg", "550 ml", "3 L",
+  // "608 gr", "14 porcoes", "20 und de 60 gr". Numero solto ("40", "4000")
+  // NAO entra: em aba escrita em quilo, 40 pode ser 40 kg e 4000 pode ser
+  // 4000 g, e o rendimento errado erra o inventario em mil vezes.
+  let rendimento = null, rendimento_un = 'g', porcoesRend = null;
   if (iRend > 0) {
-    const v = cel(iRend, 4);
-    const n = _ftImpNumero(v);
-    if (n != null && n > 0 && n !== _FT_IMP_RENDIMENTO_TEMPLATE) rendimento = n;
+    const bruto = String(cel(iRend, 4) || '').trim();
+    const n = _ftImpNumero(bruto);
+    const temUn = bruto.match(/(kg|quilos?|gr?\b|gramas?|ml|mililitros?|l\b|lt\b|litros?|por[cç][oõ]es|por[cç][aã]o|und?\b|unid)/i);
+    if (n != null && n > 0 && n !== _FT_IMP_RENDIMENTO_TEMPLATE && temUn) {
+      const u = temUn[1].toLowerCase();
+      if (/por[cç]|und?|unid/.test(u)) { porcoesRend = Number.isInteger(n) ? n : null; }
+      else if (/^(kg|quilo)/.test(u)) { rendimento = n; rendimento_un = 'kg'; }
+      else if (/^ml|mililitro/.test(u)) { rendimento = n; rendimento_un = 'ml'; }
+      else if (/^(l|lt|litro)/.test(u)) { rendimento = n; rendimento_un = 'L'; }
+      else { rendimento = n; rendimento_un = 'g'; }
+    } else if (n != null && n > 0 && n !== _FT_IMP_RENDIMENTO_TEMPLATE) {
+      // Numero solto. A propria receita decide a unidade: o que sai nunca e
+      // mil vezes o que entra. "Molho Roti" recebe 136 kg e diz 40 -> 40 kg;
+      // "Mousseline" recebe 10 kg e diz 4000 -> 4000 g. Quando nenhuma das
+      // duas leituras cabe, e porque o campo tem outra coisa ("1", de uma
+      // porcao) e fica em branco.
+      const emG = { g: 1, kg: 1000, ml: 1, L: 1000 };
+      const entrada = linhas.reduce((s, l) =>
+        s + (l.quantidade && emG[l.unidade] ? l.quantidade * emG[l.unidade] : 0), 0);
+      const cabe = g => entrada > 0 && g >= entrada * 0.05 && g <= entrada * 1.5;
+      const dominante = linhas.filter(l => l.unidade === 'kg').length
+        > linhas.filter(l => l.unidade === 'g').length ? 'kg' : 'g';
+      const ordem = dominante === 'kg' ? ['kg', 'g'] : ['g', 'kg'];
+      const escolhida = ordem.find(u => cabe(n * emG[u]));
+      if (escolhida) { rendimento = n; rendimento_un = escolhida; }
+      else avisos.push(`rendimento "${bruto}" está sem unidade na planilha — ficou em branco`);
+    }
   }
-  if (rendimento == null) avisos.push('rendimento em branco');
+  if (rendimento == null && !avisos.some(a => /^rendimento "/.test(a))) avisos.push('rendimento em branco');
 
   // História: a linha logo abaixo de "STORY BEHIND THIS FOOD".
   const iStory = rows.findIndex(r => /story behind/i.test(String(r[0])));
@@ -4393,11 +4528,15 @@ function _ftImpLerAba(ws, nomeAba, XLSX) {
     obsFicha.push('A planilha diz "Oleaginosas": marcar a castanha específica.');
   }
 
+  // "Rendimento: 14 porcoes" nao e peso, e o numero de porcoes — vale quando
+  // o cabecalho (C4) nao trouxe nenhum.
+  if (porcoes == null && porcoesRend) porcoes = porcoesRend;
+
   return { ficha: {
     aba: nomeAba, nome, outlet, porcoes, preco_venda, data_referencia, categoria,
     alergenos: alerg.lista, alergTexto, observacao: obsFicha.join('\n') || null,
     tipo: /p\.?\s*f\.?\s*$/i.test(String(nomeAba).trim()) ? 'prato' : 'base',
-    rendimento, rendimento_un: 'g', historia, modo_preparo, linhas, avisos,
+    rendimento, rendimento_un, historia, modo_preparo, linhas, avisos,
   } };
 }
 
@@ -4423,7 +4562,10 @@ function _ftImpLerArquivo(wb, XLSX) {
 function _ftImpResolver(lidas, existentes, catalogo) {
   const porNomeArquivo = {}, porNomeSolto = {};
   lidas.fichas.forEach(f => {
-    [f.nome, f.aba].forEach(n => {
+    // `apelidos`: nomes de abas iguais que o carregamento juntou numa ficha so
+    // (a aba "Roti" do Magret e a mesma receita do "Molho Roti"). Sem isso o
+    // ingrediente escrito com o outro nome ficaria a vincular.
+    [f.nome, f.aba, ...(f.apelidos || [])].forEach(n => {
       const k = _ftImpChave(n), s = _ftImpChaveSolta(n);
       if (k) (porNomeArquivo[k] = porNomeArquivo[k] || new Set()).add(f);
       if (s) (porNomeSolto[s] = porNomeSolto[s] || new Set()).add(f);

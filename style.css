@@ -1570,6 +1570,45 @@ body.has-cart .main-with-sidebar { padding-right: 340px; }
 }
 .ft-tag-rec { color: var(--blue); border-color: rgba(37,99,168,.45); background: rgba(37,99,168,.1); }
 
+/* ---------------------------------------------------------------
+   COR POR CATEGORIA DA FICHA
+   ---------------------------------------------------------------
+   Onze cores, uma por categoria. A cor identifica a FAMILIA; quem
+   diz se a ficha vai para o hospede ou fica na producao e o
+   preenchimento: prato tem a tarja cheia, base tem a tarja vazada.
+   Ficha sem categoria (ou com categoria antiga, de texto livre)
+   continua com a tarja dourada de antes.
+   As cores se repetem entre cozinhas sem problema: a lista e sempre
+   de um PDV so, nunca mistura Le Jardin com Comissaria.          */
+.ft-cat-cafe      { --ft-cat: #F0C44A; --ft-cat-fraco: rgba(240,196, 74,.13); }
+.ft-cat-entrada   { --ft-cat: #6FBF73; --ft-cat-fraco: rgba(111,191,115,.13); }
+.ft-cat-principal { --ft-cat: #D14B3F; --ft-cat-fraco: rgba(209, 75, 63,.13); }
+.ft-cat-sanduiche { --ft-cat: #E9842F; --ft-cat-fraco: rgba(233,132, 47,.13); }
+.ft-cat-sobremesa { --ft-cat: #D96BA0; --ft-cat-fraco: rgba(217,107,160,.13); }
+.ft-cat-proteina  { --ft-cat: #B5744C; --ft-cat-fraco: rgba(181,116, 76,.13); }
+.ft-cat-guarnicao { --ft-cat: #9BB04B; --ft-cat-fraco: rgba(155,176, 75,.13); }
+.ft-cat-molho     { --ft-cat: #3FA7A0; --ft-cat-fraco: rgba( 63,167,160,.13); }
+.ft-cat-tempero   { --ft-cat: #5B9BD5; --ft-cat-fraco: rgba( 91,155,213,.13); }
+.ft-cat-conserva  { --ft-cat: #9B7FD4; --ft-cat-fraco: rgba(155,127,212,.13); }
+.ft-cat-massa     { --ft-cat: #8E9AA8; --ft-cat-fraco: rgba(142,154,168,.13); }
+/* Doce e sorvete sao a base da sobremesa: rosa mais fechado, de proposito
+   perto do rosa dela — e a mesma familia, numa cozinha com 20 fichas doces. */
+.ft-cat-doce      { --ft-cat: #B06A89; --ft-cat-fraco: rgba(176,106,137,.13); }
+
+.ft-card[class*="ft-cat-"] { border-left-color: var(--ft-cat); }
+.ft-card[class*="ft-cat-"]:hover { border-left-color: var(--ft-cat); }
+/* Base: mesma cor, tarja tracejada — o preenchimento e que diz prato x base. */
+.ft-card.ft-base[class*="ft-cat-"] { border-left-style: dashed; }
+.ft-tag-cat { color: var(--ft-cat, var(--muted)); border-color: var(--ft-cat, var(--border-subtle)); }
+.ft-card.ft-prato .ft-tag-cat { background: var(--ft-cat-fraco, transparent); }
+/* O filtro de categoria tambem leva a cor dela — sem icone nenhum, so o
+   proprio texto e a borda. Assim a fila de filtros ja e a legenda.        */
+.filter-chip[class*="ft-cat-"] { color: var(--ft-cat); border-color: var(--ft-cat-fraco); }
+.filter-chip[class*="ft-cat-"]:hover { border-color: var(--ft-cat); }
+.filter-chip[class*="ft-cat-"].active {
+  background: var(--ft-cat-fraco); border-color: var(--ft-cat); color: var(--ft-cat);
+}
+
 .ft-editor-topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 
 /* Cabeçalho e linha usam o MESMO grid: se divergirem, o rótulo deixa de
