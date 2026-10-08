@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gerente de Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610062131">
+<link rel="stylesheet" href="style.css?v=202610082036">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610062131"></script>
+<script src="config.js?v=202610082036"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -240,6 +240,10 @@
     <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas
       <span class="nav-badge" id="badgeFichas"></span></div>
     <div class="nav-item" onclick="goTab('descartes',this)"><span class="nav-icon">⊘</span> Descartes</div>
+    <div class="nav-item" onclick="goTab('seguranca',this)">
+      <span class="nav-icon">❄</span> Segurança dos alimentos
+      <span class="nav-badge" id="badgeSeguranca"></span>
+    </div>
     <div class="nav-item" onclick="goTab('catalogo',this)"><span class="nav-icon">◎</span> Catálogo &amp; Preços</div>
     <div class="nav-item" onclick="goTab('pendentes',this)">
       <span class="nav-icon">⚠</span> Itens Pendentes
@@ -598,6 +602,10 @@
     <div id="dsRoot"></div>
   </div>
 
+  <div class="tab-content" id="tab-seguranca">
+    <div id="sgRoot"></div>
+  </div>
+
   <div class="tab-content" id="tab-fechamento">
     <div class="main full">
       <div class="filters-bar" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
@@ -861,6 +869,7 @@ const tabTitles = {
   fechamento:   ['Fechar o Mês', 'Colunas da planilha REQUISIÇÃO COZINHA, um PDV por vez'],
   fichas:       ['Fichas Técnicas', 'Receitas de todas as cozinhas e o que espera aprovação'],
   descartes:    ['Descartes', 'O que cada cozinha descartou, com o custo'],
+  seguranca:    ['Segurança dos alimentos', 'Temperatura dos equipamentos e inspeções da nutrição'],
   catalogo:     ['Catálogo & Preços', 'Itens do catálogo com preço, fornecedor e disponibilidade'],
   pendentes:    ['Itens Pendentes', 'Itens livres aguardando decisão'],
 };
@@ -966,6 +975,14 @@ async function abrirTelaDescartes() {
   const pdvId = _DS.pdvId && pdvs.some(p => p.id === _DS.pdvId) ? _DS.pdvId : pdvs[0]?.id;
   if (!pdvId) { document.getElementById('dsRoot').innerHTML = '<div class="empty-text">Nenhuma cozinha cadastrada.</div>'; return; }
   await montarDescartes('#dsRoot', { pdvId, pdvs });
+}
+
+// Temperatura e inspeções de todas as cozinhas (migration 95). Abre em
+// "todas as áreas"; o seletor filtra uma cozinha.
+async function abrirTelaSeguranca() {
+  if (!state.pdvs || !state.pdvs.length) await carregarPDVs();
+  const pdvs = state.pdvs.map(p => ({ id: p.id, nome: p.nome }));
+  await montarSegurancaCozinha('#sgRoot', { pdvId: _SG.cozOpts?.pdvId || null, pdvs, permitirTodas: true });
 }
 
 // Abrir o registro para ver os itens — detalhe compartilhado em config.js
@@ -1077,6 +1094,7 @@ function goTab(tab, el) {
   if (tab === 'fechamento')  initFechamento();
   if (tab === 'fichas')      abrirTelaFichas();
   if (tab === 'descartes')   abrirTelaDescartes();
+  if (tab === 'seguranca')   abrirTelaSeguranca();
   // Atualiza cart sidebar (aparece só em reqCreate)
   if (typeof atualizarCartBarRC === 'function') atualizarCartBarRC();
   // Auto-abre grupo pai se sub-item ativo
@@ -1094,6 +1112,7 @@ async function atualizarBadges() {
     sb.from('divergencias_estoque').select('id', { count: 'exact', head: true }).eq('status', 'pendente'),
   ]);
   setBadge('badgeAprovacao', cAprov || 0);
+  contarOcorrenciasAbertas().then(n => setBadge('badgeSeguranca', n)).catch(() => {});
   setBadge('badgePendentes', cPend || 0);
   const bd = document.getElementById('badgeDivergencias');
   if (bd) {

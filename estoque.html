@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610062131">
+<link rel="stylesheet" href="style.css?v=202610082036">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610062131"></script>
+<script src="config.js?v=202610082036"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -806,6 +806,10 @@
     <div class="nav-item" data-proc="compra" onclick="goTab('compra',this)"><span class="nav-icon">$</span> Solicitar Compra</div>
     <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">▤</span> Fichas Técnicas</div>
     <div class="nav-item" onclick="goTab('descartes',this)"><span class="nav-icon">⊘</span> Descartes</div>
+    <div class="nav-item" onclick="goTab('seguranca',this)">
+      <span class="nav-icon">❄</span> Segurança dos alimentos
+      <span class="nav-badge" id="badgeSeguranca"></span>
+    </div>
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
   </div>
   <div class="sidebar-foot">
@@ -1253,6 +1257,10 @@
     <div id="dsRoot"></div>
   </div>
 
+  <div class="tab-content" id="tab-seguranca">
+    <div id="sgRoot"></div>
+  </div>
+
   </div>
 </div>
 
@@ -1424,6 +1432,7 @@ window.addEventListener('load', async () => {
   state.pdvs = pdvs || [];
   const com = state.pdvs.find(p => p.tipo === 'comissaria');
   state.pdvComissariaId = com?.id;
+  atualizarBadgeSeguranca();
 
   // Popular dropdowns de PDV
   const pdvSel = document.getElementById('f-pdv');
@@ -1477,6 +1486,7 @@ const tabTitles = {
   inventario:   ['Inventário do Mês', 'Contagem da câmara da Comissaria'],
   fichas:       ['Fichas Técnicas', 'Receitas da Comissaria'],
   descartes:    ['Descartes', 'O que foi descartado na Comissaria'],
+  seguranca:    ['Segurança dos alimentos', 'Temperatura das câmaras e inspeções da nutrição'],
 };
 
 function toggleNavGroup(headEl) {
@@ -1527,6 +1537,7 @@ function goTab(aba, el) {
   if (aba === 'inventario') abrirTelaInventario();
   if (aba === 'fichas') abrirTelaFichas();
   if (aba === 'descartes') abrirTelaDescartes();
+  if (aba === 'seguranca') abrirTelaSeguranca();
   openParentGroup(el);
   document.getElementById('chkSaveBar').classList.toggle('visible',
     aba === 'checklist' && Object.keys(state.chk.dirty).length > 0);
@@ -1551,6 +1562,18 @@ async function abrirTelaInventario() {
   }
   await montarInventario('#invRoot',
     { pdvId: state.pdvComissariaId, pdvNome: 'Comissaria' });
+}
+
+// Temperatura das câmaras (Recebimento, Açougue, Peixaria) e inspeções da
+// nutrição — migration 95. Mesma tela das cozinhas.
+async function abrirTelaSeguranca() {
+  await montarSegurancaCozinha('#sgRoot', { pdvId: state.pdvComissariaId });
+}
+async function atualizarBadgeSeguranca() {
+  if (!state.pdvComissariaId) return;
+  const n = await contarForaDaFaixaCozinha(state.pdvComissariaId).catch(() => 0);
+  const b = document.getElementById('badgeSeguranca');
+  if (b) { b.textContent = n || ''; b.style.display = n ? '' : 'none'; }
 }
 
 // Descarte da câmara da Comissaria — mesma tela das cozinhas.

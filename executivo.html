@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chef — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610062131">
+<link rel="stylesheet" href="style.css?v=202610082036">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610062131"></script>
+<script src="config.js?v=202610082036"></script>
 <style>
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .cat-btn {
@@ -153,6 +153,10 @@
     <div class="nav-item" data-proc="req" onclick="goTab('req',this)"><span class="nav-icon">↔</span> Requisição de Estoque</div>
     <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas</div>
     <div class="nav-item" onclick="goTab('descartes',this)"><span class="nav-icon">⊘</span> Descartes</div>
+    <div class="nav-item" onclick="goTab('seguranca',this)">
+      <span class="nav-icon">❄</span> Segurança dos alimentos
+      <span class="nav-badge" id="badgeSeguranca"></span>
+    </div>
     <div class="nav-item" onclick="goTab('inventario',this)"><span class="nav-icon">▦</span> Inventário</div>
     <div class="nav-item" onclick="goTab('fechamento',this)"><span class="nav-icon">⇥</span> Fechar o Mês</div>
 
@@ -282,6 +286,10 @@
 
   <div class="tab-content" id="tab-descartes">
     <div id="dsRoot"></div>
+  </div>
+
+  <div class="tab-content" id="tab-seguranca">
+    <div id="sgRoot"></div>
   </div>
 
   <div class="tab-content" id="tab-inventario">
@@ -552,6 +560,7 @@ window.addEventListener('load', async () => {
   // certos — antes o cabecalho abria em "Solicitar / Requisitar", que
   // era o nome de quando as duas coisas eram uma aba so.
   goTab(state.subAtual, document.querySelector('.nav-item[data-proc="' + state.subAtual + '"]'));
+  atualizarBadgeSeguranca();
 });
 
 function isoDate(d) { return d.toISOString().split('T')[0]; }
@@ -575,6 +584,7 @@ const tabTitles = {
   rel:          ['Relatório por PDV', 'Aquisições finalizadas consolidadas'],
   fichas:       ['Fichas Técnicas', 'Receitas da cozinha'],
   descartes:    ['Descartes', 'O que foi descartado e o que ainda falta conferir'],
+  seguranca:    ['Segurança dos alimentos', 'Temperatura dos equipamentos e inspeções da nutrição'],
   fechamento:   ['Fechar o Mês', 'Colunas da planilha REQUISIÇÃO COZINHA para o financeiro'],
 };
 
@@ -632,6 +642,18 @@ async function abrirTelaDescartes() {
   await montarDescartes('#dsRoot', { pdvId, pdvNome: pdv?.nome || '', pdvs });
 }
 
+// Temperatura e inspeções (migration 95). Chef de cozinha vê a dele; o chef
+// executivo do hotel, sem cozinha fixa, escolhe — ou vê todas as áreas.
+async function abrirTelaSeguranca() {
+  const pdvs = state.perfil.pdv_id ? null : (state.pdvs || []).map(p => ({ id: p.id, nome: p.nome }));
+  await montarSegurancaCozinha('#sgRoot', { pdvId: state.perfil.pdv_id || null, pdvs, permitirTodas: !state.perfil.pdv_id });
+}
+async function atualizarBadgeSeguranca() {
+  const n = await contarForaDaFaixaCozinha(state.perfil.pdv_id || null).catch(() => 0);
+  const b = document.getElementById('badgeSeguranca');
+  if (b) { b.textContent = n || ''; b.style.display = n ? '' : 'none'; }
+}
+
 async function abrirTelaInventario(pdvId) {
   const meu = pdvId || state.perfil.pdv_id;
   const cx = document.getElementById('inv-pdv-escolha');
@@ -668,7 +690,7 @@ function goTab(aba, el) {
   else delete document.body.dataset.processo;
   state.abaAtual = destino;
   document.querySelectorAll('.tab-content').forEach(c => {
-    if (['tab-criar','tab-compras','tab-reqs','tab-niveis','tab-divergencias','tab-rel','tab-inventario','tab-fichas','tab-descartes','tab-fechamento'].includes(c.id)) c.classList.remove('active');
+    if (['tab-criar','tab-compras','tab-reqs','tab-niveis','tab-divergencias','tab-rel','tab-inventario','tab-fichas','tab-descartes','tab-fechamento','tab-seguranca'].includes(c.id)) c.classList.remove('active');
   });
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('tab-' + destino).classList.add('active');
@@ -679,6 +701,7 @@ function goTab(aba, el) {
   document.getElementById('topSub').textContent = s;
   if (aba === 'fichas') abrirTelaFichas();
   if (aba === 'descartes') abrirTelaDescartes();
+  if (aba === 'seguranca') abrirTelaSeguranca();
   if (aba === 'inventario') abrirTelaInventario();
   if (aba === 'fechamento')  montarFechamentoReq('#fqRoot');
   if (aba === 'compras') carregarComprasGeral();

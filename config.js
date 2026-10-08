@@ -26,6 +26,8 @@ const REDIRECT_POR_PERFIL = {
   estoque:         'estoque.html',
   comprador:       'comprador.html',     // fase pós-piloto
   recebimento:     'recebimento.html',   // fase pós-piloto
+  nutricionista:   'nutricao.html',      // migration 95
+  nutri_estagio:   'nutricao.html',
 };
 
 // Rótulo de cada perfil na interface. Fonte única — evita divergência entre telas.
@@ -39,6 +41,8 @@ const LABEL_PERFIL = {
   estoque:         'Comissária',
   comprador:       'Comprador',
   recebimento:     'Recebimento',
+  nutricionista:   'Nutricionista',
+  nutri_estagio:   'Estagiária de Nutrição',
 };
 
 // =====================================================================
@@ -1478,7 +1482,8 @@ function nomeAutor(usuarioId) {
 
 // "Fulano" ou "Fulano (Chef)" — o perfil separa o pedido do cozinheiro do que
 // o Chef ou a Comissaria lançou em nome do PDV
-const _ROTULO_PERFIL = { executivo: 'Chef', gerente_compras: 'Gerente', estoque: 'Comissária', pdv: 'Cozinheiro' };
+const _ROTULO_PERFIL = { executivo: 'Chef', gerente_compras: 'Gerente', estoque: 'Comissária', pdv: 'Cozinheiro',
+  nutricionista: 'Nutricionista', nutri_estagio: 'Nutrição' };
 
 function autorComPerfil(usuarioId) {
   const u = _autores?.get(usuarioId);
@@ -2433,7 +2438,23 @@ const _FT = {
   aberta: null, linhas: [], linhasFicha: [], usada: [], eventos: [], salvando: false,
   original: null, publicadaEstado: null, custo: null, gerencial: null,
   precos: null,        // item_id -> preço vigente; só carrega para quem vê preço
+  nutri: {},           // ficha_id -> última revisão da nutricionista (migration 95)
+  filtroNutri: null,   // pendente | revisada
+  nutriAberta: null,   // a revisão da ficha aberta
 };
+
+// Revisão de alergênicos da nutricionista (migration 95). A revisão vale
+// para a versão: ficha alterada depois volta a pendente. Quem acompanha a
+// fila é a nutricionista e a gerência; a cozinha só vê o selo na ficha.
+function _ftVeNutri() {
+  const p = window.state && window.state.perfil && window.state.perfil.perfil;
+  return ['nutricionista', 'gerente_compras', 'master_sistema'].includes(p);
+}
+function _ftRevisaNutri() {
+  const p = window.state && window.state.perfil && window.state.perfil.perfil;
+  return p === 'nutricionista' || p === 'master_sistema';
+}
+const _ftNutriOk = f => { const r = _FT.nutri[f.id]; return !!r && r.versao === f.versao; };
 
 // =====================================================================
 // CUSTO PELA FICHA — compartilhado por fichas, requisição e relatórios
@@ -2647,6 +2668,7 @@ const _FT_EVENTOS = {
   enviar_degustacao: 'enviou para degustação', aprovar_degustacao: 'aprovou a degustação',
   publicar: 'publicou', devolver: 'devolveu para ajustes', reprovar: 'reprovou',
   descartar: 'descartou a alteração', sharepoint: 'salvou o PDF no SharePoint',
+  revisao_nutri: 'revisou os alergênicos (nutrição)',
 };
 const _FT_ABERTAS = ['rascunho', 'degustacao', 'validacao_custo'];
 
@@ -2706,6 +2728,14 @@ async function montarFichas(seletor, opts) {
     const { data: rv } = await sb.from('ficha_revisoes').select('id, ficha_id, status, atualizada_em')
       .in('ficha_id', ids.slice(i, i + 150)).in('status', _FT_ABERTAS);
     (rv || []).forEach(r => { _FT.revisoes[r.ficha_id] = r; });
+  }
+  _FT.nutri = {};
+  if (_ftVeNutri()) {
+    for (let i = 0; i < ids.length; i += 150) {
+      const { data: rn } = await sb.from('ficha_revisao_nutri').select('ficha_id, versao, revisada_em')
+        .in('ficha_id', ids.slice(i, i + 150));
+      (rn || []).forEach(r => { _FT.nutri[r.ficha_id] = r; });
+    }
   }
   _FT.aberta = null;
 
@@ -2806,12 +2836,16 @@ function _ftRenderLista() {
       default: return true;
     }
   };
+  const veNutri = _ftVeNutri();
+  const passaNutri = f => !veNutri || !_FT.filtroNutri
+    || (_FT.filtroNutri === 'revisada') === _ftNutriOk(f);
   const vis = _FT.lista.filter(f =>
-    (!_FT.categoria || f.categoria === _FT.categoria) && passaStatus(f) &&
+    (!_FT.categoria || f.categoria === _FT.categoria) && passaStatus(f) && passaNutri(f) &&
     (!q || _ftNorm(f.nome).includes(q)));
+  const nNutriOk = veNutri ? _FT.lista.filter(_ftNutriOk).length : 0;
 
   const chip = (rot, val, n, fn) => `<button class="filter-chip${fn === '_ftFiltrar' && val ? ' ' + _ftClasseCat(val) : ''}${
-    (fn === '_ftFiltrarStatus' ? _FT.filtroStatus : _FT.categoria) === val ? ' active' : ''}"
+    (fn === '_ftFiltrarStatus' ? _FT.filtroStatus : fn === '_ftFiltrarNutri' ? _FT.filtroNutri : _FT.categoria) === val ? ' active' : ''}"
     onclick="${fn}(${val === null ? 'null' : "'" + String(val).replace(/'/g, "\\'") + "'"})"
     >${escapeHtml(rot)}${n != null ? ` <span class="text-muted">${n}</span>` : ''}</button>`;
   const conta = fn => _FT.lista.filter(fn).length;
@@ -2851,6 +2885,11 @@ function _ftRenderLista() {
       ${chip('Publicadas', 'publicada', conta(f => f.status === 'publicada'), '_ftFiltrarStatus')}
       ${nRepr ? chip('Reprovadas', 'reprovada', nRepr, '_ftFiltrarStatus') : ''}
     </div>` : ''}
+    ${veNutri && _FT.lista.length ? `<div class="ft-chips">
+      ${chip('Revisão nutricional', null, null, '_ftFiltrarNutri')}
+      ${chip('Pendentes', 'pendente', _FT.lista.length - nNutriOk, '_ftFiltrarNutri')}
+      ${chip('Revisadas', 'revisada', nNutriOk, '_ftFiltrarNutri')}
+    </div>` : ''}
     <div class="ft-chips">
       ${chip('Todas', null, _FT.lista.length, '_ftFiltrar')}
       ${cats.map(c => chip(c, c, _FT.lista.filter(f => f.categoria === c).length, '_ftFiltrar')).join('')}
@@ -2870,6 +2909,7 @@ function _ftRenderLista() {
           ${f.rendimento ? `<span>rende ${_ftFmt(f.rendimento)} ${escapeHtml(f.rendimento_un)}</span>` : ''}
           ${f.porcoes ? `<span>${f.porcoes} porç.</span>` : ''}
           ${pdfVelho ? '<span class="ft-tag ft-tag-aberto">PDF desatualizado</span>' : ''}
+          ${veNutri && !_ftNutriOk(f) ? '<span class="ft-tag ft-tag-nutri">revisão pendente</span>' : ''}
         </div>
       </div>`; }).join('')}</div>`
       : `<div class="empty-text">${_FT.lista.length
@@ -2879,6 +2919,7 @@ function _ftRenderLista() {
 
 function _ftFiltrar(cat) { _FT.categoria = cat; _ftRenderLista(); }
 function _ftFiltrarStatus(st) { _FT.filtroStatus = st; _ftRenderLista(); }
+function _ftFiltrarNutri(st) { _FT.filtroNutri = st; _ftRenderLista(); }
 function _ftBuscar(v) {
   _FT.busca = v;
   const el = document.getElementById('ft-busca');
@@ -2935,7 +2976,7 @@ async function _ftAbrir(id, opcoes = {}) {
   _FT.raiz.innerHTML = '<div class="loading-text">Abrindo...</div>';
   const { data: f } = await sb.from('fichas_tecnicas').select('*').eq('id', id).maybeSingle();
   if (!f) { showToast('Ficha não encontrada.', 'error'); return montarFichas(_FT.raiz, _FT); }
-  const [{ data: linhas }, { data: usada }, { data: rev }, { data: ev }] = await Promise.all([
+  const [{ data: linhas }, { data: usada }, { data: rev }, { data: ev }, { data: rn }] = await Promise.all([
     sb.from('ficha_itens')
       .select('id, item_id, sub_ficha_id, descricao, observacao, quantidade, unidade, fator_correcao, ordem, itens(nome, unidade), fichas_tecnicas!ficha_itens_sub_ficha_id_fkey(nome)')
       .eq('ficha_id', id).order('ordem'),
@@ -2944,8 +2985,10 @@ async function _ftAbrir(id, opcoes = {}) {
     sb.from('ficha_revisoes').select('*').eq('ficha_id', id).in('status', _FT_ABERTAS).maybeSingle(),
     sb.from('ficha_eventos').select('evento, de_status, para_status, motivo, usuario_id, criado_em, revisao_id')
       .eq('ficha_id', id).order('criado_em', { ascending: false }).limit(20),
+    sb.from('ficha_revisao_nutri').select('*').eq('ficha_id', id).maybeSingle(),
   ]);
   await carregarAutores(sb);
+  _FT.nutriAberta = rn || null;
 
   _FT.ficha = f;
   _FT.rev = rev || null;
@@ -3057,6 +3100,7 @@ function _ftRenderVisualizar(versaoAntiga) {
       <div class="ft-ver-meta">${alerg.length
         ? alerg.map(a => `<span class="ft-tag ft-tag-alerg">${escapeHtml(a)}</span>`).join('')
         : '<span class="text-muted">nenhum marcado</span>'}</div>
+      ${versaoAntiga || vendoRev ? '' : _ftNutriHtml(f)}
 
       ${f.observacao ? `<div class="section-title mt-3"><span>Observações</span></div>
         <div class="ft-ver-texto">${_ftTexto(f.observacao)}</div>` : ''}
@@ -3071,6 +3115,51 @@ function _ftRenderVisualizar(versaoAntiga) {
 
       <div id="ft-producao"></div>
     </div>`;
+}
+
+// O selo da nutricionista abaixo dos alergênicos. A cozinha vê só quando a
+// revisão vale para a versão atual; a nutricionista e a gerência veem também
+// a pendência. Quem revisa ganha a lista para marcar e o botão de confirmar.
+function _ftNutriHtml(f) {
+  const r = _FT.nutriAberta;
+  const ok = r && r.versao === f.versao;
+  const quem = r ? autorComPerfil(r.revisada_por) || nomeAutor(r.revisada_por) : '';
+  const selo = ok
+    ? `<div class="ft-nutri-selo">✓ Revisados pela nutrição em ${_ftDataBR(r.revisada_em)}${
+        quem ? ' · ' + escapeHtml(quem) : ''} · REV ${String(r.versao).padStart(2, '0')}${
+        r.observacao ? `<div class="ft-linha-obs">${escapeHtml(r.observacao)}</div>` : ''}</div>`
+    : !_ftVeNutri() ? ''
+    : r ? `<div class="ft-nutri-pend">Revisão pendente · a última foi na REV ${String(r.versao).padStart(2, '0')}, em ${_ftDataBR(r.revisada_em)}</div>`
+    : '<div class="ft-nutri-pend">Revisão pendente</div>';
+  if (!_ftRevisaNutri()) return selo;
+  return selo + `
+    <div class="form-panel ft-nutri-form" style="display:block">
+      <div class="section-title" style="margin-top:0"><span>${ok ? 'Revisar de novo' : 'Revisão de alergênicos'}</span></div>
+      <div class="ft-alerg" id="ft-nutri-alerg">${_FT_ALERGENOS.map(([v, rot]) => `
+        <label class="ft-alerg-item"><input type="checkbox" value="${v}"${
+          (f.alergenos || []).includes(v) ? ' checked' : ''}> ${rot}</label>`).join('')}</div>
+      <div class="form-group" style="margin-top:10px">
+        <label>Observação</label>
+        <input class="input" id="ft-nutri-obs" placeholder="opcional" value="">
+      </div>
+      <div class="ft-rodape" style="margin-top:6px">
+        <button class="btn btn-gold" onclick="_ftNutriConfirmar('${f.id}')">Confirmar revisão</button>
+      </div>
+    </div>`;
+}
+
+async function _ftNutriConfirmar(id) {
+  if (_FT.salvando) return;
+  const alerg = [...document.querySelectorAll('#ft-nutri-alerg input:checked')].map(x => x.value);
+  const obs = (document.getElementById('ft-nutri-obs')?.value || '').trim();
+  _FT.salvando = true;
+  const { data, error } = await sb.rpc('nutri_revisar_ficha', { p_ficha: id, p_alergenos: alerg, p_obs: obs || null });
+  _FT.salvando = false;
+  if (error) { showToast('Não confirmou: ' + error.message, 'error'); return; }
+  const antes = (_FT.aberta && _FT.aberta.versao) || null;
+  showToast(data !== antes ? `Revisão confirmada · alergênicos corrigidos (REV ${String(data).padStart(2, '0')})`
+                           : 'Revisão confirmada.', 'success');
+  await _ftAbrir(id);
 }
 
 // FCy — Fator de Cocção (GENERAL-09, Passo 5): peso pronto ÷ peso líquido
@@ -5747,4 +5836,802 @@ async function _fqCopiarOrfaos() {
   } catch {
     showToast('Não consegui copiar.', 'error');
   }
+}
+
+// =====================================================================
+// SEGURANÇA DOS ALIMENTOS — temperatura e inspeção (migration 95)
+// =====================================================================
+// Mora aqui porque roda em cinco telas: a da nutrição registra, e as da
+// cozinha (cozinheiro, chef, Comissária) e do gerente consultam.
+//
+// TEMPERATURA. A estagiária vai câmara por câmara e digita o que o
+// termômetro mostra. Data, hora, turno e quem registrou o banco preenche
+// (antes das 14h é manhã). A faixa é do equipamento e fica gravada junto
+// com a leitura: mudar a faixa depois não reescreve o passado. Fora da faixa,
+// a linha fica vermelha até a nutrição registrar a ação corretiva — e, se
+// precisou, o chamado aberto para a engenharia — e encerrar.
+//
+// INSPEÇÃO. Etiqueta, validade e armazenamento. Cada irregularidade é uma
+// linha; a cozinha inspecionada vê, e a liderança dela marca que conversou
+// com a equipe. Sem foto: o banco é o plano gratuito (decisão de 08/10).
+
+const _SG = {
+  areas: [], equip: [], ultimas: {}, hoje: [], pdvs: [],
+  areaSel: null, salvando: false,
+  insp: { linhas: [], pdvId: null },
+  rel: { areaId: null, mes: null },
+  eqAreaId: null, eqConferir: false,
+};
+
+const _SG_TIPOS = [
+  ['refrigerado',   'Refrigerado',          0,    6],
+  ['congelado',     'Congelado',            null, -18],
+  ['climatizacao',  'Climatização da área', null, 17],
+  ['estufa_quente', 'Estufa quente',        60,   null],
+  ['outro',         'Outro',                null, null],
+];
+const _SG_IRREG = [
+  ['sem_etiqueta',            'Sem etiqueta'],
+  ['etiqueta_vencida',        'Vencido'],
+  ['etiqueta_incompleta',     'Etiqueta incompleta'],
+  ['armazenamento_incorreto', 'Armazenamento incorreto'],
+  ['sem_tampa',               'Sem tampa'],
+  ['outro',                   'Outro'],
+];
+const _sgPerfil = () => window.state && window.state.perfil && window.state.perfil.perfil;
+const _sgNutri  = () => ['nutricionista', 'nutri_estagio', 'master_sistema'].includes(_sgPerfil());
+const _sgChefe  = () => ['nutricionista', 'master_sistema'].includes(_sgPerfil());
+const _sgLidera = () => ['executivo', 'estoque', 'gerente_compras', 'master_sistema'].includes(_sgPerfil());
+const _sgNum1 = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const _sgFmtT = v => v == null ? '—' : _sgNum1(v) + ' °C';
+const _sgFaixa = (min, max) => min != null && max != null ? `${_sgNum1(min)} a ${_sgNum1(max)} °C`
+  : min != null ? `a partir de ${_sgNum1(min)} °C` : max != null ? `até ${_sgNum1(max)} °C` : '—';
+const _sgFora = (t, e) => (e.faixa_min != null && t < Number(e.faixa_min)) || (e.faixa_max != null && t > Number(e.faixa_max));
+const _sgQuando = d => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+const _sgHora = d => d ? new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+const _sgInicioHoje = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString(); };
+const _sgTurnoAgora = () => new Date().getHours() < 14 ? 'manha' : 'tarde';
+const _SG_TURNO = { manha: 'Manhã', tarde: 'Tarde' };
+const _sgIrregRot = t => (_SG_IRREG.find(x => x[0] === t) || [t, t])[1];
+const _sgArea = id => _SG.areas.find(a => a.id === id);
+const _sgEq = id => _SG.equip.find(e => e.id === id);
+const _sgEqNome = e => e ? (e.codigo ? e.codigo + ' · ' : '') + e.nome : '—';
+// A tela que monta o módulo diz como navegar (ir para ocorrências, fichas...).
+const _sgIr = (aba, extra) => { if (typeof window.sgIr === 'function') window.sgIr(aba, extra); };
+
+async function _sgCarregarBase() {
+  const [a, e] = await Promise.all([
+    sb.from('areas_temperatura').select('id, nome, pdv_id, ordem, ativa, pdvs(nome)').order('ordem'),
+    sb.from('equipamentos_temperatura').select('*').order('ordem'),
+  ]);
+  _SG.areas = a.data || [];
+  _SG.equip = e.data || [];
+  return !a.error && !e.error;
+}
+async function _sgCarregarUltimas() {
+  const { data } = await sb.from('temperatura_atual').select('*');
+  _SG.ultimas = Object.fromEntries((data || []).map(l => [l.equipamento_id, l]));
+}
+async function _sgCarregarHoje() {
+  const { data } = await sb.from('leituras_temperatura')
+    .select('id, equipamento_id, turno, registrada_em, usuario_id, fora_faixa').gte('registrada_em', _sgInicioHoje());
+  _SG.hoje = data || [];
+}
+// Quantos equipamentos da área já foram aferidos no turno, hoje.
+function _sgStatusTurno(areaId, turno) {
+  const eqs = _SG.equip.filter(e => e.area_id === areaId && e.ativo).map(e => e.id);
+  const lidas = _SG.hoje.filter(l => l.turno === turno && eqs.includes(l.equipamento_id));
+  const feitos = new Set(lidas.map(l => l.equipamento_id)).size;
+  const ultima = lidas.sort((a, b) => String(b.registrada_em).localeCompare(String(a.registrada_em)))[0];
+  return { total: eqs.length, feitos, ultima, fora: lidas.some(l => l.fora_faixa) };
+}
+function _sgStatusHtml(s) {
+  if (!s.total) return '<span class="text-muted">—</span>';
+  if (!s.feitos) return '<span class="sg-pend">pendente</span>';
+  const cls = s.fora ? 'sg-ruim' : s.feitos < s.total ? 'sg-parcial' : 'sg-ok';
+  return `<span class="${cls}">${s.feitos < s.total ? s.feitos + '/' + s.total : '✓'} ${_sgHora(s.ultima.registrada_em)}</span>`;
+}
+
+// ---------------------------------------------------------------------
+// AFERIR — a tela da estagiária no celular
+// ---------------------------------------------------------------------
+async function montarAfericao(seletor) {
+  const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
+  if (!raiz) return;
+  _SG.raizAfericao = raiz;
+  raiz.innerHTML = '<div class="loading-text">Carregando equipamentos...</div>';
+  if (!await _sgCarregarBase()) { raiz.innerHTML = '<div class="empty-text">Não consegui carregar as áreas.</div>'; return; }
+  await Promise.all([_sgCarregarUltimas(), _sgCarregarHoje(), carregarAutores(sb)]);
+  _sgRenderAfericao();
+}
+
+function _sgRenderAfericao() {
+  const raiz = _SG.raizAfericao;
+  const turno = _sgTurnoAgora();
+  const area = _SG.areaSel && _sgArea(_SG.areaSel);
+  if (!area) {
+    const ativas = _SG.areas.filter(a => a.ativa);
+    raiz.innerHTML = `
+      <div class="sg-turno">Turno da ${_SG_TURNO[turno].toLowerCase()} · ${new Date().toLocaleDateString('pt-BR')}</div>
+      <div class="sg-areas">${ativas.map(a => {
+        const s = _sgStatusTurno(a.id, turno);
+        return `<button class="sg-area-btn${s.feitos && s.feitos === s.total ? ' feita' : ''}" onclick="_sgEscolherArea('${a.id}')">
+          <span class="sg-area-nome">${escapeHtml(a.nome)}</span>
+          <span class="sg-area-sub">${escapeHtml(a.pdvs?.nome || 'sem cozinha')} · ${s.total} equip.</span>
+          <span class="sg-area-st">${_sgStatusHtml(s)}</span>
+        </button>`; }).join('')}</div>`;
+    return;
+  }
+  const eqs = _SG.equip.filter(e => e.area_id === area.id && e.ativo);
+  raiz.innerHTML = `
+    <div class="sg-topo">
+      <button class="btn btn-secondary btn-sm" onclick="_sgEscolherArea(null)">← Áreas</button>
+      <div><div class="sg-area-titulo">${escapeHtml(area.nome)}</div>
+        <div class="text-muted" style="font-size:12px">${escapeHtml(area.pdvs?.nome || 'sem cozinha')} · turno da ${_SG_TURNO[turno].toLowerCase()}</div></div>
+    </div>
+    <div class="sg-eqs">${eqs.map(e => {
+      const u = _SG.ultimas[e.id];
+      const neg = e.tipo === 'congelado';
+      return `<div class="sg-eq" id="sg-eq-${e.id}">
+        <div class="sg-eq-info">
+          <div class="sg-eq-nome">${escapeHtml(_sgEqNome(e))}${e.patrimonio ? ` <span class="text-muted">#${escapeHtml(e.patrimonio)}</span>` : ''}</div>
+          <div class="sg-eq-sub">${_sgFaixa(e.faixa_min, e.faixa_max)}${u ? ` · última ${_sgFmtT(u.temperatura)} às ${_sgQuando(u.registrada_em)}` : ''}</div>
+        </div>
+        <div class="sg-eq-input">
+          <button class="sg-sinal" data-neg="${neg ? 1 : 0}" onclick="_sgTrocarSinal('${e.id}', this)" title="Trocar o sinal">${neg ? '−' : '+'}</button>
+          <input class="input sg-temp" id="sg-t-${e.id}" inputmode="decimal" autocomplete="off" placeholder="°C"
+                 oninput="_sgConferirLinha('${e.id}')">
+        </div>
+        <div class="sg-eq-acao" id="sg-a-${e.id}" style="display:none">
+          <div class="sg-fora-rot">Fora da faixa</div>
+          <input class="input" id="sg-ac-${e.id}" placeholder="Ação corretiva">
+        </div>
+      </div>`; }).join('')}</div>
+    <div class="sg-salvar">
+      <button class="btn btn-primary btn-lg" style="width:100%" onclick="_sgSalvarAfericao()">Salvar aferições</button>
+    </div>`;
+}
+
+function _sgEscolherArea(id) { _SG.areaSel = id; _sgRenderAfericao(); window.scrollTo({ top: 0 }); }
+
+function _sgTrocarSinal(id, btn) {
+  const neg = btn.dataset.neg === '1' ? 0 : 1;
+  btn.dataset.neg = String(neg);
+  btn.textContent = neg ? '−' : '+';
+  _sgConferirLinha(id);
+}
+
+// O valor digitado com o sinal do botão. Quem digita "-5" manda no sinal.
+function _sgValor(id) {
+  const el = document.getElementById('sg-t-' + id);
+  const n = numBR(el && el.value);
+  if (n == null) return null;
+  if (String(el.value).trim().startsWith('-')) return n;
+  const neg = document.querySelector(`#sg-eq-${id} .sg-sinal`)?.dataset.neg === '1';
+  return neg ? -Math.abs(n) : Math.abs(n);
+}
+
+function _sgConferirLinha(id) {
+  const e = _sgEq(id);
+  const v = _sgValor(id);
+  const fora = v != null && _sgFora(v, e);
+  document.getElementById('sg-eq-' + id)?.classList.toggle('sg-eq-fora', fora);
+  const cx = document.getElementById('sg-a-' + id);
+  if (cx) cx.style.display = fora ? '' : 'none';
+}
+
+async function _sgSalvarAfericao() {
+  if (_SG.salvando) return;
+  const eqs = _SG.equip.filter(e => e.area_id === _SG.areaSel && e.ativo);
+  const linhas = [];
+  for (const e of eqs) {
+    const v = _sgValor(e.id);
+    if (v == null) continue;
+    if (v < -60 || v > 150) { showToast(`${_sgEqNome(e)}: temperatura inválida.`, 'error'); return; }
+    const ac = (document.getElementById('sg-ac-' + e.id)?.value || '').trim();
+    linhas.push({ equipamento_id: e.id, temperatura: Math.round(v * 10) / 10,
+                  acao_corretiva: _sgFora(v, e) && ac ? ac : null });
+  }
+  if (!linhas.length) { showToast('Digite a temperatura de pelo menos um equipamento.', 'error'); return; }
+  _SG.salvando = true;
+  const { error } = await sb.from('leituras_temperatura').insert(linhas);
+  _SG.salvando = false;
+  if (error) { showToast('Não salvou: ' + error.message, 'error'); return; }
+  const fora = linhas.filter(l => _sgFora(l.temperatura, _sgEq(l.equipamento_id))).length;
+  showToast(`${linhas.length} aferição(ões) salva(s)${fora ? ` · ${fora} fora da faixa` : ''}.`, fora ? 'error' : 'success');
+  _SG.areaSel = null;
+  await montarAfericao(_SG.raizAfericao);
+  if (typeof window.sgAtualizarBadge === 'function') window.sgAtualizarBadge();
+}
+
+// ---------------------------------------------------------------------
+// OCORRÊNCIAS — o que ficou fora da faixa
+// ---------------------------------------------------------------------
+async function contarOcorrenciasAbertas() {
+  const { count } = await sb.from('leituras_temperatura').select('id', { count: 'exact', head: true })
+    .eq('fora_faixa', true).is('resolvida_em', null);
+  return count || 0;
+}
+
+async function montarOcorrencias(seletor) {
+  const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
+  if (!raiz) return;
+  _SG.raizOcorr = raiz;
+  raiz.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const desde = new Date(); desde.setDate(desde.getDate() - 60);
+  const [, lst] = await Promise.all([
+    _sgCarregarBase(),
+    sb.from('leituras_temperatura').select('*').eq('fora_faixa', true)
+      .gte('registrada_em', desde.toISOString()).order('registrada_em', { ascending: false }),
+    carregarAutores(sb),
+  ]);
+  if (lst.error) { raiz.innerHTML = '<div class="empty-text">Não consegui carregar.</div>'; return; }
+  const todas = lst.data || [];
+  const abertas = todas.filter(l => !l.resolvida_em);
+  const fechadas = todas.filter(l => l.resolvida_em);
+  const pode = _sgNutri();
+  const loc = l => { const e = _sgEq(l.equipamento_id); const a = e && _sgArea(e.area_id);
+    return `${escapeHtml(a?.nome || '')} · ${escapeHtml(_sgEqNome(e))}`; };
+  raiz.innerHTML = `
+    <div class="section-title" style="margin-top:0"><span>Abertas</span><span class="text-muted">${abertas.length}</span></div>
+    ${abertas.length ? abertas.map(l => `
+      <div class="sg-ocorr" id="sg-oc-${l.id}">
+        <div class="sg-ocorr-topo">
+          <div><div class="sg-ocorr-loc">${loc(l)}</div>
+            <div class="text-muted" style="font-size:12px">${_sgQuando(l.registrada_em)} · ${_SG_TURNO[l.turno]} · ${escapeHtml(autorComPerfil(l.usuario_id) || nomeAutor(l.usuario_id) || '—')}</div></div>
+          <div class="sg-ocorr-temp">${_sgFmtT(l.temperatura)}<div class="sg-ocorr-faixa">faixa ${_sgFaixa(l.faixa_min, l.faixa_max)}</div></div>
+        </div>
+        ${pode ? `
+          <div class="form-group"><label>Ação corretiva</label>
+            <input class="input" id="sg-oa-${l.id}" value="${escapeHtml(l.acao_corretiva || '')}"></div>
+          <div class="sg-chamado">
+            <label class="ft-alerg-item"><input type="checkbox" id="sg-oe-${l.id}"${l.chamado_engenharia ? ' checked' : ''}> Chamado aberto para a engenharia</label>
+            <input class="input" id="sg-on-${l.id}" placeholder="Nº do chamado" value="${escapeHtml(l.chamado_numero || '')}">
+          </div>
+          <div class="ft-rodape">
+            <button class="btn btn-outline btn-sm" onclick="_sgSalvarOcorr('${l.id}', false)">Salvar</button>
+            <button class="btn btn-gold btn-sm" onclick="_sgSalvarOcorr('${l.id}', true)">Encerrar</button>
+          </div>`
+        : `${l.acao_corretiva ? `<div class="sg-ocorr-acao">Ação: ${escapeHtml(l.acao_corretiva)}</div>` : ''}
+           ${l.chamado_engenharia ? `<div class="sg-ocorr-acao">Chamado para a engenharia${l.chamado_numero ? ' nº ' + escapeHtml(l.chamado_numero) : ''}</div>` : ''}`}
+      </div>`).join('') : '<div class="empty-text">Nenhuma ocorrência aberta.</div>'}
+
+    <div class="section-title mt-3"><span>Encerradas · 60 dias</span><span class="text-muted">${fechadas.length}</span></div>
+    ${fechadas.length ? `<div class="table-wrap"><table class="data-table tabela-cards">
+      <thead><tr><th>Quando</th><th>Equipamento</th><th class="num">Temp.</th><th>Ação corretiva</th><th>Encerrada</th>${_sgChefe() ? '<th></th>' : ''}</tr></thead>
+      <tbody>${fechadas.map(l => `<tr>
+        <td data-label="Quando">${_sgQuando(l.registrada_em)}</td>
+        <td class="td-titulo">${loc(l)}</td>
+        <td class="num" data-label="Temp.">${_sgFmtT(l.temperatura)}</td>
+        <td data-label="Ação">${escapeHtml(l.acao_corretiva || '')}${l.chamado_engenharia ? ` <span class="ft-tag">engenharia${l.chamado_numero ? ' ' + escapeHtml(l.chamado_numero) : ''}</span>` : ''}</td>
+        <td data-label="Encerrada" class="text-muted">${_sgQuando(l.resolvida_em)} · ${escapeHtml(nomeAutor(l.resolvida_por) || '—')}</td>
+        ${_sgChefe() ? `<td class="td-acoes"><button class="btn btn-sm btn-secondary" onclick="_sgReabrir('${l.id}')">Reabrir</button></td>` : ''}
+      </tr>`).join('')}</tbody></table></div>` : '<div class="empty-text">Nenhuma no período.</div>'}`;
+}
+
+async function _sgSalvarOcorr(id, encerrar) {
+  const acao = (document.getElementById('sg-oa-' + id)?.value || '').trim();
+  if (encerrar && !acao) { showToast('Registre a ação corretiva antes de encerrar.', 'error'); return; }
+  const upd = {
+    acao_corretiva: acao || null,
+    chamado_engenharia: !!document.getElementById('sg-oe-' + id)?.checked,
+    chamado_numero: (document.getElementById('sg-on-' + id)?.value || '').trim() || null,
+  };
+  if (encerrar) upd.resolvida_em = new Date().toISOString();
+  const { data, error } = await sb.from('leituras_temperatura').update(upd).eq('id', id).select('id').maybeSingle();
+  if (error) { showToast('Não salvou: ' + error.message, 'error'); return; }
+  if (!data) { showToast('Seu perfil não pode alterar esta ocorrência.', 'error'); return; }
+  showToast(encerrar ? 'Ocorrência encerrada.' : 'Ação registrada.', 'success');
+  await montarOcorrencias(_SG.raizOcorr);
+  if (typeof window.sgAtualizarBadge === 'function') window.sgAtualizarBadge();
+}
+
+async function _sgReabrir(id) {
+  const { error } = await sb.from('leituras_temperatura').update({ resolvida_em: null }).eq('id', id);
+  if (error) { showToast('Não reabriu: ' + error.message, 'error'); return; }
+  await montarOcorrencias(_SG.raizOcorr);
+  if (typeof window.sgAtualizarBadge === 'function') window.sgAtualizarBadge();
+}
+
+// ---------------------------------------------------------------------
+// INSPEÇÃO — etiqueta, validade, armazenamento
+// ---------------------------------------------------------------------
+// modo 'nutri': registra e vê todas; modo 'cozinha': vê a da cozinha e a
+// liderança marca que conversou com a equipe.
+async function montarInspecoes(seletor, opts = {}) {
+  const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
+  if (!raiz) return;
+  _SG.raizInsp = raiz;
+  _SG.inspOpts = opts;
+  if (opts.pdvs) _SG.pdvs = opts.pdvs;
+  raiz.innerHTML = '<div class="loading-text">Carregando inspeções...</div>';
+  const desde = new Date(); desde.setDate(desde.getDate() - 90);
+  let q = sb.from('inspecoes').select('*, pdvs(nome), inspecao_itens(id, tipo, descricao, ordem)')
+    .gte('realizada_em', desde.toISOString()).order('realizada_em', { ascending: false });
+  const filtro = opts.modo === 'cozinha' ? opts.pdvId : _SG.insp.filtroPdv;
+  if (filtro) q = q.eq('pdv_id', filtro);
+  const [{ data, error }] = await Promise.all([q, carregarAutores(sb)]);
+  if (error) { raiz.innerHTML = '<div class="empty-text">Não consegui carregar as inspeções.</div>'; return; }
+  _SG.inspecoes = data || [];
+  if (opts.modo !== 'cozinha' && !_SG.insp.linhas.length) _SG.insp.linhas = [{ tipo: 'sem_etiqueta', descricao: '' }];
+  _sgRenderInspecoes();
+}
+
+function _sgRenderInspecoes() {
+  const opts = _SG.inspOpts || {};
+  const nutri = opts.modo !== 'cozinha' && _sgNutri();
+  _SG.raizInsp.innerHTML = `
+    ${nutri ? `<div class="form-panel" style="display:block">
+      <div class="section-title" style="margin-top:0"><span>Nova inspeção</span></div>
+      <div class="form-row col2">
+        <div class="form-group"><label>PDV</label>
+          <select class="select" id="sg-i-pdv">
+            <option value="">Escolha...</option>
+            ${_sgOpcoesPdv(_SG.insp.pdvId)}
+          </select></div>
+        <div class="form-group"><label>Local</label>
+          <input class="input" id="sg-i-local" placeholder="opcional — ex.: câmara 2, garde manger"></div>
+      </div>
+      <div class="uppercase-label" style="margin:6px 0">Irregularidades</div>
+      <div id="sg-i-linhas">${_sgLinhasInspHtml()}</div>
+      <button class="btn btn-outline btn-sm" onclick="_sgInspAddLinha()">+ Irregularidade</button>
+      <div class="form-group" style="margin-top:10px"><label>Observação</label>
+        <input class="input" id="sg-i-obs" placeholder="opcional"></div>
+      <div class="ft-rodape" style="margin-top:6px">
+        <button class="btn btn-primary" onclick="_sgRegistrarInspecao()">Registrar inspeção</button>
+      </div>
+    </div>
+    <div class="ds-topo ds-filtro">
+      <select class="select ft-pdv" onchange="_sgInspFiltrar(this.value)">
+        <option value="">Todos os PDVs</option>
+        ${_sgOpcoesPdv(_SG.insp.filtroPdv)}
+      </select>
+    </div>` : ''}
+    ${_SG.inspecoes.length ? _SG.inspecoes.map(i => {
+      const itens = (i.inspecao_itens || []).sort((a, b) => a.ordem - b.ordem);
+      return `<div class="sg-insp${itens.length ? '' : ' sg-insp-ok'}">
+        <div class="sg-insp-topo">
+          <div><div class="sg-insp-titulo">${escapeHtml(i.pdvs?.nome || '')}${i.local ? ' · ' + escapeHtml(i.local) : ''}</div>
+            <div class="text-muted" style="font-size:12px">${_sgQuando(i.realizada_em)} · ${escapeHtml(autorComPerfil(i.usuario_id) || nomeAutor(i.usuario_id) || '—')}</div></div>
+          <div class="sg-insp-n">${itens.length ? itens.length + ' irregularidade' + (itens.length > 1 ? 's' : '') : 'sem irregularidade'}</div>
+        </div>
+        ${itens.length ? `<ul class="sg-insp-itens">${itens.map(x => `<li><span class="ft-tag ft-tag-alerg">${escapeHtml(_sgIrregRot(x.tipo))}</span> ${escapeHtml(x.descricao)}</li>`).join('')}</ul>` : ''}
+        ${i.observacao ? `<div class="ft-linha-obs">${escapeHtml(i.observacao)}</div>` : ''}
+        <div class="sg-insp-rodape">
+          ${i.ciente_em ? `<span class="sg-ok">✓ Equipe orientada · ${escapeHtml(nomeAutor(i.ciente_por) || '')} · ${_sgQuando(i.ciente_em)}</span>`
+            : itens.length ? (opts.modo === 'cozinha' && _sgLidera()
+              ? `<button class="btn btn-sm btn-gold" onclick="_sgInspCiente('${i.id}')">Equipe orientada</button>`
+              : '<span class="sg-pend">aguardando a equipe</span>') : ''}
+          ${nutri && _sgChefe() ? `<button class="btn btn-sm btn-secondary" onclick="_sgInspRemover('${i.id}')">Remover</button>` : ''}
+        </div>
+      </div>`; }).join('') : '<div class="empty-text">Nenhuma inspeção nos últimos 90 dias.</div>'}`;
+}
+
+// A nutrição inspeciona cozinhas e bares (pedido de 09/10/2026): o seletor
+// separa os dois grupos para o bar não se perder no meio das cozinhas.
+function _sgOpcoesPdv(sel) {
+  const op = p => `<option value="${p.id}"${p.id === sel ? ' selected' : ''}>${escapeHtml(p.nome)}</option>`;
+  const bares = _SG.pdvs.filter(p => p.tipo === 'bar'), outros = _SG.pdvs.filter(p => p.tipo !== 'bar');
+  return bares.length ? `<optgroup label="Cozinhas">${outros.map(op).join('')}</optgroup><optgroup label="Bares">${bares.map(op).join('')}</optgroup>`
+                      : _SG.pdvs.map(op).join('');
+}
+
+function _sgLinhasInspHtml() {
+  return _SG.insp.linhas.map((l, k) => `<div class="sg-i-linha">
+    <select class="select" onchange="_SG.insp.linhas[${k}].tipo = this.value">
+      ${_SG_IRREG.map(([v, r]) => `<option value="${v}"${v === l.tipo ? ' selected' : ''}>${r}</option>`).join('')}
+    </select>
+    <input class="input" placeholder="O que foi encontrado — ex.: creme de leite aberto" value="${escapeHtml(l.descricao)}"
+           oninput="_SG.insp.linhas[${k}].descricao = this.value">
+    <button class="ft-del" onclick="_sgInspRemLinha(${k})" title="Tirar">×</button>
+  </div>`).join('');
+}
+function _sgInspAddLinha() {
+  _SG.insp.linhas.push({ tipo: 'sem_etiqueta', descricao: '' });
+  document.getElementById('sg-i-linhas').innerHTML = _sgLinhasInspHtml();
+  const ins = document.querySelectorAll('#sg-i-linhas input');
+  ins[ins.length - 1]?.focus();
+}
+function _sgInspRemLinha(k) {
+  _SG.insp.linhas.splice(k, 1);
+  document.getElementById('sg-i-linhas').innerHTML = _sgLinhasInspHtml();
+}
+function _sgInspFiltrar(v) { _SG.insp.filtroPdv = v || null; montarInspecoes(_SG.raizInsp, _SG.inspOpts); }
+
+async function _sgRegistrarInspecao() {
+  if (_SG.salvando) return;
+  const pdvId = document.getElementById('sg-i-pdv')?.value;
+  if (!pdvId) { showToast('Escolha o PDV.', 'error'); return; }
+  const itens = _SG.insp.linhas.filter(l => l.descricao.trim());
+  if (!itens.length && !confirm('Registrar a inspeção sem nenhuma irregularidade?')) return;
+  _SG.salvando = true;
+  const { data: ins, error } = await sb.from('inspecoes').insert({
+    pdv_id: pdvId,
+    local: (document.getElementById('sg-i-local')?.value || '').trim() || null,
+    observacao: (document.getElementById('sg-i-obs')?.value || '').trim() || null,
+  }).select('id').single();
+  if (error) { _SG.salvando = false; showToast('Não registrou: ' + error.message, 'error'); return; }
+  if (itens.length) {
+    const { error: e2 } = await sb.from('inspecao_itens').insert(itens.map((l, k) => ({
+      inspecao_id: ins.id, tipo: l.tipo, descricao: l.descricao.trim(), ordem: k + 1 })));
+    if (e2) {
+      // Sem os itens a inspeção diria "sem irregularidade" — desfaz.
+      await sb.from('inspecoes').delete().eq('id', ins.id);
+      _SG.salvando = false;
+      showToast('Não registrou as irregularidades: ' + e2.message, 'error');
+      return;
+    }
+  }
+  _SG.salvando = false;
+  showToast('Inspeção registrada.', 'success');
+  _SG.insp = { linhas: [], pdvId, filtroPdv: _SG.insp.filtroPdv };
+  await montarInspecoes(_SG.raizInsp, _SG.inspOpts);
+}
+
+async function _sgInspCiente(id) {
+  const { error } = await sb.rpc('inspecao_ciente', { p_inspecao: id });
+  if (error) { showToast('Não marcou: ' + error.message, 'error'); return; }
+  showToast('Marcado: equipe orientada.', 'success');
+  await montarInspecoes(_SG.raizInsp, _SG.inspOpts);
+}
+
+async function _sgInspRemover(id) {
+  if (!confirm('Remover esta inspeção?')) return;
+  const { error } = await sb.from('inspecoes').delete().eq('id', id);
+  if (error) { showToast('Não removeu: ' + error.message, 'error'); return; }
+  await montarInspecoes(_SG.raizInsp, _SG.inspOpts);
+}
+
+// ---------------------------------------------------------------------
+// PAINEL DA NUTRIÇÃO
+// ---------------------------------------------------------------------
+async function montarPainelNutri(seletor) {
+  const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
+  if (!raiz) return;
+  raiz.innerHTML = '<div class="loading-text">Carregando...</div>';
+  const sete = new Date(); sete.setDate(sete.getDate() - 7);
+  const chefe = _sgChefe();
+  const [ok, abertas, insp] = await Promise.all([
+    _sgCarregarBase(), contarOcorrenciasAbertas(),
+    sb.from('inspecoes').select('id, ciente_em, inspecao_itens(id)').gte('realizada_em', sete.toISOString()),
+    _sgCarregarHoje(),
+  ]);
+  if (!ok) { raiz.innerHTML = '<div class="empty-text">Não consegui carregar.</div>'; return; }
+  const ativas = _SG.areas.filter(a => a.ativa);
+  const sm = ativas.filter(a => { const s = _sgStatusTurno(a.id, 'manha'); return s.total && s.feitos === s.total; }).length;
+  const st = ativas.filter(a => { const s = _sgStatusTurno(a.id, 'tarde'); return s.total && s.feitos === s.total; }).length;
+  const conferir = _SG.equip.filter(e => e.ativo && e.conferir).length;
+  const is = insp.data || [];
+  const semCiencia = is.filter(i => (i.inspecao_itens || []).length && !i.ciente_em).length;
+
+  // Fichas por cozinha, para a fila de revisão da nutricionista.
+  let fichasHtml = '';
+  if (chefe) {
+    let fichas = [];
+    for (let i = 0; ; i += 1000) {
+      const { data } = await sb.from('fichas_tecnicas').select('id, versao, pdv_id, pdvs(nome)').eq('ativa', true).range(i, i + 999);
+      fichas = fichas.concat(data || []);
+      if (!data || data.length < 1000) break;
+    }
+    const rev = {};
+    for (let i = 0; i < fichas.length; i += 150) {
+      const { data } = await sb.from('ficha_revisao_nutri').select('ficha_id, versao').in('ficha_id', fichas.slice(i, i + 150).map(f => f.id));
+      (data || []).forEach(r => { rev[r.ficha_id] = r.versao; });
+    }
+    const por = {};
+    fichas.forEach(f => {
+      const k = f.pdv_id; por[k] = por[k] || { nome: f.pdvs?.nome || '', total: 0, ok: 0 };
+      por[k].total++; if (rev[f.id] === f.versao) por[k].ok++;
+    });
+    const tot = fichas.length, okT = Object.values(por).reduce((s, x) => s + x.ok, 0);
+    fichasHtml = `
+      <div class="section-title mt-3"><span>Revisão das fichas</span><span class="text-muted">${okT} de ${tot}</span></div>
+      <div class="table-wrap"><table class="data-table tabela-cards">
+        <thead><tr><th>Cozinha</th><th class="num">Fichas</th><th class="num">Revisadas</th><th class="num">Pendentes</th><th></th></tr></thead>
+        <tbody>${Object.entries(por).sort((a, b) => (b[1].total - b[1].ok) - (a[1].total - a[1].ok)).map(([id, x]) => `<tr>
+          <td class="td-titulo">${escapeHtml(x.nome)}</td>
+          <td class="num" data-label="Fichas">${x.total}</td>
+          <td class="num" data-label="Revisadas">${x.ok}</td>
+          <td class="num" data-label="Pendentes">${x.total - x.ok}</td>
+          <td class="td-acoes">${x.total - x.ok ? `<button class="btn btn-sm btn-outline" onclick="_sgIr('fichas', '${id}')">Revisar</button>` : '<span class="sg-ok">✓</span>'}</td>
+        </tr>`).join('')}</tbody></table></div>`;
+  }
+
+  raiz.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card clicavel" onclick="_sgIr('ocorrencias')">
+        <div class="stat-label">Fora da faixa</div>
+        <div class="stat-value${abertas ? ' text-error' : ''}">${abertas}</div>
+        <div class="stat-sub">ocorrências abertas</div></div>
+      <div class="stat-card clicavel" onclick="_sgIr('afericao')">
+        <div class="stat-label">Aferição de hoje</div>
+        <div class="stat-value">${sm}/${ativas.length} · ${st}/${ativas.length}</div>
+        <div class="stat-sub">áreas completas · manhã · tarde</div></div>
+      <div class="stat-card clicavel" onclick="_sgIr('inspecoes')">
+        <div class="stat-label">Inspeções · 7 dias</div>
+        <div class="stat-value">${is.length}</div>
+        <div class="stat-sub">${semCiencia ? semCiencia + ' aguardando a cozinha' : 'todas com ciência'}</div></div>
+      ${chefe && conferir ? `<div class="stat-card clicavel" onclick="_sgIr('equipamentos')">
+        <div class="stat-label">Equipamentos</div>
+        <div class="stat-value text-orange">${conferir}</div>
+        <div class="stat-sub">a conferir</div></div>` : ''}
+    </div>
+
+    <div class="section-title mt-3"><span>Aferição de hoje</span></div>
+    <div class="table-wrap"><table class="data-table tabela-cards">
+      <thead><tr><th>Área</th><th>Cozinha</th><th>Manhã</th><th>Tarde</th></tr></thead>
+      <tbody>${ativas.map(a => `<tr>
+        <td class="td-titulo">${escapeHtml(a.nome)}</td>
+        <td data-label="Cozinha" class="text-muted">${escapeHtml(a.pdvs?.nome || 'sem cozinha')}</td>
+        <td data-label="Manhã">${_sgStatusHtml(_sgStatusTurno(a.id, 'manha'))}</td>
+        <td data-label="Tarde">${_sgStatusHtml(_sgStatusTurno(a.id, 'tarde'))}</td>
+      </tr>`).join('')}</tbody></table></div>
+    ${fichasHtml}`;
+}
+
+// ---------------------------------------------------------------------
+// SEGURANÇA DOS ALIMENTOS NA TELA DA COZINHA
+// ---------------------------------------------------------------------
+// A cozinha vê a última temperatura de cada equipamento dela — é o que
+// avisa o cozinheiro que não estava no turno de que uma produção pode ter
+// passado por temperatura errada — e as inspeções que recebeu.
+async function montarSegurancaCozinha(seletor, opts = {}) {
+  const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
+  if (!raiz) return;
+  _SG.raizCoz = raiz;
+  _SG.cozOpts = opts;
+  raiz.innerHTML = '<div class="loading-text">Carregando...</div>';
+  await Promise.all([_sgCarregarBase(), _sgCarregarUltimas(), carregarAutores(sb)]);
+  const pdvId = opts.pdvId || null;
+  // Gerente e chef executivo escolhem a cozinha; vazio = todas as áreas.
+  const areas = _SG.areas.filter(a => a.ativa && (!pdvId || a.pdv_id === pdvId));
+  const linha = e => {
+    const u = _SG.ultimas[e.id];
+    const aberta = u && u.fora_faixa && !u.resolvida_em;
+    return `<tr class="${aberta ? 'sg-linha-fora' : ''}">
+      <td class="td-titulo">${escapeHtml(_sgEqNome(e))}</td>
+      <td data-label="Faixa" class="text-muted">${_sgFaixa(e.faixa_min, e.faixa_max)}</td>
+      <td class="num" data-label="Última">${u ? `<strong>${_sgFmtT(u.temperatura)}</strong>` : '<span class="text-muted">sem aferição</span>'}</td>
+      <td data-label="Quando" class="text-muted">${u ? _sgQuando(u.registrada_em) + ' · ' + escapeHtml(nomeAutor(u.usuario_id) || '') : ''}</td>
+      <td data-label="Situação">${!u ? '' : aberta ? `<span class="sg-ruim">fora da faixa</span>${u.acao_corretiva ? `<div class="ft-linha-obs">Ação: ${escapeHtml(u.acao_corretiva)}</div>` : ''}`
+        : u.fora_faixa ? `<span class="sg-ok">encerrada</span>${u.acao_corretiva ? `<div class="ft-linha-obs">Ação: ${escapeHtml(u.acao_corretiva)}</div>` : ''}`
+        : '<span class="sg-ok">ok</span>'}</td>
+    </tr>`;
+  };
+  const nAbertas = areas.reduce((n, a) => n + _SG.equip.filter(e => e.area_id === a.id && e.ativo)
+    .filter(e => { const u = _SG.ultimas[e.id]; return u && u.fora_faixa && !u.resolvida_em; }).length, 0);
+  raiz.innerHTML = `
+    ${opts.pdvs && opts.pdvs.length > 1 ? `<div class="ds-topo">
+      <select class="select ft-pdv" onchange="_sgCozTrocar(this.value)">
+        ${opts.permitirTodas ? `<option value="">Todas as áreas</option>` : ''}
+        ${opts.pdvs.map(p => `<option value="${p.id}"${p.id === pdvId ? ' selected' : ''}>${escapeHtml(p.nome)}</option>`).join('')}
+      </select></div>` : ''}
+    ${nAbertas ? `<div class="aviso aviso-error">${nAbertas} equipamento(s) com a última aferição fora da faixa.</div>` : ''}
+    ${!areas.length && pdvId ? '' : `<div class="section-title" style="margin-top:0"><span>Temperatura dos equipamentos</span></div>`}
+    ${!areas.length && pdvId ? '' : areas.length ? areas.map(a => `
+      <div class="sg-coz-area">${escapeHtml(a.nome)}${!pdvId && a.pdvs?.nome ? ` <span class="text-muted">· ${escapeHtml(a.pdvs.nome)}</span>` : ''}</div>
+      <div class="table-wrap"><table class="data-table tabela-cards sg-coz-tabela">
+        <thead><tr><th>Equipamento</th><th>Faixa</th><th class="num">Última</th><th>Quando</th><th>Situação</th></tr></thead>
+        <tbody>${_SG.equip.filter(e => e.area_id === a.id && e.ativo).map(linha).join('')}</tbody>
+      </table></div>`).join('') : '<div class="empty-text">Nenhum equipamento cadastrado para esta cozinha.</div>'}
+    <div class="section-title mt-3"><span>Inspeções · 90 dias</span></div>
+    <div id="sg-coz-insp"></div>`;
+  await montarInspecoes('#sg-coz-insp', { modo: 'cozinha', pdvId });
+}
+
+function _sgCozTrocar(id) {
+  montarSegurancaCozinha(_SG.raizCoz, { ..._SG.cozOpts, pdvId: id || null });
+}
+
+// Quantos equipamentos da cozinha estão com a última aferição fora da faixa.
+// O início da tela da cozinha usa para o aviso.
+async function contarForaDaFaixaCozinha(pdvId) {
+  await _sgCarregarBase();
+  await _sgCarregarUltimas();
+  const ids = new Set(_SG.areas.filter(a => a.ativa && (!pdvId || a.pdv_id === pdvId)).map(a => a.id));
+  return _SG.equip.filter(e => e.ativo && ids.has(e.area_id))
+    .filter(e => { const u = _SG.ultimas[e.id]; return u && u.fora_faixa && !u.resolvida_em; }).length;
+}
+
+// ---------------------------------------------------------------------
+// RELATÓRIO MENSAL — substitui a planilha arquivada
+// ---------------------------------------------------------------------
+async function montarRelatorioTemperatura(seletor) {
+  const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
+  if (!raiz) return;
+  _SG.raizRel = raiz;
+  if (!_SG.areas.length) await _sgCarregarBase();
+  if (!_SG.rel.mes) { const d = new Date(); _SG.rel.mes = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+  if (!_SG.rel.areaId) _SG.rel.areaId = _SG.areas[0]?.id || null;
+  raiz.innerHTML = `
+    <div class="ds-topo ds-filtro sg-nao-imprime">
+      <select class="select ft-pdv" onchange="_SG.rel.areaId = this.value; _sgGerarRelatorio()">
+        ${_SG.areas.map(a => `<option value="${a.id}"${a.id === _SG.rel.areaId ? ' selected' : ''}>${escapeHtml(a.nome)}</option>`).join('')}
+      </select>
+      <input class="input" type="month" value="${_SG.rel.mes}" onchange="_SG.rel.mes = this.value; _sgGerarRelatorio()" style="max-width:170px">
+      <button class="btn btn-outline" onclick="_sgImprimir()">Imprimir</button>
+    </div>
+    <div id="sg-rel"></div>`;
+  await _sgGerarRelatorio();
+}
+
+async function _sgGerarRelatorio() {
+  const cx = document.getElementById('sg-rel');
+  if (!cx) return;
+  const area = _sgArea(_SG.rel.areaId);
+  if (!area) { cx.innerHTML = '<div class="empty-text">Escolha a área.</div>'; return; }
+  cx.innerHTML = '<div class="loading-text">Montando...</div>';
+  const [ano, mes] = _SG.rel.mes.split('-').map(Number);
+  const ini = new Date(ano, mes - 1, 1), fim = new Date(ano, mes, 1);
+  const eqs = _SG.equip.filter(e => e.area_id === area.id);
+  let leit = [];
+  if (eqs.length) {
+    for (let i = 0; ; i += 1000) {
+      const { data } = await sb.from('leituras_temperatura').select('*').in('equipamento_id', eqs.map(e => e.id))
+        .gte('registrada_em', ini.toISOString()).lt('registrada_em', fim.toISOString())
+        .order('registrada_em').range(i, i + 999);
+      leit = leit.concat(data || []);
+      if (!data || data.length < 1000) break;
+    }
+  }
+  await carregarAutores(sb);
+  // Só aparece na planilha o equipamento ativo ou que teve leitura no mês.
+  const cols = eqs.filter(e => e.ativo || leit.some(l => l.equipamento_id === e.id));
+  const dias = new Date(ano, mes, 0).getDate();
+  const linhas = [];
+  for (let d = 1; d <= dias; d++) {
+    for (const turno of ['manha', 'tarde']) {
+      const doTurno = leit.filter(l => new Date(l.registrada_em).getDate() === d && l.turno === turno);
+      const porEq = {};
+      doTurno.forEach(l => { porEq[l.equipamento_id] = l; });   // a última do turno vale
+      const quem = [...new Set(doTurno.map(l => nomeAutor(l.usuario_id)).filter(Boolean))].join(', ');
+      const hora = doTurno.length ? _sgHora(doTurno[0].registrada_em) : '';
+      const acoes = doTurno.filter(l => l.fora_faixa).map(l => `${_sgEqNome(_sgEq(l.equipamento_id))}: ${l.acao_corretiva || 'sem ação registrada'}`).join(' · ');
+      linhas.push({ d, turno, porEq, quem, hora, acoes, tem: doTurno.length > 0 });
+    }
+  }
+  const nomeMes = ini.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  cx.innerHTML = `
+    <div class="sg-rel-cab">
+      <div class="sg-rel-titulo">Planilha de temperatura de equipamentos</div>
+      <div>${escapeHtml(area.nome)}${area.pdvs?.nome ? ' · ' + escapeHtml(area.pdvs.nome) : ''} · ${escapeHtml(nomeMes)}</div>
+    </div>
+    <div class="table-wrap"><table class="data-table sg-rel-tabela">
+      <thead><tr><th>Dia</th><th>Turno</th><th>Hora</th>
+        ${cols.map(e => `<th class="num" title="${escapeHtml(e.nome)}">${escapeHtml(e.codigo || e.patrimonio || e.nome)}<div class="sg-rel-faixa">${_sgFaixa(e.faixa_min, e.faixa_max)}</div></th>`).join('')}
+        <th>Responsável</th><th>Ação corretiva</th></tr></thead>
+      <tbody>${linhas.map(l => `<tr class="${l.turno === 'manha' ? 'sg-rel-m' : 'sg-rel-t'}">
+        <td>${l.turno === 'manha' ? l.d : ''}</td><td>${_SG_TURNO[l.turno]}</td><td>${l.hora}</td>
+        ${cols.map(e => { const x = l.porEq[e.id]; return `<td class="num${x && x.fora_faixa ? ' sg-rel-fora' : ''}">${x ? _sgNum1(x.temperatura) : ''}</td>`; }).join('')}
+        <td>${escapeHtml(l.quem)}</td><td class="sg-rel-acao">${escapeHtml(l.acoes)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <div class="sg-rel-legenda">${cols.map(e => `<span><strong>${escapeHtml(e.codigo || e.patrimonio || '')}</strong> ${escapeHtml(e.nome)}${e.patrimonio && e.codigo ? ' #' + escapeHtml(e.patrimonio) : ''}</span>`).join('')}</div>`;
+}
+
+// ---------------------------------------------------------------------
+// EQUIPAMENTOS — cadastro e faixas (nutricionista-chefe)
+// ---------------------------------------------------------------------
+async function montarEquipamentos(seletor, opts = {}) {
+  const raiz = typeof seletor === 'string' ? document.querySelector(seletor) : seletor;
+  if (!raiz) return;
+  _SG.raizEq = raiz;
+  if (opts.pdvs) _SG.pdvs = opts.pdvs;
+  raiz.innerHTML = '<div class="loading-text">Carregando...</div>';
+  await _sgCarregarBase();
+  if (!_SG.eqAreaId || !_sgArea(_SG.eqAreaId)) _SG.eqAreaId = _SG.areas[0]?.id || null;
+  _sgRenderEquipamentos();
+}
+
+function _sgRenderEquipamentos() {
+  const area = _sgArea(_SG.eqAreaId);
+  const nConf = _SG.equip.filter(e => e.ativo && e.conferir).length;
+  const lista = _SG.eqConferir ? _SG.equip.filter(e => e.ativo && e.conferir)
+    : _SG.equip.filter(e => area && e.area_id === area.id);
+  const pdvOpts = sel => `<option value="">Sem cozinha</option>` + _SG.pdvs.map(p =>
+    `<option value="${p.id}"${p.id === sel ? ' selected' : ''}>${escapeHtml(p.nome)}</option>`).join('');
+  _SG.raizEq.innerHTML = `
+    <div class="ds-topo ds-filtro">
+      <select class="select ft-pdv" onchange="_SG.eqAreaId = this.value; _SG.eqConferir = false; _sgRenderEquipamentos()">
+        ${_SG.areas.map(a => `<option value="${a.id}"${a.id === _SG.eqAreaId ? ' selected' : ''}>${escapeHtml(a.nome)}${a.ativa ? '' : ' (inativa)'}</option>`).join('')}
+      </select>
+      ${nConf ? `<button class="filter-chip${_SG.eqConferir ? ' active' : ''}" onclick="_SG.eqConferir = !_SG.eqConferir; _sgRenderEquipamentos()">A conferir <span class="text-muted">${nConf}</span></button>` : ''}
+      <button class="btn btn-outline btn-sm" onclick="_sgNovaArea()">+ Área</button>
+    </div>
+    ${area && !_SG.eqConferir ? `<div class="form-panel" style="display:block">
+      <div class="form-row col3">
+        <div class="form-group"><label>Área</label><input class="input" id="sg-ar-nome" value="${escapeHtml(area.nome)}"></div>
+        <div class="form-group"><label>Cozinha</label><select class="select" id="sg-ar-pdv">${pdvOpts(area.pdv_id)}</select></div>
+        <div class="form-group"><label>Situação</label><select class="select" id="sg-ar-ativa">
+          <option value="1"${area.ativa ? ' selected' : ''}>Ativa</option><option value="0"${area.ativa ? '' : ' selected'}>Inativa</option></select></div>
+      </div>
+      <div class="ft-rodape"><button class="btn btn-outline btn-sm" onclick="_sgSalvarArea('${area.id}')">Salvar área</button></div>
+    </div>` : ''}
+    <div class="sg-eq-lista">${lista.map(e => _sgEqFormHtml(e)).join('')}</div>
+    ${area && !_SG.eqConferir ? `<button class="btn btn-outline" onclick="_sgNovoEquip()">+ Equipamento</button>` : ''}`;
+}
+
+function _sgEqFormHtml(e) {
+  const a = _sgArea(e.area_id);
+  const v = x => x == null ? '' : String(x).replace('.', ',');
+  return `<div class="sg-eq-form${e.conferir ? ' sg-conferir' : ''}${e.ativo ? '' : ' sg-inativo'}" id="sg-ef-${e.id}">
+    ${_SG.eqConferir ? `<div class="uppercase-label">${escapeHtml(a?.nome || '')}</div>` : ''}
+    ${e.conferir ? `<div class="sg-conferir-nota">${escapeHtml(e.conferir)}</div>` : ''}
+    <div class="sg-eq-grid">
+      <div class="form-group"><label>Código</label><input class="input" data-c="codigo" value="${escapeHtml(e.codigo || '')}"></div>
+      <div class="form-group sg-eq-g-nome"><label>Nome</label><input class="input" data-c="nome" value="${escapeHtml(e.nome)}"></div>
+      <div class="form-group"><label>Patrimônio</label><input class="input" data-c="patrimonio" value="${escapeHtml(e.patrimonio || '')}"></div>
+      <div class="form-group"><label>Tipo</label><select class="select" data-c="tipo" onchange="_sgTipoPadrao('${e.id}', this.value)">
+        ${_SG_TIPOS.map(([t, r]) => `<option value="${t}"${t === e.tipo ? ' selected' : ''}>${r}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Mín. °C</label><input class="input" data-c="faixa_min" inputmode="decimal" value="${v(e.faixa_min)}"></div>
+      <div class="form-group"><label>Máx. °C</label><input class="input" data-c="faixa_max" inputmode="decimal" value="${v(e.faixa_max)}"></div>
+      <div class="form-group"><label>Situação</label><select class="select" data-c="ativo">
+        <option value="1"${e.ativo ? ' selected' : ''}>Ativo</option><option value="0"${e.ativo ? '' : ' selected'}>Inativo</option></select></div>
+    </div>
+    <div class="ft-rodape"><button class="btn btn-sm btn-primary" onclick="_sgSalvarEquip('${e.id}')">${e.conferir ? 'Conferido · salvar' : 'Salvar'}</button></div>
+  </div>`;
+}
+
+function _sgTipoPadrao(id, tipo) {
+  const t = _SG_TIPOS.find(x => x[0] === tipo);
+  const f = document.getElementById('sg-ef-' + id);
+  if (!t || !f) return;
+  f.querySelector('[data-c="faixa_min"]').value = t[2] == null ? '' : String(t[2]);
+  f.querySelector('[data-c="faixa_max"]').value = t[3] == null ? '' : String(t[3]);
+}
+
+async function _sgSalvarEquip(id) {
+  const f = document.getElementById('sg-ef-' + id);
+  const g = c => f.querySelector(`[data-c="${c}"]`).value;
+  const num = c => { const t = String(g(c)).trim(); return t === '' ? null : numBR(t); };
+  const reg = {
+    codigo: g('codigo').trim() || null, nome: g('nome').trim(), patrimonio: g('patrimonio').trim() || null,
+    tipo: g('tipo'), faixa_min: num('faixa_min'), faixa_max: num('faixa_max'), ativo: g('ativo') === '1', conferir: null,
+  };
+  if (!reg.nome) { showToast('Informe o nome.', 'error'); return; }
+  if (reg.faixa_min == null && reg.faixa_max == null) { showToast('Informe a faixa (mínima, máxima ou as duas).', 'error'); return; }
+  if (reg.faixa_min != null && reg.faixa_max != null && reg.faixa_min > reg.faixa_max) { showToast('A mínima é maior que a máxima.', 'error'); return; }
+  const { error } = await sb.from('equipamentos_temperatura').update(reg).eq('id', id);
+  if (error) { showToast('Não salvou: ' + error.message, 'error'); return; }
+  showToast('Equipamento salvo.', 'success');
+  await montarEquipamentos(_SG.raizEq);
+}
+
+async function _sgNovoEquip() {
+  const ordem = Math.max(0, ..._SG.equip.filter(e => e.area_id === _SG.eqAreaId).map(e => e.ordem)) + 10;
+  const { error } = await sb.from('equipamentos_temperatura').insert({
+    area_id: _SG.eqAreaId, nome: 'Novo equipamento', tipo: 'refrigerado', faixa_min: 0, faixa_max: 6,
+    ordem, conferir: 'Equipamento novo: preencha nome, código e patrimônio.' });
+  if (error) { showToast('Não criou: ' + error.message, 'error'); return; }
+  await montarEquipamentos(_SG.raizEq);
+}
+
+async function _sgSalvarArea(id) {
+  const nome = (document.getElementById('sg-ar-nome')?.value || '').trim();
+  if (!nome) { showToast('Informe o nome da área.', 'error'); return; }
+  const { error } = await sb.from('areas_temperatura').update({
+    nome, pdv_id: document.getElementById('sg-ar-pdv')?.value || null,
+    ativa: document.getElementById('sg-ar-ativa')?.value === '1' }).eq('id', id);
+  if (error) { showToast('Não salvou: ' + error.message, 'error'); return; }
+  showToast('Área salva.', 'success');
+  await montarEquipamentos(_SG.raizEq);
+}
+
+async function _sgNovaArea() {
+  const nome = (prompt('Nome da nova área') || '').trim();
+  if (!nome) return;
+  const ordem = Math.max(0, ..._SG.areas.map(a => a.ordem)) + 10;
+  const { data, error } = await sb.from('areas_temperatura').insert({ nome, ordem }).select('id').single();
+  if (error) { showToast('Não criou: ' + error.message, 'error'); return; }
+  _SG.eqAreaId = data.id; _SG.eqConferir = false;
+  await montarEquipamentos(_SG.raizEq);
+}
+
+// Imprime só a planilha: o resto da tela some enquanto o diálogo está aberto.
+function _sgImprimir() {
+  document.body.classList.add('imprimindo-temp');
+  const tirar = () => { document.body.classList.remove('imprimindo-temp'); window.removeEventListener('afterprint', tirar); };
+  window.addEventListener('afterprint', tirar);
+  window.print();
+  setTimeout(tirar, 1500);
 }

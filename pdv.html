@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610062131">
+<link rel="stylesheet" href="style.css?v=202610082036">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610062131"></script>
+<script src="config.js?v=202610082036"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -434,6 +434,10 @@
     </div>
     <div class="nav-item" onclick="goTab('fichas',this)"><span class="nav-icon">✎</span> Fichas Técnicas</div>
     <div class="nav-item" onclick="goTab('descartes',this)"><span class="nav-icon">⊘</span> Descartes</div>
+    <div class="nav-item" id="navSeguranca" onclick="goTab('seguranca',this)">
+      <span class="nav-icon">❄</span> Segurança dos alimentos
+      <span class="nav-badge" id="badgeSeguranca"></span>
+    </div>
     <div class="nav-item" id="navInventario" onclick="goTab('inventario',this)" style="display:none"><span class="nav-icon">▦</span> Inventário</div>
     <div class="nav-item" onclick="goTab('historico',this)"><span class="nav-icon">⏱</span> Histórico</div>
     <div class="nav-item" onclick="goTab('relatorios',this)"><span class="nav-icon">▣</span> Relatórios</div>
@@ -464,6 +468,7 @@
        menos usa: ele entrava para pedir à Comissaria e caía na tela de
        pedir ao fornecedor. -->
   <div class="tab-content active" id="tab-inicio">
+    <div class="aviso aviso-error" id="avisoTemperatura" style="display:none;cursor:pointer" onclick="switchAba('seguranca')"></div>
     <div class="inicio-cards">
       <button class="card-acao primaria" data-proc="req" onclick="switchAba('req')">
         <span class="glifo">▤</span>
@@ -687,6 +692,11 @@
 
   <div class="tab-content" id="tab-descartes">
     <div class="main full"><div id="dsRoot"></div></div>
+  </div>
+
+  <!-- Temperatura dos equipamentos e inspeções da nutrição (migration 95) -->
+  <div class="tab-content" id="tab-seguranca">
+    <div class="main full"><div id="sgRoot"></div></div>
   </div>
 
   <div class="tab-content" id="tab-inventario">
@@ -1517,6 +1527,7 @@ const tabTitles = {
   relatorios: ['Relatórios', 'Aquisições finalizadas do seu PDV'],
   fichas:     ['Fichas Técnicas', 'Receitas da sua cozinha'],
   descartes:  ['Descartes', 'O que foi descartado na sua cozinha'],
+  seguranca:  ['Segurança dos alimentos', 'Temperatura dos equipamentos e inspeções'],
 };
 
 function toggleSidebar() {
@@ -1539,6 +1550,25 @@ async function abrirTelaFichas() {
 async function abrirTelaDescartes() {
   await montarDescartes('#dsRoot', {
     pdvId: state.perfil.pdv_id, pdvNome: state.pdvNome });
+}
+
+async function abrirTelaSeguranca() {
+  await montarSegurancaCozinha('#sgRoot', { pdvId: state.perfil.pdv_id });
+}
+
+// Equipamento da cozinha com a última aferição fora da faixa: aviso no
+// Início e bolinha no menu. Bar não tem equipamento cadastrado.
+async function atualizarAvisoTemperatura() {
+  if (state.soHortifruti) return;
+  const n = await contarForaDaFaixaCozinha(state.perfil.pdv_id).catch(() => 0);
+  const av = document.getElementById('avisoTemperatura');
+  if (av) {
+    av.style.display = n ? '' : 'none';
+    av.textContent = n === 1 ? '1 equipamento da cozinha com temperatura fora da faixa.'
+                             : n + ' equipamentos da cozinha com temperatura fora da faixa.';
+  }
+  const b = document.getElementById('badgeSeguranca');
+  if (b) { b.textContent = n || ''; b.style.display = n ? '' : 'none'; }
 }
 
 async function abrirTelaInventario() {
@@ -1569,6 +1599,8 @@ function goTab(aba, el) {
   if (aba === 'fichas') abrirTelaFichas();
   if (aba === 'descartes') abrirTelaDescartes();
   if (aba === 'inventario') abrirTelaInventario();
+  if (aba === 'seguranca') abrirTelaSeguranca();
+  if (aba === 'inicio') atualizarAvisoTemperatura();
   if (window.innerWidth <= 900) {
     document.querySelector('.sidebar')?.classList.remove('open');
     document.getElementById('sbOverlay')?.classList.remove('open');
