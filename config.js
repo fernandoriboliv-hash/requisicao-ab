@@ -2604,17 +2604,33 @@ const _FT_CATEGORIAS = [
 // de embutidos. Elas reaproveitam as cores: a lista e sempre de uma cozinha
 // so, entao a mesma cor em dois PDVs nunca aparece junta na tela.
 const _FT_CATEGORIAS_COMISSARIA = [
-  { nome: 'Peças curadas',       classe: 'ft-cat-proteina' },
-  { nome: 'Embutidos curados',   classe: 'ft-cat-principal' },
-  { nome: 'Embutidos frescos',   classe: 'ft-cat-sanduiche' },
-  { nome: 'Cozidos e defumados', classe: 'ft-cat-guarnicao' },
+  { nome: 'Peças curadas',       classe: 'ft-cat-proteina',  tipo: 'prato' },
+  { nome: 'Embutidos curados',   classe: 'ft-cat-principal', tipo: 'prato' },
+  { nome: 'Embutidos frescos',   classe: 'ft-cat-sanduiche', tipo: 'prato' },
+  { nome: 'Cozidos e defumados', classe: 'ft-cat-guarnicao', tipo: 'prato' },
+];
+
+// A Confeitaria produz sub-receita para as outras cozinhas, nao prato de
+// carta, entao as familias dela sao outras: uma ganache e uma mousse nao
+// cabem em "Molhos e emulsoes". Mesmas cores, tag propria.
+const _FT_CATEGORIAS_CONFEITARIA = [
+  { nome: 'Sobremesas de carta',             classe: 'ft-cat-sobremesa', tipo: 'prato' },
+  { nome: 'Bolos e tortas',                  classe: 'ft-cat-principal', tipo: 'prato' },
+  { nome: 'Biscoitos e petit fours',         classe: 'ft-cat-sanduiche', tipo: 'prato' },
+  { nome: 'Docinhos e brigadeiros',          classe: 'ft-cat-doce',      tipo: 'prato' },
+  { nome: 'Massas e bases assadas',          classe: 'ft-cat-massa',     tipo: 'base'  },
+  { nome: 'Cremes e mousses',                classe: 'ft-cat-molho',     tipo: 'base'  },
+  { nome: 'Ganaches e caldas',               classe: 'ft-cat-tempero',   tipo: 'base'  },
+  { nome: 'Compotas, geleias e frutas',      classe: 'ft-cat-entrada',   tipo: 'base'  },
+  { nome: 'Crocantes e preparos auxiliares', classe: 'ft-cat-guarnicao', tipo: 'base'  },
 ];
 
 // Categoria antiga, de texto livre, nao casa com nenhuma das listas: fica
 // sem classe e o card continua com a tarja dourada de antes.
 const _FT_CLASSE_CAT = (() => {
   const m = {};
-  [..._FT_CATEGORIAS, ..._FT_CATEGORIAS_COMISSARIA].forEach(c => { m[_ftNormCat(c.nome)] = c.classe; });
+  [..._FT_CATEGORIAS, ..._FT_CATEGORIAS_COMISSARIA, ..._FT_CATEGORIAS_CONFEITARIA]
+    .forEach(c => { m[_ftNormCat(c.nome)] = c.classe; });
   return m;
 })();
 
@@ -2627,11 +2643,29 @@ function _ftClasseCat(categoria) {
   return _FT_CLASSE_CAT[_ftNormCat(categoria)] || '';
 }
 
-// Categoria que a cozinha usa e nao esta na lista de cima. Entra no editor
-// como opcao propria: as da Comissaria tem cor mas nao estao em
-// _FT_CATEGORIAS, e sem isso salvar a ficha apagaria a categoria dela.
-const _FT_CAT_NOMES = new Set(_FT_CATEGORIAS.map(c => _ftNormCat(c.nome)));
-function _ftCatForaDaLista(c) { return c && !_FT_CAT_NOMES.has(_ftNormCat(c)); }
+// Cada cozinha ve a lista dela. A Comissaria faz embutido e a Confeitaria faz
+// sub-receita de doce: nenhuma das duas cabe na lista do restaurante, e tanto
+// o filtro da tela quanto o editor seguem a lista da cozinha aberta.
+function _ftListaCat() {
+  if (/confeitaria/i.test(_FT.pdvNome || '')) return _FT_CATEGORIAS_CONFEITARIA;
+  if (/comissaria/i.test(_FT.pdvNome || '')) return _FT_CATEGORIAS_COMISSARIA;
+  return _FT_CATEGORIAS;
+}
+
+// Grupo do <select> de categoria. Grupo vazio nao vai para a tela: a lista da
+// Comissaria nao tem nada em "a cozinha produz".
+function _ftGrupoCat(rotulo, nomes, atual) {
+  if (!nomes.length) return '';
+  return `<optgroup label="${escapeHtml(rotulo)}">${nomes
+    .map(n => `<option${n === atual ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}</optgroup>`;
+}
+
+// Categoria que a cozinha usa e nao esta na lista dela. Entra no editor como
+// opcao propria, senao salvar a ficha apagaria a categoria dela.
+function _ftCatForaDaLista(c) {
+  const nomes = new Set(_ftListaCat().map(x => _ftNormCat(x.nome)));
+  return c && !nomes.has(_ftNormCat(c));
+}
 
 // Aceita vírgula: <input type="number"> recusa "1,8" e a cozinha digita
 // com vírgula. Mesma correção que o inventário precisou.
@@ -2825,11 +2859,10 @@ function _ftRenderLista() {
   // Na ordem da cozinha (cafe da manha -> sobremesa -> bases), nao alfabetica.
   // O que nao esta na lista fechada vai para o fim, em ordem de nome.
   const usadas = new Set(_FT.lista.map(f => f.categoria).filter(Boolean));
+  const daCozinha = _ftListaCat();
   const cats = [
-    ..._FT_CATEGORIAS.map(c => c.nome).filter(n => usadas.has(n)),
-    ..._FT_CATEGORIAS_COMISSARIA.map(c => c.nome).filter(n => usadas.has(n)),
-    ...[...usadas].filter(n => !_FT_CATEGORIAS.some(c => c.nome === n)
-      && !_FT_CATEGORIAS_COMISSARIA.some(c => c.nome === n)).sort(),
+    ...daCozinha.map(c => c.nome).filter(n => usadas.has(n)),
+    ...[...usadas].filter(n => !daCozinha.some(c => c.nome === n)).sort(),
   ];
   const q = _ftNorm(_FT.busca);
   const emAprovacao = f => ['degustacao', 'validacao_custo'].includes(_ftEtapa(f));
@@ -3416,13 +3449,9 @@ function _ftRenderEditor() {
           <label>Categoria</label>
           <select class="select" id="ft-cat">
             <option value=""${f.categoria ? '' : ' selected'}>— sem categoria —</option>
-            <optgroup label="Vai para o hóspede">${_FT_CATEGORIAS.filter(c => c.tipo === 'prato')
-              .map(c => `<option${c.nome === f.categoria ? ' selected' : ''}>${escapeHtml(c.nome)}</option>`).join('')}</optgroup>
-            <optgroup label="A cozinha produz">${_FT_CATEGORIAS.filter(c => c.tipo === 'base')
-              .map(c => `<option${c.nome === f.categoria ? ' selected' : ''}>${escapeHtml(c.nome)}</option>`).join('')}</optgroup>
-            ${cats.filter(_ftCatForaDaLista).length ? `<optgroup label="Em uso nesta cozinha, fora da lista">${
-              cats.filter(_ftCatForaDaLista)
-                .map(c => `<option${c === f.categoria ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</optgroup>` : ''}
+            ${_ftGrupoCat('Vai para o hóspede', _ftListaCat().filter(c => c.tipo === 'prato').map(c => c.nome), f.categoria)}
+            ${_ftGrupoCat('A cozinha produz', _ftListaCat().filter(c => c.tipo === 'base').map(c => c.nome), f.categoria)}
+            ${_ftGrupoCat('Em uso nesta cozinha, fora da lista', cats.filter(_ftCatForaDaLista), f.categoria)}
           </select>
         </div>
       </div>
