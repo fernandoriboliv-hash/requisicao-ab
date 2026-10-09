@@ -2545,6 +2545,122 @@ const _FT_ALERGENOS = [
   ['pimenta', 'Pimenta'],
 ];
 
+// =====================================================================
+// SUGESTÃO DE ALERGÊNICO LIDA DOS INGREDIENTES
+// =====================================================================
+// Pedido do Fernando em 09/10/2026: 569 fichas ativas e só 100 com algum
+// alergênico marcado. A nutrição não vai preencher 469 do zero.
+//
+// Isto NÃO grava nada e NÃO é laudo: só pré-marca a caixa e diz qual
+// ingrediente levantou a suspeita. Quem confirma é a nutricionista, no
+// botão de sempre. Enquanto ela não confirma, a ficha segue pendente.
+//
+// As regras foram escritas contra os 1.372 textos de ingrediente que
+// existem hoje no sistema, não de cabeça — por isso os `menos`, que são
+// as armadilhas reais desta casa:
+//   leite de coco / de amêndoas / de aveia / de soja / de tigre  ≠ leite
+//   manteiga de cacau, manteiga vegetal, queijo vegano           ≠ leite
+//   "chocolate nacional sem leite"                               ≠ leite
+//   NOZ-MOSCADA (17 linhas)                                      ≠ noz
+//   "caju" sozinho é a fruta; a castanha é "castanha de caju"
+//   óleo de girassol  ≠  semente de girassol
+//   farinha de arroz / milho / mandioca / amêndoas               ≠ glúten
+//   "Gema Amassada" não é massa; "vagem holandesa" não é holandês
+//   fornecedor MARISCO aparece no texto e não é molusco
+//   Portobelo é cogumelo, não vinho do Porto
+const _FT_ALERG_PISTAS = [
+  { al: ['gluten'],
+    // "torrada" ficou de fora de proposito: "castanha de caju torrada" e
+    // "castanha do para torrada" sao castanha tostada, nao pao. O pao de
+    // verdade ja entra por pao/focaccia/sourdough/baguete.
+    quando: /\b(trigo|centeio|cevada|aveia|malte|panko|semolina|cuscuz)\b|farinha de rosca|\b(pao|paes|brioche|focaccia|sourdough|baguete|crouton|croutons|biscoito|bolacha|cerveja|shoyu|miso|misso)\w*|empanad|empanament|tempura|\bmassa\b|\bfarinha\b/,
+    menos: /pao de queijo|massa de gelatina|farinha de (arroz|milho|caju|amendoas?|mandioca|linhaca|castanha|polvilho)/ },
+
+  { al: ['leite', 'lactose'],
+    quando: /\b(leite|manteiga|queijo|iogurte|nata|requeijao|mascarpone|burrata|catupiry|coalhada|ricota|gorgonzola|brie|gruyere|parmesao|provolone|feta|boursin|buttermilk|chantilly|lactose|ghee)\b|cream cheese|chocolate branco/,
+    menos: /leite de (coco|amendoas?|aveia|soja|castanha|tigre)|leite aveia|manteiga de cacau|manteiga vegetal|queijo vegano|sem leite/ },
+
+  { al: ['ovos'],
+    quando: /\b(ovo|ovos|gema|gemas|clara|claras|maionese|aioli|merengue|anglaise|mousseline|holandes)\b/,
+    menos: /vagem holandesa|batata holandesa/ },
+
+  { al: ['peixes'],
+    quando: /\b(peixe|peixes|robalo|salmao|atum|linguado|pescada|badejo|cherne|corvina|garoupa|truta|bacalhau|anchova|sardinha|namorado|tilapia|bottarga|katsuobushi|hondashi|dashi|caviar|ovas|shiokara)\b|ova de/ },
+
+  { al: ['crustaceos'], quando: /\b(camarao|camaroes|lagosta|lagostim|siri|caranguejo)\b/ },
+
+  // "marisco" fica de fora de proposito: e o nome do fornecedor de peixe,
+  // aparece em "peixe do dia (fornecedor MARISCO)".
+  { al: ['moluscos'], quando: /\b(lula|lulas|polvo|vieira|vieiras|mexilhao|ostra|ostras|berbigao|vongole)\b/ },
+
+  { al: ['soja'], quando: /\b(soja|shoyu|tofu|edamame|miso|misso)\b/ },
+
+  { al: ['amendoim'],      quando: /\bamendoi(m|ns)\b/ },
+  { al: ['amendoa'],       quando: /\bamendoas?\b/ },
+  { al: ['avela'],         quando: /\bavelas?\b/ },
+  { al: ['pistache'],      quando: /\bpistache\b/ },
+  { al: ['pinoli'],        quando: /\bpinolis?\b/ },
+  { al: ['macadamia'],     quando: /\bmacadamia\b/ },
+  { al: ['peca'],          quando: /\bpecan\b|noz pec/ },
+  { al: ['castanha_caju'], quando: /castanha de caju|castanha caju|castanhas de caju|farinha de caju|ou caju/ },
+  { al: ['castanha_para'], quando: /castanhas? do para|cast do para/ },
+
+  { al: ['castanhas'],
+    quando: /\bcastanhas?\b|\blicuri\b|\bbaru\b/,
+    menos: /castanha de caju|castanha caju|castanhas? do para|cast do para/ },
+
+  // So a semente. Oleo de girassol refinado aparece em 35 linhas e nao e o
+  // que o cardapio do Blaise declarou.
+  { al: ['sementes'], quando: /sementes? de girassol|sementes? de abobora|amburana/ },
+
+  { al: ['gergelim'], quando: /\b(gergelim|tahine|tahini|sesamo)\b/ },
+
+  { al: ['sulfitos'],
+    quando: /\bvinho\b|vinagre de vinho|\bbalsamico\b|\bjerez\b|frutas secas|uva passa|\bpassas\b|\bdamasco\b/ },
+
+  { al: ['pimenta'], quando: /\bpimentas?\b/ },
+];
+
+// Texto normalizado de uma linha: o que a cozinha escreveu + o nome do item
+// do catalogo quando ela ja vinculou.
+function _ftAlergTextoLinha(l) {
+  return _ftNormCat([l.nomeFicha, l.nomeCat].filter(Boolean).join(' '));
+}
+
+// Devolve { porAlerg: {codigo: [ingredientes que levantaram]}, subPendentes: [] }
+// `fichasDoPdv` é _FT.lista, para herdar o alergênico da sub-receita.
+// O nome da receita também conta: "Crumble de castanha de caju" e "Tartar de
+// Salmão" dizem o que têm mesmo quando a linha correspondente não foi escrita.
+function _ftAlergSugerir(linhas, fichasDoPdv, nomeFicha) {
+  const porAlerg = {};
+  const subPendentes = [];
+  const marca = (cod, motivo) => {
+    (porAlerg[cod] = porAlerg[cod] || []);
+    if (!porAlerg[cod].includes(motivo)) porAlerg[cod].push(motivo);
+  };
+  const aplica = (texto, motivo) => {
+    if (!texto) return;
+    _FT_ALERG_PISTAS.forEach(r => {
+      if (!r.quando.test(texto)) return;
+      if (r.menos && r.menos.test(texto)) return;
+      r.al.forEach(a => marca(a, motivo));
+    });
+  };
+  aplica(_ftNormCat(nomeFicha), 'nome da receita');
+  (linhas || []).forEach(l => {
+    if (l.sub_ficha_id) {
+      // sub-receita nao se le por texto: vale o que ela ja tem confirmado
+      const sub = (fichasDoPdv || []).find(f => f.id === l.sub_ficha_id);
+      const dela = (sub && sub.alergenos) || [];
+      if (dela.length) dela.forEach(a => marca(a, 'sub-receita ' + (l.nomeCat || l.nome)));
+      else subPendentes.push(l.nomeCat || l.nome || 'sub-receita');
+      return;
+    }
+    aplica(_ftAlergTextoLinha(l), l.nomeFicha || l.nomeCat || l.nome);
+  });
+  return { porAlerg, subPendentes };
+}
+
 // Motivos de desperdício — lista única das SOPs (GENERAL-03, 10 e 11, LJ-04,
 // LJ-06 e Manual LJ). Antes eram três listas diferentes e duas SOPs mandavam
 // descartar por um motivo que nenhuma lista tinha. O grupo é o que o relatório
@@ -2753,7 +2869,7 @@ async function montarFichas(seletor, opts) {
   raiz.innerHTML = '<div class="loading-text">Carregando fichas...</div>';
 
   const { data, error } = await sb.from('fichas_tecnicas')
-    .select('id, nome, categoria, tipo, status, rendimento, rendimento_un, porcoes, versao, atualizada_em, item_id, criada_em, sharepoint_versao')
+    .select('id, nome, categoria, tipo, status, rendimento, rendimento_un, porcoes, versao, atualizada_em, item_id, criada_em, sharepoint_versao, alergenos')
     .eq('pdv_id', _FT.pdvId).eq('ativa', true).order('categoria').order('nome');
   if (error) {
     raiz.innerHTML = '<div class="empty-text">Não consegui carregar as fichas.</div>'
@@ -3171,12 +3287,34 @@ function _ftNutriHtml(f) {
     : r ? `<div class="ft-nutri-pend">Revisão pendente · a última foi na REV ${String(r.versao).padStart(2, '0')}, em ${_ftDataBR(r.revisada_em)}</div>`
     : '<div class="ft-nutri-pend">Revisão pendente</div>';
   if (!_ftRevisaNutri()) return selo;
+
+  // Sugestão lida dos ingredientes. Vem pré-marcada para não obrigar a
+  // nutrição a preencher do zero, mas só vira alergênico da ficha quando
+  // ela clica em confirmar.
+  const jaTem = f.alergenos || [];
+  const { porAlerg, subPendentes } = _ftAlergSugerir(_FT.linhas, _FT.lista, f.nome);
+  const sugeridos = Object.keys(porAlerg).filter(a => !jaTem.includes(a));
+  const rotulo = Object.fromEntries(_FT_ALERGENOS);
+
   return selo + `
     <div class="form-panel ft-nutri-form" style="display:block">
       <div class="section-title" style="margin-top:0"><span>${ok ? 'Revisar de novo' : 'Revisão de alergênicos'}</span></div>
       <div class="ft-alerg" id="ft-nutri-alerg">${_FT_ALERGENOS.map(([v, rot]) => `
-        <label class="ft-alerg-item"><input type="checkbox" value="${v}"${
-          (f.alergenos || []).includes(v) ? ' checked' : ''}> ${rot}</label>`).join('')}</div>
+        <label class="ft-alerg-item${sugeridos.includes(v) ? ' ft-alerg-sug' : ''}"><input type="checkbox" value="${v}"${
+          jaTem.includes(v) || sugeridos.includes(v) ? ' checked' : ''}> ${rot}${
+          sugeridos.includes(v) ? '<span class="ft-sug-tag">sugerido</span>' : ''}</label>`).join('')}</div>
+      ${sugeridos.length || subPendentes.length ? `
+      <div class="ft-sug-box">
+        <div class="ft-sug-titulo">Sugestão lida dos ingredientes — confira antes de confirmar</div>
+        ${sugeridos.map(a => `<div class="ft-sug-linha"><b>${escapeHtml(rotulo[a] || a)}</b> · ${
+          escapeHtml(porAlerg[a].slice(0, 5).join(', '))}${porAlerg[a].length > 5
+            ? ' e mais ' + (porAlerg[a].length - 5) : ''}</div>`).join('')}
+        ${subPendentes.length ? `<div class="ft-sug-linha ft-sug-alerta">Não dá para ler ${
+          subPendentes.length > 1 ? 'estas sub-receitas' : 'esta sub-receita'}, que ainda não ${
+          subPendentes.length > 1 ? 'foram revisadas' : 'foi revisada'}: ${
+          escapeHtml([...new Set(subPendentes)].join(', '))}</div>` : ''}
+      </div>` : `
+      <div class="ft-sug-box"><div class="ft-sug-linha">Nenhum alergênico apareceu nos ingredientes desta ficha. Confira mesmo assim.</div></div>`}
       <div class="form-group" style="margin-top:10px">
         <label>Observação</label>
         <input class="input" id="ft-nutri-obs" placeholder="opcional" value="">
