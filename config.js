@@ -2527,12 +2527,18 @@ function custoPelaFicha(insumos, precoDe) {
 // a da SOP. "Castanhas (outras)" existe para não invalidar ficha antiga.
 const _FT_ALERGENOS = [
   ['gluten', 'Glúten (trigo, centeio, cevada, aveia)'], ['crustaceos', 'Crustáceos'],
+  // Molusco é alergia distinta de crustáceo: quem não pode mexilhão pode
+  // camarão. Veio do cardápio de alergênicos do Blaise (08/10).
+  ['moluscos', 'Moluscos'],
   ['ovos', 'Ovos'], ['peixes', 'Peixes'], ['amendoim', 'Amendoim'], ['soja', 'Soja'],
   ['leite', 'Leite (todas as espécies)'], ['lactose', 'Lactose'],
   ['amendoa', 'Amêndoa'], ['avela', 'Avelã'], ['castanha_caju', 'Castanha-de-caju'],
   ['castanha_para', 'Castanha-do-pará'], ['macadamia', 'Macadâmia'], ['nozes', 'Nozes'],
   ['peca', 'Pecã'], ['pistache', 'Pistache'], ['pinoli', 'Pinoli'],
   ['castanhas', 'Castanhas (outras)'],
+  // Semente de girassol, abóbora e amburana: o Blaise declara as três e
+  // nenhuma é castanha — marcar como castanha avisaria a pessoa errada.
+  ['sementes', 'Sementes (girassol, abóbora, amburana)'],
   ['latex', 'Látex natural'], ['gergelim', 'Gergelim'], ['sulfitos', 'Sulfitos'],
   // Pimenta não é alergênico da RDC, mas é o que a cozinha marca na ficha —
   // as planilhas já vinham com "Pimentas" e "Pimenta do reino" (22/09).
