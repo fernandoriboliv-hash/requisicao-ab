@@ -2825,6 +2825,7 @@ const _FT_EVENTOS = {
   publicar: 'publicou', devolver: 'devolveu para ajustes', reprovar: 'reprovou',
   descartar: 'descartou a alteração', sharepoint: 'salvou o PDF no SharePoint',
   revisao_nutri: 'revisou os alergênicos (nutrição)',
+  categoria: 'corrigiu a categoria', alergenos: 'corrigiu os alergênicos da carga',
 };
 const _FT_ABERTAS = ['rascunho', 'degustacao', 'validacao_custo'];
 
