@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610092016">
+<link rel="stylesheet" href="style.css?v=202610131642">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610092016"></script>
+<script src="config.js?v=202610131642"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -48,6 +48,16 @@
     margin-bottom: 2px;
     border: 1px solid transparent;
     transition: border-color 0.15s, background 0.15s;
+  }
+  /* As quatro colunas acima sao da linha do CATALOGO, que tem cinco filhos:
+     caixinha, nome, unidade, acoes e comentario. A linha do favorito tem
+     dois — nome e acoes. Sem uma grade propria o nome caia na primeira
+     coluna, a de 22px da caixinha, e saia uma letra por linha: a linha
+     media 1.417px de altura e o botao "Abrir" ficava fora da tela.
+     So no desktop: abaixo de 480px o bloco de celular ja da lugar
+     explicito a cada um por grid-template-areas, e la a linha sai certa. */
+  @media (min-width: 481px) {
+    .item-row.linha-simples { grid-template-columns: 1fr auto; }
   }
   .item-actions-cell {
     display: flex;
@@ -455,7 +465,7 @@
     <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Abrir menu">☰</button>
     <div class="top-bar-hero">
       <div class="top-title" id="topTitle">Solicitar Compra</div>
-      <div class="top-sub" id="topSub">Pedido para compra externa (aprovação do Gerente)</div>
+      <div class="top-sub" id="topSub">Pedido para compra externa (aprovação da Gestão)</div>
     </div>
   </div>
 
@@ -1519,7 +1529,7 @@ function atualizarCarrinho() {
 const tabTitles = {
   inventario:  ['Inventário', 'Contagem do mês, item por item'],
   inicio:     ['Início', 'O que você quer fazer?'],
-  compra:     ['Solicitar Compra', 'Pedido para compra externa (aprovação do Gerente)'],
+  compra:     ['Solicitar Compra', 'Pedido para compra externa (aprovação da Gestão)'],
   req:        ['Requisição de Estoque', 'Pedido de itens do estoque interno — sem aprovação'],
   favoritos:  ['Favoritos', 'Pedidos que se repetem — abra, confira e envie'],
   rascunhos:  ['Rascunhos', 'Solicitações salvas pra continuar depois'],
@@ -2275,7 +2285,7 @@ function renderFavoritos() {
     const resumo = itens.slice(0, 3).map(i => escapeHtml(i.item_nome)).join(' · ')
       + (itens.length > 3 ? ` · +${itens.length - 3}` : '');
     return `
-      <div class="item-row" style="cursor:pointer" onclick="abrirFavorito('${m.id}')">
+      <div class="item-row linha-simples" style="cursor:pointer" onclick="abrirFavorito('${m.id}')">
         <div class="item-name">
           <strong>${escapeHtml(m.nome)}</strong>
           <span class="item-obs">${itens.length} ${itens.length === 1 ? 'item' : 'itens'} — ${resumo}</span>

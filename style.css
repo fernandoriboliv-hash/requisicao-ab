@@ -2064,6 +2064,11 @@ body[data-processo] #execCartBtn:disabled { background: var(--muted2); color: va
 .inv-chave em { font-style: normal; font-size: 11.5px; color: var(--muted); }
 /* Item que veio da busca e nao esta na lista da cozinha: fica visivel,
    mas dito. Sem a marca, parece que a lista curta nao esta funcionando. */
+/* Previa da conversao em peso bruto, embaixo do nome na contagem
+   (migration 96). Vai dentro do .inv-nome, e nao numa coluna propria, para
+   nao empurrar o campo de quantidade na tela do celular. */
+.inv-bruto { display: block; margin-top: 2px; }
+
 .inv-item.fora-da-lista { border-left: 2px solid var(--muted2); }
 .inv-incluir {
   display: inline-block; margin-left: 8px; padding: 2px 8px;

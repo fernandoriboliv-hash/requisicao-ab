@@ -35,7 +35,7 @@ const REDIRECT_POR_PERFIL = {
 // cozinha. Só o rótulo muda; o código do perfil continua o mesmo no banco.
 const LABEL_PERFIL = {
   master_sistema:  'Master de Sistema',
-  gerente_compras: 'Gerente de Compras',
+  gerente_compras: 'Gestor de Cozinhas e Compras',
   executivo:       'Chef',
   pdv:             'Cozinheiro',
   estoque:         'Comissária',
@@ -1143,16 +1143,20 @@ const _pbNum = n => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3
 
 // A linha que a Comissária lê: quanto rende, por quanto multiplica e qual é
 // o peso bruto do que ela acabou de pesar.
+// A conta inteira, e nao so o resultado: a Comissaria precisa poder conferir
+// o numero sem refazer na calculadora, que e o que ela fazia ate 02/10.
+// Antes de pesar, so o que da para dizer e o aproveitamento e o fator.
 function avisoPesoBruto(itemId, peso, unidade, catalogo) {
   const f = fatorPesoBruto(itemId, catalogo);
   if (!f) return '';
   const p = numBR(peso);   // a Comissaria digita "1,85"
-  const bruto = p > 0 ? p * f.fator : null;
-  return '<span class="peso-bruto">aproveitamento ' + f.passos.map(x => _pbNum(x) + '%').join(' · ')
-    + ' · fator ' + f.fator.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    + (bruto != null
-        ? ' · bruto <strong>' + _pbNum(bruto) + ' ' + (unidade || 'kg') + '</strong>'
-        : '')
+  const un = unidade || 'kg';
+  const fat = f.fator.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const aprov = 'aproveitamento ' + f.passos.map(x => _pbNum(x) + '%').join(' · ');
+  return '<span class="peso-bruto">' + (p > 0
+    ? 'líquido ' + _pbNum(p) + ' ' + un + ' × ' + fat
+      + ' = bruto <strong>' + _pbNum(p * f.fator) + ' ' + un + '</strong> · ' + aprov
+    : aprov + ' · fator ' + fat)
     + '</span>';
 }
 
@@ -1482,7 +1486,7 @@ function nomeAutor(usuarioId) {
 
 // "Fulano" ou "Fulano (Chef)" — o perfil separa o pedido do cozinheiro do que
 // o Chef ou a Comissaria lançou em nome do PDV
-const _ROTULO_PERFIL = { executivo: 'Chef', gerente_compras: 'Gerente', estoque: 'Comissária', pdv: 'Cozinheiro',
+const _ROTULO_PERFIL = { executivo: 'Chef', gerente_compras: 'Gestor', estoque: 'Comissária', pdv: 'Cozinheiro',
   nutricionista: 'Nutricionista', nutri_estagio: 'Nutrição' };
 
 function autorComPerfil(usuarioId) {
@@ -1882,6 +1886,13 @@ const _INV = {
   usarLista: false, listaCurta: null, extras: new Set(),
   salvando: new Set(),
   foraPlanilha: [],
+  // Peso bruto (migration 96). O que a Comissaria transforma e contado
+  // pesado pronto, e o relatorio sai no peso COMPRADO. Quem multiplica e a
+  // exportacao, nao a gravacao: o banco guarda o que a pessoa digitou, e
+  // uma revisao de fator vale para tudo que for extraido dali em diante.
+  // O que mora aqui e so a previa, para quem conta conferir na hora.
+  catalogo: null,        // Map id -> { aproveitamento_pct, item_origem_id }
+  pesoBrutoDesde: null,  // competencia a partir da qual a conversao vale
 };
 
 const _invChave = (l) => (l.linha_id ? 'L' + l.linha_id : 'I' + l.item_id);
@@ -1933,7 +1944,7 @@ async function montarInventario(seletor, opts) {
     // para quando a pessoa mandar print pra mim.
     const m = String(eI.message || '');
     const humano =
-      /schema cache|does not exist/i.test(m) ? 'O inventário ainda não foi liberado neste sistema. Avise o gerente de compras.'
+      /schema cache|does not exist/i.test(m) ? 'O inventário ainda não foi liberado neste sistema. Avise a Gestão de Cozinhas e Compras.'
       : /permiss|denied|policy/i.test(m)     ? 'Seu usuário não conta a câmara desta cozinha.'
       : !navigator.onLine                     ? 'Sem internet. A contagem abre assim que a conexão voltar.'
       : 'Não consegui abrir a contagem deste mês.';
@@ -1968,6 +1979,7 @@ async function montarInventario(seletor, opts) {
     [_invChave(c), { id: c.id, qtd: parseFloat(c.quantidade) }]));
 
   await _invCarregarLivres();
+  await _invCarregarPesoBruto();
 
   const { data: cfg } = await sb.from('pdvs')
     .select('inventario_lista_curta').eq('id', _INV.pdvId).maybeSingle();
@@ -2044,6 +2056,72 @@ async function _invCarregarForaDaPlanilha() {
     linha_id: null, item_id: x.item_id, nome: x.nome,
     uom: x.uom, commodity: x.commodity || 'FORA DA PLANILHA',
   }));
+}
+
+// ---------------------------------------------------------------------
+// PREVIA DO PESO BRUTO NA CONTAGEM
+// ---------------------------------------------------------------------
+// So as tres colunas que a conta usa — quem conta esta de pe na camara com
+// o celular, e o catalogo inteiro nao serve para nada aqui.
+//
+// PAGINADO: o PostgREST devolve no maximo 1000 linhas e ignora um .limit()
+// maior, calado. Sao 803 itens ativos hoje; no dia em que passarem de mil,
+// um select solto perderia os ultimos em ordem de id — e o item perdido
+// nao daria erro nenhum, so deixaria de converter.
+//
+// Nao filtra por `ativo`: o fator sobe a cadeia por `item_origem_id`, e o
+// item de origem pode estar desativado sem que isso mude o fator de quem
+// ainda se conta.
+async function _invCarregarPesoBruto() {
+  _INV.catalogo = null;
+  _INV.pesoBrutoDesde = null;
+
+  const { data: desde, error } = await sb.rpc('inventario_peso_bruto_desde');
+  // Sem a migration 96 a funcao nao existe, e sem a chave preenchida a
+  // conversao esta desligada: a contagem segue sem a previa, que e
+  // exatamente como ela era antes.
+  if (error || !desde) return;
+  // Mes anterior ao corte sai como sempre saiu — agosto e setembro ja
+  // foram entregues ao financeiro.
+  if (String(_INV.competencia) < String(desde)) return;
+
+  const itens = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error: e2 } = await sb.from('itens')
+      .select('id, aproveitamento_pct, item_origem_id').order('id').range(de, de + 999);
+    if (e2) return;
+    itens.push(...data);
+    if (data.length < 1000) break;
+  }
+  _INV.pesoBrutoDesde = desde;
+  _INV.catalogo = new Map(itens.map(i => [i.id, i]));
+}
+
+const _invFmt = n => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+
+// A conta inteira embaixo do nome, e nao so o resultado: quem conta precisa
+// poder conferir sem refazer na calculadora. Devolve '' para linha que nao
+// converte, que e a imensa maioria — as 764 linhas da planilha do
+// financeiro nao tem item ligado, entao nao tem fator.
+function _invTextoBruto(l, valor) {
+  if (!l || !l.item_id || !_INV.catalogo) return '';
+  const f = fatorPesoBruto(l.item_id, _INV.catalogo);
+  if (!f) return '';
+  const un = l.uom || 'kg';
+  const fat = f.fator.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const q = _invNum(valor);
+  return q === null || q === 0
+    ? 'fator ' + fat + ' — entra no relatório em peso comprado'
+    : 'contado ' + _invFmt(q) + ' ' + escapeHtml(un) + ' × ' + fat
+      + ' = <strong>' + _invFmt(q * f.fator) + ' ' + escapeHtml(un) + '</strong> no relatório';
+}
+
+// Reescreve so a previa a cada tecla. Redesenhar a linha fecharia o teclado
+// no meio da digitacao — mesma razao do _invAtualizarLinha.
+function _invPrevia(chave, valor) {
+  const cx = document.getElementById('invpb-' + chave);
+  if (!cx) return;   // linha sem fator: nem procura o item
+  cx.innerHTML = _invTextoBruto(_invTodos().find(l => _invChave(l) === chave), valor);
 }
 
 async function _invCarregarListaCurta() {
@@ -2156,7 +2234,7 @@ function _invRender() {
     + '<div class="inv-livres" id="inv-livres"></div>'
     + '<div class="inv-rodape">'
     +   (fechado
-        ? '<span class="text-muted">Contagem fechada pelo gerente. Não dá mais para alterar.</span>'
+        ? '<span class="text-muted">Contagem fechada pela Gestão. Não dá mais para alterar.</span>'
         : '<span class="text-muted">' + (total - contados) + ' item(ns) ainda sem contagem</span>'
           + '<span class="text-muted" style="font-size:11px">grava sozinho a cada item</span>')
     + '</div>';
@@ -2171,11 +2249,15 @@ function _invLinha(l, fechado) {
   const zero = tem && c.qtd === 0;
   // So aparece quando a busca trouxe algo de fora da lista da cozinha.
   const fora = _invListaAtiva() && !_invNaLista(l);
+  // Item transformado: o relatorio sai no peso comprado, e quem conta ve a
+  // conta. Vazio para toda linha que nao tem fator (migration 96).
+  const bruto = _invTextoBruto(l, tem ? c.qtd : '');
   return ''
     + '<div class="inv-item' + (tem ? ' contado' : '') + (zero ? ' zerado' : '')
     +   (fora ? ' fora-da-lista' : '') + '" id="inv-' + k + '">'
     +   '<div class="inv-nome">' + escapeHtml(l.nome)
     +     (l.receita ? '<span class="inv-receita">' + escapeHtml(l.receita) + '</span>' : '')
+    +     (bruto ? '<span class="inv-bruto peso-bruto" id="invpb-' + k + '">' + bruto + '</span>' : '')
     +     (fora && !fechado
         ? '<button class="inv-incluir" onclick="_invIncluir(\'' + k + '\')">'
           + '+ incluir na minha lista</button>'
@@ -2184,7 +2266,8 @@ function _invLinha(l, fechado) {
     +   '<div class="inv-campo">'
     +     '<input class="input inv-qtd" type="text" inputmode="decimal"'
     +       ' value="' + (tem ? c.qtd : '') + '" placeholder="—" ' + (fechado ? 'disabled' : '')
-    +       ' onchange="_invSalvar(\'' + k + '\', this.value)" onclick="this.select()">'
+    +       ' onchange="_invSalvar(\'' + k + '\', this.value)" onclick="this.select()"'
+    +       ' oninput="_invPrevia(\'' + k + '\', this.value)">'
     +     '<span class="inv-uom">' + escapeHtml(l.uom || '') + '</span>'
     +     (fechado ? ''
         : '<button class="inv-apagar" onclick="_invApagar(\'' + k + '\')"'
@@ -2216,7 +2299,7 @@ async function _invConcluir(concluir) {
     { p_inventario_id: _INV.inventarioId, p_concluir: !!concluir });
   if (error) { showToast('Não consegui: ' + error.message, 'error'); return; }
   _INV.concluido = !!concluir;
-  showToast(concluir ? 'Avisado ao gerente: contagem concluída.'
+  showToast(concluir ? 'Avisado à Gestão: contagem concluída.'
                      : 'Voltou para em andamento.', 'success');
   _invRender();
 }
@@ -3880,7 +3963,7 @@ function _ftVincularSugerir(i, v) {
   cx.innerHTML = todos.length
     ? todos.map(x => `<button class="ft-sug-item" onclick="_ftVincularEscolher(${i},'${x.tipo}','${x.id}')">
         ${escapeHtml(x.nome)}${x.tipo === 'rec' ? ' <span class="ft-tag ft-tag-rec">sub-receita</span>' : ''}</button>`).join('')
-    : '<div class="text-muted" style="font-size:12px;padding:8px">Nada encontrado. Se o item não existe no catálogo, avise o gerente de compras.</div>';
+    : '<div class="text-muted" style="font-size:12px;padding:8px">Nada encontrado. Se o item não existe no catálogo, avise a Gestão de Cozinhas e Compras.</div>';
 }
 
 function _ftVincularEscolher(i, tipo, id) {
@@ -3995,7 +4078,7 @@ function _ftVincSugerir(chave, v) {
   cx.innerHTML = todos.length
     ? todos.map(c => `<button class="ft-sug-item" onclick="_ftVincAplicar('${chave}','${c.tipo}','${c.id}')">
         ${escapeHtml(c.nome)}${c.tipo === 'rec' ? ' <span class="ft-tag ft-tag-rec">sub-receita</span>' : ''}</button>`).join('')
-    : '<div class="text-muted" style="font-size:12px;padding:8px">Nada encontrado. Se o item não existe no catálogo, avise o gerente de compras.</div>';
+    : '<div class="text-muted" style="font-size:12px;padding:8px">Nada encontrado. Se o item não existe no catálogo, avise a Gestão de Cozinhas e Compras.</div>';
 }
 
 async function _ftVincAplicar(chave, tipo, id) {
@@ -4040,7 +4123,7 @@ function _ftSugerir(v) {
           ${x.tipo === 'rec' ? '<span class="ft-tag ft-tag-rec">sub-receita</span>' : ''}
         </button>`).join('')
     : '<div class="text-muted" style="font-size:12px;padding:8px">'
-      + 'Nada encontrado. Se o ingrediente não existe no catálogo, avise o gerente de compras.</div>';
+      + 'Nada encontrado. Se o ingrediente não existe no catálogo, avise a Gestão de Cozinhas e Compras.</div>';
 }
 
 function _ftAdicionar(tipo, id) {
@@ -5729,7 +5812,7 @@ async function montarFechamentoReq(seletor) {
   _FQ.pdvs = data || [];
   if (!_FQ.pdvs.length) {
     raiz.innerHTML = '<div class="empty-text">Seu login não está ligado a nenhuma cozinha, '
-      + 'então não há o que exportar. Fale com o gerente de compras.</div>';
+      + 'então não há o que exportar. Fale com a Gestão de Cozinhas e Compras.</div>';
     return;
   }
   _fqTela();

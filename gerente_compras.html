@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gerente de Compras — Rosewood A&B</title>
+<title>Gestão de Cozinhas e Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610092016">
+<link rel="stylesheet" href="style.css?v=202610131642">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610092016"></script>
+<script src="config.js?v=202610131642"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -199,7 +199,7 @@
 <nav class="sidebar">
   <div class="sidebar-brand">
     <div class="name">Rosewood</div>
-    <div class="sub">A&amp;B · Gerente de Compras</div>
+    <div class="sub">A&amp;B · Gestão de Cozinhas e Compras</div>
   </div>
   <div class="sidebar-nav">
     <div class="nav-item active" onclick="goTab('dashboard',this)"><span class="nav-icon">◈</span> Dashboard</div>
@@ -412,7 +412,7 @@
   <div class="tab-content" id="tab-reqCreate">
     <div class="main full">
       <div class="aviso aviso-info">
-        Como gerente, você pode criar uma requisição de estoque em nome de qualquer PDV. Sem corte de horário.
+        Pela Gestão, você pode criar uma requisição de estoque em nome de qualquer PDV. Sem corte de horário.
       </div>
       <div class="form-row col2">
         <div class="field">
@@ -2370,6 +2370,30 @@ function renderFechamentoInventario(d) {
         ></textarea>
     </div>`);
 
+  // A conversão do inventário é restrita de propósito: a coluna CONTAGEM
+  // acima sai como foi contada, porque as linhas da planilha do financeiro
+  // não têm item do catálogo ligado e portanto não têm fator. Quem converte
+  // é o que nasce de item nosso — a produção do açougue. Sem dizer isso
+  // aqui, o número da aba Receitas sobe e não há como saber por quê.
+  //
+  // Só no mês que converte. O inventário tem UMA competência, diferente do
+  // fechamento da requisição, que é um período e pode atravessar o corte —
+  // lá o aviso aparece sempre. Aqui, mostrá-lo num mês anterior diria que a
+  // planilha de setembro mudou, e ela não mudou.
+  if (d.peso_bruto_desde && String(d.competencia) >= String(d.peso_bruto_desde)) {
+    html.push(`
+      <div class="form-panel" style="display:block;margin-bottom:18px;border-left:3px solid var(--gold,#B8963E)">
+        <div class="section-title" style="margin-top:0"><span>Produção do açougue em peso bruto</span></div>
+        <div class="text-muted" style="font-size:12px">
+          A partir da competência de <strong>${ptDate(d.peso_bruto_desde)}</strong> os itens
+          transformados pela Comissaria saem convertidos pelo fator de aproveitamento —
+          é o peso comprado. A contagem fica guardada como foi digitada; quem multiplica
+          é esta exportação. A coluna ${c.coluna} acima <strong>não</strong> muda:
+          as linhas da planilha não têm fator.
+        </div>
+      </div>`);
+  }
+
   html.push(`
     <div class="form-panel" style="display:block;margin-bottom:18px">
       <div class="section-title" style="margin-top:0">
@@ -2417,6 +2441,38 @@ function renderFechamentoInventario(d) {
         ${c.nao_contados.length > amostra.length
           ? `<div class="text-muted" style="font-size:12px;margin-top:8px">
                … e mais ${c.nao_contados.length - amostra.length}.</div>` : ''}
+      </div>`);
+  }
+
+  // Item do CATÁLOGO que a cozinha contou e a planilha não lista (migration
+  // 84). A exportação calcula isso desde setembro e a tela nunca mostrou:
+  // no fechamento de setembro foram 11 itens, 92,9 kg, que o servidor
+  // devolveu e ninguém viu. Como não há linha onde encaixá-los, vão no
+  // corpo do e-mail, igual aos anotados à mão.
+  //
+  // É aqui que a conversão em peso bruto mais aparece: metade das linhas
+  // com fator do inventário é deste bloco.
+  const foraCat = d.fora_da_planilha || [];
+  if (foraCat.length) {
+    html.push(`
+      <div class="form-panel" style="display:block;margin-bottom:18px">
+        <div class="section-title" style="margin-top:0">
+          <span>Itens do catálogo sem linha na planilha (${foraCat.length})</span>
+          <button class="btn btn-sm btn-outline" onclick="copiarForaPlanilha()">Copiar para o e-mail</button>
+        </div>
+        <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+          Contados pela cozinha, sem linha onde encaixar na coluna ${c.coluna} — vão no corpo do e-mail.
+        </div>
+        <table class="data-table">
+          <thead><tr><th>Item</th><th style="text-align:right">Quantidade</th><th>Unid.</th></tr></thead>
+          <tbody>${foraCat.map(x => `
+            <tr>
+              <td data-label="Item">${escapeHtml(x.nome)}</td>
+              <td data-label="Quantidade" style="text-align:right">${nf(x.qtd)}</td>
+              <td data-label="Unid." class="text-muted">${escapeHtml(x.uom || '')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
       </div>`);
   }
 
@@ -2816,6 +2872,25 @@ async function copiarLivres() {
     // A cozinha vai junto: ele cola isto no corpo do e-mail, e "3 kg de
     // tapioca" sem dono não deixa ninguém conferir.
     ...l.map(x => [x.nome, String(x.quantidade).replace('.', ','), x.unidade, x.pdv || ''].join('\t')),
+  ].join('\n');
+  try {
+    await navigator.clipboard.writeText(txt);
+    showToast('Copiado — cole no corpo do e-mail.', 'success');
+  } catch {
+    showToast('Não consegui copiar sozinho.', 'error');
+  }
+}
+
+// Itens do catalogo contados sem linha na planilha. Mesmo formato do
+// copiarLivres: nome, quantidade com virgula, unidade.
+async function copiarForaPlanilha() {
+  const d = fechamentoDados;
+  const l = (d && d.fora_da_planilha) || [];
+  if (!l.length) return;
+  const txt = [
+    'Itens contados que não têm linha na planilha — ' + d.pdv.nome,
+    '',
+    ...l.map(x => [x.nome, String(x.qtd).replace('.', ','), x.uom || ''].join('\t')),
   ].join('\n');
   try {
     await navigator.clipboard.writeText(txt);

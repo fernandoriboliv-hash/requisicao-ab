@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprador — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610092016">
+<link rel="stylesheet" href="style.css?v=202610131642">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610092016"></script>
+<script src="config.js?v=202610131642"></script>
 <style>
   /* Bloco de um fornecedor na fila de aprovados */
   .forn-bloco {
@@ -1526,7 +1526,7 @@ function filaPorItem(linhas) {
              ${fmtQtd(l.moq)} ${escapeHtml(l.unidade || '')}</span>` : ''}
         </td>
         <td class="num" data-label="Quantidade">${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}
-          ${l.cortada ? `<br><span class="linha-corte" title="O gerente ajustou na Lista do Dia">
+          ${l.cortada ? `<br><span class="linha-corte" title="A Gestão ajustou na Lista do Dia">
              pedido: ${fmtQtd(l.qtdPedida)}</span>` : ''}</td>
         <td data-label="Fornecedor">${seletor}</td>
         <td class="num" data-label="Preço un.">${l.preco ? fmtMoeda(l.preco) : '<span class="text-muted">sem preço</span>'}
@@ -1571,7 +1571,7 @@ function filaPorFornecedor(grupos) {
              ${fmtMoeda(l.maisBarata.preco)} — economia de ${fmtMoeda(ganho)}</span>` : ''}
         </td>
         <td class="num" data-label="Quantidade">${fmtQtd(l.qtd)} ${escapeHtml(l.unidade || '')}
-          ${l.cortada ? `<br><span class="linha-corte" title="O gerente ajustou na Lista do Dia">
+          ${l.cortada ? `<br><span class="linha-corte" title="A Gestão ajustou na Lista do Dia">
              pedido: ${fmtQtd(l.qtdPedida)}</span>` : ''}</td>
         <td class="num" data-label="Preço un.">${l.preco ? fmtMoeda(l.preco) : '<span class="text-muted">sem preço</span>'}
           ${idade ? `<br><span class="opc-tag">${escapeHtml(idade)}</span>` : ''}
@@ -2449,7 +2449,7 @@ async function abrirEmail(ordemId) {
     </div>
     ${faltamCfg ? `<div class="aviso aviso-warn">
       Os textos fixos (entrega, dados fiscais, regras) ainda não foram preenchidos.
-      O Gerente configura uma vez em <strong>Configurações do pedido</strong> e eles passam
+      A Gestão configura uma vez em <strong>Configurações do pedido</strong> e eles passam
       a sair em todo pedido automaticamente.</div>` : ''}
     ${ordem.enviada_em ? `<div class="aviso aviso-info">
       Já marcada como enviada em ${ptDateTime(ordem.enviada_em)}.</div>` : ''}
@@ -3786,7 +3786,7 @@ function exportarHistorico() {
 // HELPERS
 // =====================================================================
 const TITULOS = {
-  fila:         ['Solicitações de Compra', 'Aprovadas pelo gerente, agrupadas por fornecedor'],
+  fila:         ['Solicitações de Compra', 'Aprovadas pela Gestão, agrupadas por fornecedor'],
   matriz:       ['Itens × Fornecedores', 'Quem atende cada item, por quanto e em quantos dias'],
   cotacoes:     ['Cotações', 'Peça preço a vários fornecedores e compare lado a lado'],
   ordens:       ['Ordens de Compra', 'Acompanhe prazo e status de cada PO'],

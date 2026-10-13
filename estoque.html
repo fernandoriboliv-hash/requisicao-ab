@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610092016">
+<link rel="stylesheet" href="style.css?v=202610131642">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610092016"></script>
+<script src="config.js?v=202610131642"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -1454,7 +1454,14 @@ window.addEventListener('load', async () => {
 
   // Antes da fila: renderFila mostra o autor de cada requisição e lê do mapa
   await carregarAutores(sb);
-  await Promise.all([carregarCatalogo(), carregarFila()]);
+  // O CATALOGO TEM QUE CHEGAR ANTES DA FILA. renderFila le state.catalogo e
+  // state.aproveitamentoAtivo para escrever a linha do peso bruto embaixo do
+  // campo de peso. Em paralelo a fila terminava primeiro, desenhava com o
+  // catalogo vazio, e a linha nunca era escrita — a Comissaria so via o fator
+  // depois, no relatorio. Conferido em 13/10: 13 linhas da fila tinham fator
+  // e nenhuma mostrava; chamando carregarFila() de novo, apareciam na hora.
+  await carregarCatalogo();
+  await carregarFila();
   atualizarBadgeChecklist();
   atualizarBadgeDivergencias();
 
@@ -2906,7 +2913,7 @@ function abrirRevisaoCompraComis() {
 
   let html = '';
   html += `<div class="aviso aviso-info" style="margin-bottom:16px">`;
-  html += `Entra na lista de compras do Gerente em <strong>${competencia.toLocaleDateString('pt-BR')}</strong>.`;
+  html += `Entra na lista de compras da Gestão em <strong>${competencia.toLocaleDateString('pt-BR')}</strong>.`;
   if (dataEntrega) html += ` Entrega desejada: <strong>${new Date(dataEntrega+'T12:00').toLocaleDateString('pt-BR')}</strong>.`;
   html += `</div>`;
 
@@ -2984,7 +2991,7 @@ async function enviarCompraCommissary() {
     return;
   }
 
-  showToast('Solicitação de compra enviada para o Gerente de Compras.', 'success');
+  showToast('Solicitação de compra enviada para a Gestão de Cozinhas e Compras.', 'success');
   limparCompraComis();
 }
 
