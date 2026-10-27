@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610271034">
+<link rel="stylesheet" href="style.css?v=202610271955">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610271034"></script>
+<script src="config.js?v=202610271955"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -2962,26 +2962,25 @@ async function enviarCompraCommissary() {
   const obs = document.getElementById('c-obs').value.trim();
   const dataEntrega = document.getElementById('c-data-entrega').value || null;
   const itensDoCarrinho = sel.map(s => s.item);
-  const competencia = isoDate(calcularCompetenciaFinal(dataEntrega, itensDoCarrinho));
+  // A data de entrega programa só o hortifruti (gruposDaCompra, no config.js)
+  const grupos = gruposDaCompra(sel.map(s => ({
+    item_id: s.item.id,
+    item_nome: s.item.nome,
+    item_categoria: s.item.categoria,
+    item_unidade: s.item.unidade,
+    quantidade_solicitada: s.qty,
+    item_livre: false,
+  })), itensDoCarrinho, dataEntrega, calcularCompetenciaFinal);
 
-  // Transação única (migration 43): cabeçalho e itens, ou nada.
-  const { error } = await sb.rpc('criar_solicitacao_compra', {
-    p_pdv_id:           state.pdvComissariaId,
-    p_data_entrega:     dataEntrega,
-    p_observacao:       obs || 'Reposição estoque commissary',
-    p_client_token:     tokenCarrinho('compraComis'),
-    p_itens:            sel.map(s => ({
-      item_id: s.item.id,
-      item_nome: s.item.nome,
-      item_categoria: s.item.categoria,
-      item_unidade: s.item.unidade,
-      quantidade_solicitada: s.qty,
-      item_livre: false,
-    })),
-    p_status:           'enviada',
-    p_data_competencia: competencia,
-  });
-  if (error) {
+  // Transação única por solicitação (migration 43): cabeçalho e itens, ou nada.
+  try {
+    await enviarCompraEmGrupos(grupos, {
+      p_pdv_id:       state.pdvComissariaId,
+      p_data_entrega: dataEntrega,
+      p_observacao:   obs || 'Reposição estoque commissary',
+      p_status:       'enviada',
+    }, 'compraComis');
+  } catch (error) {
     if (ehEnvioDuplicado(error)) {
       showToast('Esta solicitação já havia sido enviada — nenhuma duplicata foi criada.', 'info');
       limparCompraComis();
@@ -2991,7 +2990,9 @@ async function enviarCompraCommissary() {
     return;
   }
 
-  showToast('Solicitação de compra enviada para a Gestão de Cozinhas e Compras.', 'success');
+  showToast(grupos.length > 1
+    ? `Solicitação enviada — o hortifruti entra na lista de ${ptDate(grupos[0].competencia)}, o restante na de ${ptDate(grupos[1].competencia)}.`
+    : 'Solicitação de compra enviada para a Gestão de Cozinhas e Compras.', 'success');
   limparCompraComis();
 }
 

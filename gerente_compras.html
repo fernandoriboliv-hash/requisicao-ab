@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestão de Cozinhas e Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610271034">
+<link rel="stylesheet" href="style.css?v=202610271955">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610271034"></script>
+<script src="config.js?v=202610271955"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -317,6 +317,7 @@
         <input class="input" type="date" id="lista-data" style="max-width:160px" onchange="carregarLista()">
         <button class="btn btn-sm btn-outline" onclick="carregarLista()">Atualizar</button>
         <button class="btn btn-sm btn-outline" onclick="exportarLista()" style="margin-left:auto">⤓ Exportar Excel</button>
+        <button class="btn btn-sm btn-primary" onclick="abrirPlanilhaPedido()">⤓ Planilha do pedido</button>
       </div>
       <div class="aviso aviso-info">
         Itens das solicitações <strong>aprovadas</strong> consolidados por categoria. Edite "Qtd Final" para ajustar antes de passar ao comprador. Você pode adicionar itens avulsos (compra por antecipação, item que nenhum PDV pediu) ou remover linhas da lista final.
@@ -461,7 +462,7 @@
       <button class="btn btn-primary" id="rcSendBtn" onclick="enviarReqCreate()" disabled>Enviar Requisição</button>
     </div>
     <div class="cart-sidebar-foot" id="cartFootLista" style="display:none">
-      <button class="btn btn-outline" onclick="exportarLista()">⤓ Exportar Excel</button>
+      <button class="btn btn-outline" onclick="abrirPlanilhaPedido()">⤓ Planilha</button>
       <button class="btn btn-primary" id="listaSendBtn" onclick="abrirRevisaoLista()" disabled>Revisar e Enviar Lista</button>
     </div>
   </aside>
@@ -846,10 +847,46 @@
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="fecharRevisaoLista()">Voltar</button>
       <button class="btn btn-outline" onclick="exportarLista()">⤓ Exportar Excel</button>
+      <button class="btn btn-outline" onclick="abrirPlanilhaPedido()">⤓ Planilha do pedido</button>
       <button class="btn btn-primary" id="btnConfirmarLista" onclick="confirmarEnvioLista()">Confirmar e Enviar</button>
     </div>
   </div>
 </div>
+
+<!-- Modal: Planilha do pedido (modelo do hotel) -->
+<div class="modal-overlay" id="planilhaModal">
+  <div class="modal" style="width:640px">
+    <div class="modal-header">
+      <span>Planilha do pedido</span>
+      <button class="modal-close" onclick="fecharPlanilhaPedido()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="pp-campo">
+        <span class="uppercase-label">Modelo</span>
+        <span id="ppModeloNome" class="pp-valor">—</span>
+        <button class="btn btn-sm btn-outline" id="ppModeloBtn"
+                onclick="document.getElementById('ppModeloArq').click()">Escolher arquivo</button>
+        <input type="file" id="ppModeloArq" accept=".xlsx" hidden onchange="escolherModeloPedido(this)">
+      </div>
+      <div class="pp-campo">
+        <label class="uppercase-label" for="ppData">Data do pedido</label>
+        <input class="input" type="date" id="ppData" style="max-width:170px" onchange="atualizarNomePlanilha()">
+        <span id="ppNomeArq" class="pp-valor">—</span>
+      </div>
+      <div id="ppResultado"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharPlanilhaPedido()">Fechar</button>
+      <button class="btn btn-primary" id="ppGerar" onclick="gerarPlanilhaPedido()">⤓ Gerar planilha</button>
+    </div>
+  </div>
+</div>
+<style>
+  .pp-campo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 0;
+              border-bottom: 1px solid var(--border-subtle); }
+  .pp-campo .uppercase-label { min-width: 110px; margin: 0; }
+  .pp-valor { font-size: 13px; color: var(--text); }
+</style>
 
 <div class="toast-stack" id="toasts"></div>
 
@@ -1821,6 +1858,283 @@ function exportarLista() {
   }
   if (totalLinhas === 0) { showToast('Lista vazia — nada para exportar.', 'error'); return; }
   baixarCSV(`lista_compras_${data}.csv`, linhas);
+}
+
+// =====================================================================
+// PLANILHA DO PEDIDO — a Lista do Dia escrita no modelo do hotel (27/10/2026)
+// =====================================================================
+// O pedido à compradora vai por e-mail, na planilha que a equipe de compras
+// mantém. Antes ele era redigitado e o número caía na linha errada.
+//
+// O arquivo NÃO é refeito numa biblioteca de planilha (perderia logo,
+// comentários, formatação e a proteção). Ele é aberto como zip e só o texto
+// das células de QTD (coluna C) das abas PROTEÍNAS, LATICÍNIOS, HORTIFRUTI e
+// DIVERSOS muda. Proteção, autor, layout e fórmulas saem como vieram. Duas
+// mudanças a mais, invisíveis: o valor guardado do TOTAL da linha (F = C×E),
+// para quem abre no celular, e o fullCalcOnLoad, para o Excel refazer os
+// totais ao abrir.
+//
+// O modelo fica guardado só neste navegador (IndexedDB) — tem dados do
+// hotel e de fornecedores, então nunca vai para o site público.
+//
+// Casamento item → linha: pelo NOME (nome, nome curto ou nome de inventário),
+// nunca pela posição. Item em duas linhas vai para a do fornecedor do preço
+// vigente. Unidade diferente não é preenchida (5 KG na linha de CX é compra
+// errada). Item sem linha sai listado para digitar à mão.
+// Pensando no BirchStreet: a regra de casamento e a escrita estão separadas;
+// outro destino reaproveita o casamento e troca só a escrita.
+const PP_ABAS = /^(PROTEINAS|LATICINIOS|HORTIFRUTI|DIVERSOS)$/;
+const PP_PRIMEIRA_LINHA = 13;   // linhas 1-12: cabeçalho do pedido
+const PP_UN = { UN: 'UN', UND: 'UN', UNID: 'UN', UNIDADE: 'UN', PC: 'PC', PCT: 'PCT', PACOTE: 'PCT',
+  KG: 'KG', KGS: 'KG', CX: 'CX', CAIXA: 'CX', DZ: 'DZ', BD: 'BD', BDJ: 'BDJ', LT: 'L', L: 'L', MC: 'MC', MACO: 'MC' };
+const _ppSemAcento = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+const _ppNorm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+const _ppUn = u => { const k = _ppSemAcento(u).replace(/[^A-Z]/g, ''); return PP_UN[k] || k; };
+const _ppXml = s => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+  .replace(/&apos;/g, "'").replace(/&#x([0-9a-f]+);/gi, (m, n) => String.fromCharCode(parseInt(n, 16)))
+  .replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n)).replace(/&amp;/g, '&');
+const _ppFmt = n => String(+Number(n).toFixed(6));
+
+let _ppJSZip = null;
+function _ppCarregarJSZip() {
+  if (window.JSZip) return Promise.resolve(window.JSZip);
+  return _ppJSZip ||= new Promise((ok, erro) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+    s.onload = () => ok(window.JSZip);
+    s.onerror = () => { _ppJSZip = null; erro(new Error('Não foi possível carregar o gerador da planilha. Confira a internet e tente de novo.')); };
+    document.head.appendChild(s);
+  });
+}
+
+// ── modelo guardado no navegador ──────────────────────────────
+function _ppDb() {
+  return new Promise((ok, erro) => {
+    const r = indexedDB.open('rw-planilha-pedido', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('modelo');
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => erro(r.error);
+  });
+}
+async function _ppModeloGuardado() {
+  try {
+    const db = await _ppDb();
+    return await new Promise(ok => {
+      const q = db.transaction('modelo').objectStore('modelo').get('atual');
+      q.onsuccess = () => ok(q.result || null);
+      q.onerror = () => ok(null);
+    });
+  } catch { return null; }
+}
+async function _ppGuardarModelo(reg) {
+  try {
+    const db = await _ppDb();
+    await new Promise((ok, erro) => {
+      const tx = db.transaction('modelo', 'readwrite');
+      tx.objectStore('modelo').put(reg, 'atual');
+      tx.oncomplete = ok;
+      tx.onerror = () => erro(tx.error);
+    });
+  } catch (e) { console.warn('[planilha] modelo não ficou guardado', e); }
+}
+
+let _ppModelo = null;   // { nome, buf, em }
+
+function _ppDataPedido() { return document.getElementById('ppData').value; }
+function _ppNomeArquivo(iso) { return iso ? `Pedido ${iso.slice(8, 10)}.${iso.slice(5, 7)}.xlsx` : ''; }
+function atualizarNomePlanilha() {
+  document.getElementById('ppNomeArq').textContent = _ppNomeArquivo(_ppDataPedido()) || '—';
+}
+
+async function abrirPlanilhaPedido() {
+  if (!listaConsolidada) { showToast('Gere a lista primeiro.', 'error'); return; }
+  // Data do pedido = dia em que o material é desejado: a lista de hoje vira
+  // o pedido de amanhã. Fica editável para fim de semana e feriado.
+  const comp = document.getElementById('lista-data').value || isoDate(new Date());
+  const d = new Date(comp + 'T12:00:00'); d.setDate(d.getDate() + 1);
+  document.getElementById('ppData').value = isoDate(d);
+  atualizarNomePlanilha();
+  document.getElementById('ppResultado').innerHTML = '';
+  _ppModelo = _ppModelo || await _ppModeloGuardado();
+  _ppMostrarModelo();
+  document.getElementById('planilhaModal').classList.add('open');
+}
+function fecharPlanilhaPedido() { document.getElementById('planilhaModal').classList.remove('open'); }
+
+function _ppMostrarModelo() {
+  document.getElementById('ppModeloNome').textContent = _ppModelo
+    ? `${_ppModelo.nome} · desde ${new Date(_ppModelo.em).toLocaleDateString('pt-BR')}`
+    : 'Nenhum modelo escolhido';
+  document.getElementById('ppModeloBtn').textContent = _ppModelo ? 'Trocar' : 'Escolher arquivo';
+}
+
+async function escolherModeloPedido(input) {
+  const f = input.files && input.files[0];
+  input.value = '';
+  if (!f) return;
+  const buf = await f.arrayBuffer();
+  try {
+    const JSZip = await _ppCarregarJSZip();
+    const linhas = await _ppLinhasDoModelo(await JSZip.loadAsync(buf));
+    if (!linhas.length) throw new Error('Este arquivo não tem as abas do pedido (PROTEÍNAS, LATICÍNIOS, HORTIFRUTI, DIVERSOS).');
+  } catch (e) {
+    showToast(e.message || 'Arquivo não reconhecido como planilha de pedido.', 'error');
+    return;
+  }
+  _ppModelo = { nome: f.name, buf, em: new Date().toISOString() };
+  await _ppGuardarModelo(_ppModelo);
+  _ppMostrarModelo();
+  document.getElementById('ppResultado').innerHTML = '';
+}
+
+// ── leitura do modelo: abas do pedido e linhas de item ────────
+async function _ppLinhasDoModelo(zip) {
+  const wbXml = await zip.file('xl/workbook.xml').async('string');
+  const rels = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+  const alvoDe = {};
+  for (const m of rels.matchAll(/<Relationship [^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)) alvoDe[m[1]] = m[2];
+  for (const m of rels.matchAll(/<Relationship [^>]*Target="([^"]+)"[^>]*Id="([^"]+)"/g)) alvoDe[m[2]] = m[1];
+  const ssArq = zip.file('xl/sharedStrings.xml');
+  const ss = ssArq ? [...(await ssArq.async('string')).matchAll(/<si>([\s\S]*?)<\/si>/g)]
+    .map(m => _ppXml([...m[1].matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map(t => t[1]).join(''))) : [];
+
+  const linhas = [];
+  for (const m of wbXml.matchAll(/<sheet [^>]*name="([^"]+)"[^>]*r:id="([^"]+)"/g)) {
+    const aba = _ppXml(m[1]);
+    if (!PP_ABAS.test(_ppSemAcento(aba)) || !alvoDe[m[2]]) continue;
+    const xml = 'xl/' + alvoDe[m[2]].replace(/^\/?xl\//, '');
+    const sx = await zip.file(xml).async('string');
+    const cel = {};
+    for (const c of sx.matchAll(/<c r="([A-E])(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+      const [, col, lin, attrs, corpo] = c;
+      if (!corpo || +lin < PP_PRIMEIRA_LINHA) continue;
+      const t = (attrs.match(/\bt="([^"]+)"/) || [])[1];
+      let v;
+      if (t === 'inlineStr') v = _ppXml([...corpo.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map(x => x[1]).join(''));
+      else {
+        const vv = (corpo.match(/<v>([\s\S]*?)<\/v>/) || [])[1];
+        if (vv == null) continue;
+        v = t === 's' ? ss[+vv] : _ppXml(vv);
+      }
+      (cel[lin] ||= {})[col] = String(v ?? '').trim();
+    }
+    for (const [lin, r] of Object.entries(cel)) {
+      if (!r.B || !r.D || (r.A || '').toUpperCase() === 'FORNECEDOR') continue;
+      linhas.push({ aba, xml, linha: +lin, nome: r.B, n: _ppNorm(r.B),
+        forn: r.A || '', un: r.D, preco: Number(r.E) || 0 });
+    }
+  }
+  return linhas;
+}
+
+// ── casamento: lista do dia → linha do modelo ─────────────────
+function _ppCasar(linhas) {
+  const tot = new Map();
+  for (const cat of ['proteina', 'laticinios', 'hortifruti', 'diversos']) {
+    for (const it of Object.values(listaConsolidada[cat] || {})) {
+      const q = parseFloat(it.qtd_final) || 0;
+      if (q <= 0) continue;
+      const k = it.item_id || 'livre:' + it.nome;
+      const t = tot.get(k) || { item_id: it.item_id, nome: it.nome, un: it.unidade, qtd: 0 };
+      t.qtd += q;
+      tot.set(k, t);
+    }
+  }
+  const preencher = new Map(), fora = [], unidade = [], duas = [];
+  for (const t of tot.values()) {
+    const it = t.item_id ? state.catalogo.find(i => i.id === t.item_id) : null;
+    const nomes = new Set([t.nome, it?.nome, it?.nome_curto, it?.nome_inventario].filter(Boolean).map(_ppNorm));
+    const cands = linhas.filter(l => nomes.has(l.n));
+    if (!cands.length) { fora.push(t); continue; }
+    let alvo = cands[0];
+    if (cands.length > 1) {
+      const f = _ppNorm(state.precosMap?.[t.item_id]?.fornecedor || it?.fornecedor_principal);
+      const doForn = f && cands.find(c => _ppNorm(c.forn).split(' ').some(p => p.length > 3 && f.includes(p)));
+      alvo = doForn || cands[0];
+      duas.push({ ...t, alvo, cands, certo: !!doForn });
+    }
+    if (t.un && _ppUn(t.un) !== _ppUn(alvo.un)) { unidade.push({ ...t, alvo }); continue; }
+    const k = alvo.xml + '|' + alvo.linha;
+    const ja = preencher.get(k);
+    preencher.set(k, { ...alvo, qtd: +((ja?.qtd || 0) + t.qtd).toFixed(3) });
+  }
+  return { preencher, fora, unidade, duas, total: tot.size };
+}
+
+// ── escrita: zera a QTD de toda linha de item e preenche a lista ──
+async function _ppEscrever(zip, linhas, preencher) {
+  for (const xml of [...new Set(linhas.map(l => l.xml))]) {
+    let x = await zip.file(xml).async('string');
+    for (const l of linhas.filter(l => l.xml === xml)) {
+      const p = preencher.get(xml + '|' + l.linha);
+      const q = p ? p.qtd : null;
+      const reC = new RegExp(`<c r="C${l.linha}"((?:\\s+[a-z:]+="[^"]*")*)\\s*(?:/>|>[\\s\\S]*?</c>)`);
+      const m = x.match(reC);
+      const attrs = m ? m[1].replace(/\s+t="[^"]*"/, '') : '';
+      const nova = q != null ? `<c r="C${l.linha}"${attrs}><v>${_ppFmt(q)}</v></c>` : `<c r="C${l.linha}"${attrs}/>`;
+      if (m) x = x.replace(reC, nova);
+      else if (q != null) x = x.replace(new RegExp(`(<c r="B${l.linha}"[^>]*?(?:/>|>[\\s\\S]*?</c>))`), `$1${nova}`);
+      const total = q != null ? q * l.preco : 0;
+      x = x.replace(new RegExp(`(<c r="F${l.linha}"[^>]*>(?:<f[^>]*/>|<f[^>]*>[^<]*</f>))<v>[^<]*</v>`), `$1<v>${_ppFmt(total)}</v>`);
+    }
+    _ppRegravar(zip, xml, x);
+  }
+  const wbXml = await zip.file('xl/workbook.xml').async('string');
+  _ppRegravar(zip, 'xl/workbook.xml', wbXml.replace(/<calcPr([^>]*?)\s*\/>/, (s, a) =>
+    /fullCalcOnLoad/.test(a) ? s : `<calcPr${a} fullCalcOnLoad="1"/>`));
+}
+// Regrava a parte sem criar entradas de pasta no zip (o JSZip cria por
+// padrão) e com a data original — o pacote sai com as mesmas entradas.
+function _ppRegravar(zip, nome, conteudo) {
+  zip.file(nome, conteudo, { createFolders: false, date: zip.file(nome).date });
+}
+
+async function gerarPlanilhaPedido() {
+  if (!_ppModelo) { showToast('Escolha o arquivo do modelo (o último pedido enviado serve).', 'error'); return; }
+  const dataPed = _ppDataPedido();
+  if (!dataPed) { showToast('Informe a data do pedido.', 'error'); return; }
+  const btn = document.getElementById('ppGerar');
+  btn.disabled = true; btn.textContent = 'Gerando...';
+  try {
+    const JSZip = await _ppCarregarJSZip();
+    const zip = await JSZip.loadAsync(_ppModelo.buf);
+    const linhas = await _ppLinhasDoModelo(zip);
+    const r = _ppCasar(linhas);
+    if (!r.total) { showToast('Lista vazia — nada para preencher.', 'error'); return; }
+    await _ppEscrever(zip, linhas, r.preencher);
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = _ppNomeArquivo(dataPed);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    _ppMostrarResultado(r, a.download);
+  } catch (e) {
+    console.error('[planilha]', e);
+    showToast('Não foi possível gerar a planilha: ' + (e.message || e), 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '⤓ Gerar planilha';
+  }
+}
+
+function _ppMostrarResultado(r, nomeArq) {
+  const q = n => _ppFmt(n).replace('.', ',');
+  const onde = l => `${escapeHtml(l.aba)} · linha ${l.linha}`;
+  const tabela = (cab, linhas) => `<table class="table-simples" style="width:100%;margin-bottom:14px">
+    <thead><tr>${cab.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${linhas.join('')}</tbody></table>`;
+  let h = `<div class="aviso aviso-success" style="margin:14px 0">${escapeHtml(nomeArq)} — ${r.preencher.size} linha(s) preenchida(s) de ${r.total} item(ns) da lista.</div>`;
+  if (r.fora.length) h += `<div class="uppercase-label mb-2">Sem linha na planilha · ${r.fora.length}</div>`
+    + tabela(['Item', 'Qtd', 'Unid.'], r.fora.map(t =>
+      `<tr><td>${escapeHtml(t.nome)}</td><td>${q(t.qtd)}</td><td>${escapeHtml(t.un || '')}</td></tr>`));
+  if (r.unidade.length) h += `<div class="uppercase-label mb-2">Unidade diferente — não preenchido · ${r.unidade.length}</div>`
+    + tabela(['Item', 'Na lista', 'Na planilha'], r.unidade.map(t =>
+      `<tr><td>${escapeHtml(t.nome)}</td><td>${q(t.qtd)} ${escapeHtml(t.un || '')}</td><td>${escapeHtml(t.alvo.un)} · ${onde(t.alvo)}</td></tr>`));
+  if (r.duas.length) h += `<div class="uppercase-label mb-2">Item em mais de uma linha · ${r.duas.length}</div>`
+    + tabela(['Item', 'Preenchido em', 'Fornecedor'], r.duas.map(t =>
+      `<tr><td>${escapeHtml(t.nome)}</td><td>${onde(t.alvo)}</td><td>${escapeHtml(t.alvo.forn || '—')}${t.certo ? '' : ' <span class="text-muted">(primeira linha — confira)</span>'}</td></tr>`));
+  document.getElementById('ppResultado').innerHTML = h;
 }
 
 // =====================================================================
@@ -4046,7 +4360,7 @@ function abrirRevisaoLista() {
   if (!listaConsolidada) { showToast('Gere a lista primeiro.', 'error'); return; }
   const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
   const data = document.getElementById('lista-data').value || isoDate(new Date());
-  let html = `<div class="aviso aviso-info" style="margin-bottom:16px">Lista de compras consolidada de <strong>${new Date(data+'T12:00').toLocaleDateString('pt-BR')}</strong>. Ao confirmar, será baixado o CSV para passar ao comprador.</div>`;
+  let html = `<div class="aviso aviso-info" style="margin-bottom:16px">Lista de compras consolidada de <strong>${new Date(data+'T12:00').toLocaleDateString('pt-BR')}</strong>.</div>`;
   let totalGlobal = 0;
   for (const cat of ['proteina','laticinios','hortifruti','diversos']) {
     const itens = Object.values(listaConsolidada[cat] || {});

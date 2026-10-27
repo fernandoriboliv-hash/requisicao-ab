@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDV — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610271034">
+<link rel="stylesheet" href="style.css?v=202610271955">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610271034"></script>
+<script src="config.js?v=202610271955"></script>
 <style>
   /* Estilos específicos da PDV */
   .cat-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -1781,9 +1781,15 @@ function atualizarAvisoCorte() {
   const dia = d => d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
 
   if (entrega && entrega > new Date()) {
+    const horti = itens.filter(i => i.categoria === 'hortifruti');
+    const resto = itens.filter(i => i.categoria !== 'hortifruti');
+    const compH = calcularCompetenciaFinal(dataEntrega, horti);
+    const compR = calcularCompetenciaFinal(null, resto);
     aviso.className = 'aviso aviso-info';
     txt.textContent = `Entrega pedida para ${dia(entrega)}. `
-      + `O pedido entra na lista de ${dia(competencia)}.`;
+      + (!resto.length ? `O pedido entra na lista de ${dia(compH)}.`
+        : !horti.length ? `O pedido entra na lista de ${dia(compR)}.`
+        : `O hortifruti entra na lista de ${dia(compH)}; o restante, na de ${dia(compR)}.`);
     return;
   }
 
@@ -1841,8 +1847,9 @@ function abrirRevisao() {
   const dataEntrega = document.getElementById(`${aba}-data-entrega`).value;
   const itensDoCarrinho = sel.map(s => s.item);
   const competencia = aba === 'compra'
-    ? isoDate(calcularCompetenciaFinal(dataEntrega, itensDoCarrinho))
-    : isoDate(new Date());
+    ? gruposDaCompra(itensSolicitacaoPayload('compra'), itensDoCarrinho, dataEntrega || null,
+                     calcularCompetenciaFinal).map(g => ptDate(g.competencia)).join(' (hortifruti) e ')
+    : ptDate(isoDate(new Date()));
 
   const catLabels = { proteina:'Proteína', laticinios:'Laticínios', hortifruti:'Hortifruti', diversos:'Diversos' };
   const porCat = { proteina: [], laticinios: [], hortifruti: [], diversos: [] };
@@ -1872,7 +1879,7 @@ function abrirRevisao() {
   html += `<div style="font-size:12px;color:var(--muted);margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle)">
     <strong style="color:var(--text)">PDV:</strong> ${escapeHtml(state.pdvNome)} ·
     <strong style="color:var(--text)">Tipo:</strong> ${aba === 'compra' ? 'Solicitação de COMPRA' : 'Requisição de ESTOQUE'} ·
-    <strong style="color:var(--text)">Competência:</strong> ${ptDate(competencia)}
+    <strong style="color:var(--text)">Competência:</strong> ${competencia}
     ${dataEntrega ? `· <strong style="color:var(--text)">Entrega desejada:</strong> ${ptDate(dataEntrega)}` : ''}
   </div>`;
 
@@ -1949,31 +1956,28 @@ function limparCarrinho(aba) {
 async function enviarCompra() {
   const obs = document.getElementById('compra-obs').value.trim();
   const dataEntrega = document.getElementById('compra-data-entrega').value || null;
-  // Data de competência considera prazo dos itens quando data_entrega é futura
+  // A data de entrega programa só o hortifruti (gruposDaCompra, no config.js)
   const itensCompra = Object.values(state.selecionados.compra).map(s => s.item);
-  const competencia = isoDate(calcularCompetenciaFinal(dataEntrega, itensCompra));
+  const grupos = gruposDaCompra(itensSolicitacaoPayload('compra'), itensCompra,
+                                dataEntrega, calcularCompetenciaFinal);
 
-  // Transação única (migration 43), mesmo remédio da requisição. O caminho
-  // do rascunho ia pior que o do envio novo: apagava os itens antigos e SÓ
-  // DEPOIS tentava gravar os novos — se o segundo passo falhasse, a pessoa
-  // perdia a lista que já tinha montado. Agora o apagar e o gravar estão
-  // dentro da mesma transação.
-  const { data: solcId, error } = await sb.rpc('criar_solicitacao_compra', {
+  // Transação única por solicitação (migration 43), mesmo remédio da
+  // requisição. O caminho do rascunho ia pior que o do envio novo: apagava
+  // os itens antigos e SÓ DEPOIS tentava gravar os novos — se o segundo
+  // passo falhasse, a pessoa perdia a lista que já tinha montado. Agora o
+  // apagar e o gravar estão dentro da mesma transação.
+  const ids = await enviarCompraEmGrupos(grupos, {
     p_pdv_id:           state.pdvId,
     p_data_entrega:     dataEntrega,
     p_observacao:       obs || null,
-    p_client_token:     tokenCarrinho('compra'),
-    p_itens:            itensSolicitacaoPayload('compra'),
     p_status:           'enviada',
-    p_data_competencia: competencia,
     p_solicitacao_id:   state.rascunhoIdCompra || null,
-  });
-  if (error) throw error;
+  }, 'compra');
 
   state.rascunhoIdCompra = null;
   await marcarUsoFavorito();
   limparCarrinho('compra');
-  mostrarSucesso(solcId, 'compra', competencia);
+  mostrarSucesso(ids[0], 'compra', grupos.map(g => g.competencia));
 }
 
 // Envio numa transação só (migration 39). Antes gravava a requisição e depois
@@ -2108,7 +2112,9 @@ function mostrarSucesso(id, aba, competencia, destino) {
   const numStr = '#' + String(id).slice(0, 8);
   document.getElementById('sucessoNum').textContent = numStr;
   document.getElementById('sucessoSub').textContent =
-      aba === 'compra'    ? `Solicitação de compra entra na lista de ${ptDate(competencia)}.`
+      aba === 'compra'    ? (Array.isArray(competencia) && competencia.length > 1
+          ? `O hortifruti entra na lista de ${ptDate(competencia[0])}; o restante, na de ${ptDate(competencia[1])}.`
+          : `Solicitação de compra entra na lista de ${ptDate([].concat(competencia)[0])}.`)
     : destino === 'compras' ? 'Hortifruti você retira na câmara — não passa pela Comissaria.'
     : destino === 'ambos'   ? 'A Comissaria separa o que não é hortifruti. O hortifruti você retira na câmara.'
     :                         'Requisição enviada para a Comissaria.';

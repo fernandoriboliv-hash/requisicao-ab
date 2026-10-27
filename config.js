@@ -1222,6 +1222,52 @@ function ehEnvioDuplicado(err) {
   return err && (err.code === '23505' || /duplicate key/i.test(err.message || ''));
 }
 
+// =====================================================================
+// PEDIDO PROGRAMADO — só o hortifruti espera a data (27/10/2026)
+// =====================================================================
+// Com data de entrega no futuro, só o HORTIFRUTI vai para a lista mais perto
+// da entrega: é o que estraga. Proteína, laticínio e o resto entram na
+// primeira lista possível (regra das 10h), porque às vezes demoram a chegar.
+// Carrinho misto vira duas solicitações, uma para cada lista.
+//
+// `itens` é o payload do criar_solicitacao_compra; `catalogo` são os itens
+// do catálogo, que é o que o calcularCompetenciaFinal da tela lê (o prazo).
+function gruposDaCompra(itens, catalogo, dataEntrega, calcular) {
+  const horti = c => c === 'hortifruti';
+  const prog  = itens.filter(i => horti(i.item_categoria));
+  const resto = itens.filter(i => !horti(i.item_categoria));
+  const compProg  = isoDate(calcular(dataEntrega, catalogo.filter(i => horti(i.categoria))));
+  const compResto = isoDate(calcular(null, catalogo.filter(i => !horti(i.categoria))));
+  if (!prog.length)  return [{ itens: resto, competencia: compResto }];
+  if (!resto.length) return [{ itens: prog, competencia: compProg }];
+  if (compProg === compResto) return [{ itens, competencia: compResto }];
+  return [{ itens: prog, competencia: compProg }, { itens: resto, competencia: compResto }];
+}
+
+// Uma chamada por grupo. O segundo grupo tem token próprio: se a rede cair
+// entre as duas, o reenvio é barrado no primeiro (já gravado) e grava só o
+// que faltou. Devolve os ids gravados; se TUDO já estava gravado, lança o
+// erro de duplicata, que cada tela já trata.
+async function enviarCompraEmGrupos(grupos, base, chaveToken) {
+  const ids = [];
+  let dup = null;
+  for (let g = 0; g < grupos.length; g++) {
+    const { data, error } = await sb.rpc('criar_solicitacao_compra', {
+      ...base,
+      p_client_token:     tokenCarrinho(g ? chaveToken + ':2' : chaveToken),
+      p_itens:            grupos[g].itens,
+      p_data_competencia: grupos[g].competencia,
+      p_solicitacao_id:   g ? null : (base.p_solicitacao_id || null),
+    });
+    if (error && ehEnvioDuplicado(error)) { dup = error; continue; }
+    if (error) throw error;
+    ids.push(data);
+  }
+  if (!ids.length && dup) throw dup;
+  resetTokenCarrinho(chaveToken + ':2');
+  return ids;
+}
+
 // true quando a coluna client_token ainda não existe (migration 17 não rodou).
 // PGRST204 = coluna não encontrada no schema cache do PostgREST; 42703 = undefined_column.
 function faltaColunaToken(err) {
@@ -1895,7 +1941,7 @@ const _INV = {
   pesoBrutoDesde: null,  // competencia a partir da qual a conversao vale
 };
 
-const _invChave = (l) => (l.linha_id ? 'L' + l.linha_id : 'I' + l.item_id);
+const _invChave = (l) => (l.anotado ? 'A' + l.chaveA : l.linha_id ? 'L' + l.linha_id : 'I' + l.item_id);
 
 // Os campos de quantidade são type="text", não type="number", e é de
 // propósito: <input type="number"> RECUSA vírgula. Quem digita "1,8" no
@@ -1979,6 +2025,7 @@ async function montarInventario(seletor, opts) {
     [_invChave(c), { id: c.id, qtd: parseFloat(c.quantidade) }]));
 
   await _invCarregarLivres();
+  await _invCarregarAnotados();
   await _invCarregarPesoBruto();
 
   const { data: cfg } = await sb.from('pdvs')
@@ -1990,6 +2037,7 @@ async function montarInventario(seletor, opts) {
   // e montada a partir das linhas da planilha, entao esses itens nao teriam
   // chave nenhuma para casar e sumiriam da contagem (migration 84).
   _INV.foraPlanilha.forEach(l => _INV.extras.add(_invChave(l)));
+  _INV.anotados.forEach(l => _INV.extras.add(_invChave(l)));
   if (_INV.usarLista) await _invCarregarListaCurta();
 
   _INV.commodity = null;
@@ -2037,7 +2085,80 @@ async function _invCarregarProducoes() {
 }
 
 function _invTodos() {
-  return _INV.linhas.concat(_INV.producoes, _INV.foraPlanilha);
+  return _INV.linhas.concat(_INV.producoes, _INV.foraPlanilha, _INV.anotados || []);
+}
+
+// ---------------------------------------------------------------------
+// ANOTADOS À MÃO NOS DOIS MESES ANTERIORES (27/10/2026)
+// ---------------------------------------------------------------------
+// O que a cozinha escreveu em "Itens que não estão na planilha" em agosto
+// e setembro volta como linha da contagem: aparece na busca, e a pessoa só
+// digita a quantidade em vez de escrever o nome de novo. Por baixo continua
+// sendo item anotado (inventario_livres): a linha grava ali, com o mesmo
+// nome e unidade, e a exportação sai igual. Sem migration — a leitura dos
+// meses anteriores usa a mesma função do mês corrente.
+const _invNomeAnotado = s => normalizarBusca(s);
+function _invChaveDoAnotado(nome, un) {
+  const s = _invNomeAnotado(nome) + '|' + String(un || '').trim().toUpperCase();
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+async function _invCarregarAnotados() {
+  _INV.anotados = [];
+  const [y, m] = _INV.competencia.split('-').map(Number);
+  const meses = [1, 2].map(n => {
+    const d = new Date(y, m - 1 - n, 1);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
+  });
+  // Nome que já tem linha neste mês (planilha, açougue, fora da planilha)
+  // não volta: seria o mesmo produto contado em dois lugares.
+  const jaTem = new Set(_INV.linhas.concat(_INV.producoes, _INV.foraPlanilha)
+    .map(l => _invNomeAnotado(l.nome)));
+  const vistos = new Set();
+  for (const comp of meses) {   // o mês mais recente primeiro: vale a grafia dele
+    const { data, error } = await sb.rpc('inventario_livres_do_mes',
+      { p_pdv_id: _INV.pdvId, p_competencia: comp });
+    if (error) continue;
+    for (const x of (data || [])) {
+      const chaveA = _invChaveDoAnotado(x.nome, x.unidade);
+      if (vistos.has(chaveA) || jaTem.has(_invNomeAnotado(x.nome))) continue;
+      vistos.add(chaveA);
+      _INV.anotados.push({ anotado: true, chaveA, linha_id: null, item_id: null,
+        nome: x.nome, uom: x.unidade, commodity: 'ANOTADOS À MÃO' });
+    }
+  }
+  // O que já foi anotado ESTE mês com o mesmo nome e unidade é a contagem
+  // da linha — inclusive o que foi escrito antes desta linha existir.
+  const porChave = new Map(_INV.anotados.map(l => [l.chaveA, l]));
+  for (const lv of (_INV.livres || [])) {
+    const k = _invChaveDoAnotado(lv.nome, lv.unidade);
+    if (porChave.has(k) && !_INV.contagem.has('A' + k)) {
+      _INV.contagem.set('A' + k, { id: lv.id, qtd: parseFloat(lv.quantidade), livre: true });
+    }
+  }
+}
+
+async function _invSalvarAnotado(alvo, chave, qtd, eu) {
+  const atual = _INV.contagem.get(chave);
+  if (atual) {
+    const { data, error } = await sb.from('inventario_livres')
+      .update({ quantidade: qtd, anotado_por: eu, anotado_em: new Date().toISOString() })
+      .eq('id', atual.id).select('id').maybeSingle();
+    if (error || !data) throw error || new Error('sem permissão para gravar');
+    const lv = (_INV.livres || []).find(x => x.id === atual.id);
+    if (lv) lv.quantidade = qtd;
+    _INV.contagem.set(chave, { id: atual.id, qtd, livre: true });
+  } else {
+    const { data, error } = await sb.from('inventario_livres').insert({
+      inventario_id: _INV.inventarioId, nome: alvo.nome, quantidade: qtd,
+      unidade: alvo.uom || 'KG', anotado_por: eu,
+    }).select('id, nome, quantidade, unidade').single();
+    if (error) throw error;
+    _INV.livres.push({ ...data, quantidade: parseFloat(data.quantidade) });
+    _INV.contagem.set(chave, { id: data.id, qtd, livre: true });
+  }
 }
 
 // Mercadoria que esta cozinha contou no mes passado ou requisitou no mes e
@@ -2326,7 +2447,9 @@ async function _invSalvar(chave, valor) {
   const eu = (window.state && window.state.perfil && window.state.perfil.id) || null;
 
   try {
-    if (atual) {
+    if (alvo && alvo.anotado) {
+      await _invSalvarAnotado(alvo, chave, qtd, eu);
+    } else if (atual) {
       const { data, error } = await sb.from('inventario_contagens')
         .update({ quantidade: qtd, contado_por: eu, contado_em: new Date().toISOString() })
         .eq('id', atual.id).select('id').maybeSingle();
@@ -2395,8 +2518,10 @@ async function _invReaproveitar(alvo, chave, qtd, eu) {
 async function _invApagar(chave) {
   const atual = _INV.contagem.get(chave);
   if (!atual) return;
-  const { error } = await sb.from('inventario_contagens').delete().eq('id', atual.id);
+  const { error } = await sb.from(atual.livre ? 'inventario_livres' : 'inventario_contagens')
+    .delete().eq('id', atual.id);
   if (error) { showToast('Não apagou: ' + error.message, 'error'); return; }
+  if (atual.livre) _INV.livres = (_INV.livres || []).filter(x => x.id !== atual.id);
   _INV.contagem.delete(chave);
   _invAtualizarLinha(chave);
 }
@@ -2433,7 +2558,9 @@ function _invRenderLivres() {
   const cx = document.getElementById('inv-livres');
   if (!cx) return;
   const fechado = _INV.status === 'fechado';
-  const l = _INV.livres || [];
+  // O que já aparece como linha "ANOTADOS À MÃO" não se repete aqui.
+  const naLinha = new Set([..._INV.contagem.values()].filter(c => c.livre).map(c => c.id));
+  const l = (_INV.livres || []).filter(x => !naLinha.has(x.id));
 
   cx.innerHTML = ''
     + '<div class="inv-livres-titulo">Itens que não estão na planilha'
@@ -2992,8 +3119,8 @@ async function montarFichas(seletor, opts) {
   _FT.aprova = aprova.data === true;
   // Na fase de cadastro as cozinhas cadastram as fichas que já usam: quem é
   // do PDV edita (o cozinheiro inclusive) e o que se salva já fica publicado.
-  // Desde 16/10 a fase não tem data para acabar (fichas_cadastro_ate =
-  // 'aberto', migration 97), por isso o aviso não mostra prazo.
+  // Desde 16/10 a fase fica em aberto (fichas_cadastro_ate = 2099-12-31,
+  // gravado em 27/10), por isso o aviso não mostra prazo.
   _FT.fase = fase.data === true;
   _FT.faseAte = ate.data?.valor || null;
   _FT.pdvCodigo = pdv.data?.codigo || '';
