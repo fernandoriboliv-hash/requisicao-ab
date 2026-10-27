@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestão de Cozinhas e Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610131642">
+<link rel="stylesheet" href="style.css?v=202610271034">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610131642"></script>
+<script src="config.js?v=202610271034"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -1152,13 +1152,13 @@ async function carregarDashboard() {
     sb.from('requisicoes').select('id, data_competencia, pdvs(nome)')
       .eq('atendida_por', 'compras').in('status', ['enviado','separacao'])
       .order('data_competencia'),
-    // 30 dias de uma vez; a janela de 7/15/30 e trocada na tela sem ir ao
+    // 15 dias de uma vez; a janela de 3/7/15 e trocada na tela sem ir ao
     // banco de novo. Volume conferido em 05/10: 59 linhas em 30 dias, longe
-    // do teto de 1000 do PostgREST.
+    // do teto de 1000 do PostgREST. (Era 7/15/30 ate 26/10.)
     sb.from('requisicao_itens')
-      .select('item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, motivo_divergencia, requisicoes!inner(data_competencia, status, pdvs(nome))')
+      .select('item_id, item_nome, item_categoria, item_unidade, quantidade_solicitada, quantidade_entregue, motivo_divergencia, requisicoes!inner(data_competencia, status, pdvs(nome))')
       .eq('divergencia', true).eq('requisicoes.status', 'entregue')
-      .gte('requisicoes.data_competencia', isoDate(new Date(Date.now() - 30 * 864e5))),
+      .gte('requisicoes.data_competencia', isoDate(new Date(Date.now() - 15 * 864e5))),
   ]);
   const compras = comprasResp.data || [];
   const reqs    = reqsResp.data || [];
@@ -1208,7 +1208,7 @@ function renderFaltaEstoque() {
   const porItem = {};
   linhas.forEach(l => {
     const k = l.item_nome;
-    const x = porItem[k] || (porItem[k] = { nome: l.item_nome, un: l.item_unidade,
+    const x = porItem[k] || (porItem[k] = { nome: l.item_nome, un: l.item_unidade, item_id: l.item_id,
       cat: l.item_categoria, pedido: 0, entregue: 0, pdvs: new Set(), vezes: 0,
       zerou: 0, ultima: '' });
     x.pedido   += Number(l.quantidade_solicitada || 0);
@@ -1218,11 +1218,16 @@ function renderFaltaEstoque() {
     if (Number(l.quantidade_entregue || 0) === 0) x.zerou++;
     if (l.requisicoes.data_competencia > x.ultima) x.ultima = l.requisicoes.data_competencia;
   });
+  // Mais recente primeiro (pedido de 26/10). Antes ordenava por "zerou" e
+  // depois pela quantidade que faltou, e a coluna Ultima saia embaralhada —
+  // parecia nao ter ordem nenhuma. Empate na data: o que zerou, depois o
+  // que faltou mais.
   const lista = Object.values(porItem)
     .map(x => ({ ...x, falta: +(x.pedido - x.entregue).toFixed(3) }))
-    .sort((a, b) => b.zerou - a.zerou || b.falta - a.falta);
+    .sort((a, b) => b.ultima.localeCompare(a.ultima) || b.zerou - a.zerou || b.falta - a.falta);
+  state.faltaLista = lista;
 
-  const seletor = [7, 15, 30].map(d =>
+  const seletor = [3, 7, 15].map(d =>
     `<button class="filter-chip${d === dias ? ' active' : ''}" onclick="setFaltaDias(${d})">${d} dias</button>`
   ).join('');
 
@@ -1246,9 +1251,9 @@ function renderFaltaEstoque() {
     </div>
     <table class="data-table tabela-cards"><thead><tr>
       <th>Item</th><th>Categoria</th><th class="num">Pediram</th><th class="num">Entregue</th>
-      <th class="num">Faltou</th><th class="center">PDVs</th><th class="center">Vezes</th><th>Última</th>
+      <th class="num">Faltou</th><th class="center">PDVs</th><th class="center">Vezes</th><th>Última</th><th></th>
     </tr></thead><tbody>
-    ${lista.map(x => `<tr${x.zerou ? ' class="falta-zerou"' : ''}>
+    ${lista.map((x, i) => `<tr${x.zerou ? ' class="falta-zerou"' : ''}>
       <td class="td-titulo">${escapeHtml(x.nome)}${x.zerou
         ? ` <span class="badge" title="Saiu zero em ${x.zerou} de ${x.vezes} vez(es)"
              style="background:var(--error-bg,#4a1f1f);color:var(--error,#E06C6C);font-size:9px">ZEROU${
@@ -1260,11 +1265,53 @@ function renderFaltaEstoque() {
       <td class="center" data-label="PDVs" title="${escapeHtml([...x.pdvs].join(' · '))}">${x.pdvs.size}</td>
       <td class="center" data-label="Vezes">${x.vezes}</td>
       <td class="text-muted" data-label="Última">${ptDate(x.ultima)}</td>
+      <td class="falta-acao">${faltaNaLista(x)
+        ? '<span class="text-muted" style="font-size:12px">✓ na lista</span>'
+        : `<button class="btn btn-sm btn-outline" onclick="faltaParaLista(${i})"
+             title="Incluir na Lista do Dia com a quantidade que faltou">+ Lista do dia</button>`}</td>
     </tr>`).join('')}
     </tbody></table>`;
 }
 
 function setFaltaDias(d) { state.faltaDias = d; renderFaltaEstoque(); }
+
+// Item do catalogo de uma linha do painel. A requisicao guarda item_id; o
+// nome e so para a linha antiga que veio sem ele.
+function faltaItemCatalogo(x) {
+  const cat = state.catalogo || [];
+  return (x.item_id && cat.find(i => i.id === x.item_id))
+    || cat.find(i => i.ativo && i.nome === x.nome) || null;
+}
+
+// Ja esta na Lista do Dia de hoje, como avulso? Conta so o que foi incluido
+// por aqui ou pelo painel de avulsos — o que os PDVs pediram por compra e
+// outra coisa, e o gerente decide na propria lista.
+function faltaNaLista(x) {
+  const item = faltaItemCatalogo(x);
+  if (!item) return false;
+  const data = document.getElementById('lista-data').value || isoDate(new Date());
+  return (listaManualItens[data] || []).some(m => m.item_id === item.id);
+}
+
+// Inclui na Lista do Dia com a quantidade que faltou. A quantidade se ajusta
+// la, na coluna Qtd Final, antes de "Confirmar e Enviar".
+function faltaParaLista(i) {
+  const x = (state.faltaLista || [])[i];
+  if (!x) return;
+  const item = faltaItemCatalogo(x);
+  if (!item) { showToast('Este item não está no catálogo — inclua pela Lista do Dia.', 'error'); return; }
+  const data = document.getElementById('lista-data').value || isoDate(new Date());
+  if (!listaManualItens[data]) listaManualItens[data] = [];
+  const cat = item.categoria || 'diversos';
+  const key = `${item.nome}__${item.unidade||''}`;
+  const qtd = Math.max(x.falta, 0) || 1;
+  listaManualItens[data].push({ cat, key, item_id: item.id, nome: item.nome,
+    unidade: item.unidade, qtd_final: qtd });
+  if (listaRemovidos[data]) listaRemovidos[data].delete(`${cat}:${key}`);
+  renderFaltaEstoque();
+  carregarLista();
+  showToast(`${item.nome.slice(0, 40)} na Lista do Dia (${fmtQtyRel(qtd)} ${item.unidade || ''}).`, 'success');
+}
 
 // Aviso de saida de estoque esperando confirmacao. So desenha quando ha
 // alguma — aviso sobre fila vazia e ruido.
@@ -4116,7 +4163,7 @@ async function confirmarEnvioLista() {
       const { error } = await sb.rpc('criar_solicitacao_compra', {
         p_pdv_id:           null,
         p_data_entrega:     null,
-        p_observacao:       'Itens avulsos lançados pelo gerente (compra do hotel)',
+        p_observacao:       'Itens avulsos lançados pela Gestão (compra do hotel)',
         p_client_token:     tokenCarrinho('ger-lista'),
         p_itens:            avulsos,
         p_status:           'aprovada',

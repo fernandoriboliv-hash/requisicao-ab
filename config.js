@@ -2990,8 +2990,10 @@ async function montarFichas(seletor, opts) {
   ]);
   _FT.podeEditar = pode.data === true;
   _FT.aprova = aprova.data === true;
-  // Até 24/10 as cozinhas cadastram as fichas que já usam: quem é do PDV
-  // edita (o cozinheiro inclusive) e o que se salva já fica publicado.
+  // Na fase de cadastro as cozinhas cadastram as fichas que já usam: quem é
+  // do PDV edita (o cozinheiro inclusive) e o que se salva já fica publicado.
+  // Desde 16/10 a fase não tem data para acabar (fichas_cadastro_ate =
+  // 'aberto', migration 97), por isso o aviso não mostra prazo.
   _FT.fase = fase.data === true;
   _FT.faseAte = ate.data?.valor || null;
   _FT.pdvCodigo = pdv.data?.codigo || '';
@@ -3102,7 +3104,7 @@ function _ftRenderLista() {
       </button>`).join('')}
     </div>` : ''}
     ${_FT.fase && _FT.podeEditar ? `<div class="ft-fase">
-      <span>Cadastro das fichas até <strong>${_ftDataBR(_FT.faseAte)}</strong> — o que for salvo já entra como publicado.</span>
+      <span>Fase de cadastro das fichas — o que for salvo já entra como publicado.</span>
       ${_FT.lista.filter(f => f.status !== 'publicada').length ? `<button class="btn btn-sm btn-outline"
         onclick="_ftPublicarCadastro()">Publicar ${_FT.lista.filter(f => f.status !== 'publicada').length} em rascunho</button>` : ''}
     </div>` : ''}
