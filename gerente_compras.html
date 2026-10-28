@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestão de Cozinhas e Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610271955">
+<link rel="stylesheet" href="style.css?v=202610280709">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610271955"></script>
+<script src="config.js?v=202610280709"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -873,6 +873,11 @@
         <input class="input" type="date" id="ppData" style="max-width:170px" onchange="atualizarNomePlanilha()">
         <span id="ppNomeArq" class="pp-valor">—</span>
       </div>
+      <div class="pp-campo">
+        <span class="uppercase-label">Pedido enviado</span>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('ppEnviadoArq').click()">Registrar arquivo final</button>
+        <input type="file" id="ppEnviadoArq" accept=".xlsx" hidden onchange="registrarPedidoEnviado(this)">
+      </div>
       <div id="ppResultado"></div>
     </div>
     <div class="modal-footer">
@@ -886,6 +891,17 @@
               border-bottom: 1px solid var(--border-subtle); }
   .pp-campo .uppercase-label { min-width: 110px; margin: 0; }
   .pp-valor { font-size: 13px; color: var(--text); }
+  .sug-painel { border: 1px solid var(--border-subtle); padding: 10px 14px; margin-bottom: 16px; }
+  .sug-painel summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+                        font-size: 13px; color: var(--muted); }
+  .sug-acoes { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 10px 0 6px; font-size: 11px; }
+  .sug-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0 18px; }
+  .sug-item { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center;
+              padding: 5px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
+  .sug-qtd { font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+  .sug-vezes { font-size: 11px; font-variant-numeric: tabular-nums; }
+  .sug-chip { display: inline-block; margin-left: 6px; padding: 0 6px; font-size: 11px;
+              border: 1px dashed var(--border-subtle); color: var(--muted); white-space: nowrap; }
 </style>
 
 <div class="toast-stack" id="toasts"></div>
@@ -1731,8 +1747,11 @@ async function carregarLista() {
   // Atualiza cart sidebar
   atualizarCartSidebarLista();
 
+  const sug = await sugestaoHortifruti(data);
+  const sugHtml = htmlSugestaoHortifruti(sug, grupos.hortifruti, data);
+
   if (totalItens === 0) {
-    cont.innerHTML = '<div class="empty-text">Nenhum item na lista final. Aguarde solicitações serem aprovadas ou adicione itens avulsos acima.</div>';
+    cont.innerHTML = sugHtml + '<div class="empty-text">Nenhum item na lista final. Aguarde solicitações serem aprovadas ou adicione itens avulsos acima.</div>';
     return;
   }
 
@@ -1758,7 +1777,9 @@ async function carregarLista() {
           <div>${escapeHtml(it.nome)}${it.origem === 'manual' ? '<span class="badge-manual">avulso</span>' : ''}</div>
           <div class="num">${it.origem === 'manual' ? '—' : it.total.toFixed(1)}</div>
           <div class="text-muted">${it.unidade||'—'}</div>
-          <div class="lista-pdv-list">${it.pdvs.length ? it.pdvs.map(p => `${escapeHtml(p.pdv)}: ${p.qtd.toFixed(1)}`).join(' · ') : '<span class="text-muted">—</span>'}</div>
+          <div class="lista-pdv-list">${it.pdvs.length ? it.pdvs.map(p => `${escapeHtml(p.pdv)}: ${p.qtd.toFixed(1)}`).join(' · ') : '<span class="text-muted">—</span>'}${
+            cat === 'hortifruti' && sug.porItem.has(it.item_id)
+              ? ` <span class="sug-chip">sugerido ${_sugFmt(sug.porItem.get(it.item_id).sugerido)}</span>` : ''}</div>
           <div class="lista-qtd-cell">
             <input class="lista-final-input" type="text" inputmode="decimal"
               value="${(it.qtd_final||0).toFixed(1)}"
@@ -1769,7 +1790,7 @@ async function carregarLista() {
       }).join('')}
     </div>`;
   }
-  cont.innerHTML = html;
+  cont.innerHTML = sugHtml + html;
   if (addPanelOpen) renderAddItens();
 }
 
@@ -1858,6 +1879,187 @@ function exportarLista() {
   }
   if (totalLinhas === 0) { showToast('Lista vazia — nada para exportar.', 'error'); return; }
   baixarCSV(`lista_compras_${data}.csv`, linhas);
+}
+
+// =====================================================================
+// SUGESTÃO DE HORTIFRUTI — pelo histórico dos pedidos (27/10/2026)
+// =====================================================================
+// Só hortifruti (decisão do Fernando). A base é pedido_historico (migration
+// 98): o que foi REALMENTE pedido à compradora, porque quase todo o
+// hortifruti não passa pelas solicitações das cozinhas.
+//
+// O cálculo é o que ele testou em 26/10 contra o pedido de verdade:
+//   - compara o mesmo dia da semana da ENTREGA (quarta com quarta), porque
+//     cada dia tem um pedido diferente;
+//   - base: os 10 últimos desses dias que têm pedido registrado;
+//   - o item entra se foi pedido em 5 dos 10, ou em 2 dos 3 últimos;
+//   - quantidade: a mediana das 5 últimas vezes em que foi pedido (um
+//     evento não puxa a sugestão como puxaria a média);
+//   - arredonda: kg acima de 20 em múltiplos de 5, kg abaixo de 0,5 em 0,5,
+//     as outras unidades em número inteiro.
+// Backtest em 28/10: 71 sugeridos, 45 pedidos de fato, 30 deles até 25% da
+// quantidade real. Quando o checklist da câmara existir, ele substitui isto.
+const _sugCache = {};
+const _sugFmt = n => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+const _sugNorm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+function _sugEntrega(dataLista) {
+  const d = new Date(dataLista + 'T12:00:00'); d.setDate(d.getDate() + 1);
+  return isoDate(d);
+}
+
+async function sugestaoHortifruti(dataLista) {
+  const entrega = _sugEntrega(dataLista);
+  if (_sugCache[entrega]) return _sugCache[entrega];
+  const vazio = { entrega, datas: [], itens: [], porItem: new Map() };
+  const d = new Date(entrega + 'T12:00:00');
+  const dow = ((d.getDay() + 6) % 7) + 1;            // ISO: segunda = 1
+  const de = isoDate(new Date(d.getTime() - 120 * 864e5));
+  let rows = [];
+  for (let i = 0; i < 20000; i += 1000) {            // PostgREST corta em 1000
+    const { data, error } = await sb.from('pedido_historico')
+      .select('data_pedido, item_id, item_nome, unidade, quantidade')
+      .eq('categoria', 'hortifruti').eq('dia_semana', dow)
+      .gte('data_pedido', de).lt('data_pedido', entrega)
+      .order('data_pedido').range(i, i + 999);
+    if (error) return vazio;                          // sem a migration 98: sem sugestão
+    rows = rows.concat(data || []);
+    if (!data || data.length < 1000) break;
+  }
+  const datas = [...new Set(rows.map(r => r.data_pedido))].sort().slice(-10);
+  if (datas.length < 3) return (_sugCache[entrega] = { ...vazio, datas });
+  const base = new Set(datas), ult3 = new Set(datas.slice(-3));
+  const por = new Map();
+  for (const r of rows) {
+    if (!base.has(r.data_pedido)) continue;
+    const k = r.item_id || 'n:' + _sugNorm(r.item_nome) + '|' + (r.unidade || '');
+    const x = por.get(k) || { item_id: r.item_id, nome: r.item_nome, un: r.unidade, q: new Map() };
+    x.q.set(r.data_pedido, (x.q.get(r.data_pedido) || 0) + Number(r.quantidade));
+    x.nome = r.item_nome; x.un = r.unidade;
+    por.set(k, x);
+  }
+  const itens = [];
+  for (const x of por.values()) {
+    const ds = [...x.q.keys()].sort();
+    if (!(ds.length >= 5 || ds.filter(dd => ult3.has(dd)).length >= 2)) continue;
+    const q = ds.slice(-5).map(dd => x.q.get(dd)).sort((a, b) => a - b);
+    const med = q.length % 2 ? q[(q.length - 1) / 2] : (q[q.length / 2 - 1] + q[q.length / 2]) / 2;
+    const kg = /^KG/i.test(String(x.un || '').trim());
+    const sugerido = kg ? (med > 20 ? Math.round(med / 5) * 5 : Math.max(0.5, Math.round(med * 2) / 2))
+                        : Math.max(1, Math.round(med));
+    // Unidade do pedido diferente da do catálogo (DILL em CX no pedido, KG
+    // no catálogo): o número não serve para a linha do catálogo, então o
+    // item aparece sem o botão de incluir.
+    const cat = x.item_id ? state.catalogo.find(c => c.id === x.item_id && c.ativo) : null;
+    const it = cat && _ppUn(cat.unidade) === _ppUn(x.un) ? cat : null;
+    itens.push({ item_id: it ? it.id : null, nome: it ? it.nome : x.nome,
+                 un: it ? it.unidade : x.un, sugerido, vezes: ds.length });
+  }
+  itens.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const porItem = new Map(itens.filter(i => i.item_id).map(i => [i.item_id, i]));
+  return (_sugCache[entrega] = { entrega, datas, itens, porItem });
+}
+
+function htmlSugestaoHortifruti(sug, hortiNaLista, dataLista) {
+  if (!sug.itens.length) return '';
+  const naLista = new Set(Object.values(hortiNaLista || {}).map(i => i.item_id).filter(Boolean));
+  const fora = sug.itens.filter(i => !i.item_id || !naLista.has(i.item_id));
+  const dia = new Date(sug.entrega + 'T12:00:00')
+    .toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  const comBotao = fora.filter(i => i.item_id);
+  return `<details class="sug-painel"${fora.length ? ' open' : ''}>
+    <summary><span class="cat-pill cat-hortifruti">Sugestão de hortifruti</span>
+      <span>entrega ${dia} · ${sug.itens.length} itens · ${fora.length} fora da lista</span></summary>
+    ${fora.length ? `<div class="sug-acoes">
+        <button class="btn btn-sm btn-outline" onclick="sugIncluirTodos('${dataLista}')">+ Incluir os ${comBotao.length}</button>
+        <span class="text-muted">base: ${sug.datas.length} ${dia.split(',')[0]} · ${sug.datas.map(d => d.slice(8, 10) + '/' + d.slice(5, 7)).join(' ')}</span>
+      </div>
+      <div class="sug-lista">${fora.map(i => `<div class="sug-item">
+          <span class="sug-nome">${escapeHtml(i.nome)}</span>
+          <span class="sug-qtd">${_sugFmt(i.sugerido)} ${escapeHtml(i.un || '')}</span>
+          <span class="sug-vezes text-muted">${i.vezes}/${sug.datas.length}</span>
+          ${i.item_id ? `<button class="btn btn-sm btn-outline" onclick="sugIncluir('${i.item_id}')">+ Lista</button>`
+                      : '<span class="text-muted" style="font-size:11px">sem item no catálogo</span>'}
+        </div>`).join('')}</div>` : '<div class="text-muted" style="padding:8px 0">Todos os sugeridos já estão na lista.</div>'}
+  </details>`;
+}
+
+function _sugPushAvulso(i, data) {
+  const item = state.catalogo.find(c => c.id === i.item_id);
+  if (!item) return false;
+  const cat = item.categoria || 'hortifruti';
+  const key = `${item.nome}__${item.unidade || ''}`;
+  if (!listaManualItens[data]) listaManualItens[data] = [];
+  if (listaManualItens[data].some(m => m.item_id === item.id)) return false;
+  listaManualItens[data].push({ cat, key, item_id: item.id, nome: item.nome,
+                                unidade: item.unidade, qtd_final: i.sugerido });
+  if (listaRemovidos[data]) listaRemovidos[data].delete(`${cat}:${key}`);
+  return true;
+}
+
+async function sugIncluir(itemId) {
+  const data = document.getElementById('lista-data').value || isoDate(new Date());
+  const sug = await sugestaoHortifruti(data);
+  const i = sug.porItem.get(itemId);
+  if (i && _sugPushAvulso(i, data)) {
+    showToast(`${i.nome.slice(0, 40)} na Lista do Dia com ${_sugFmt(i.sugerido)} ${i.un || ''}.`, 'success');
+    carregarLista();
+  }
+}
+
+async function sugIncluirTodos(data) {
+  const sug = await sugestaoHortifruti(data);
+  const naLista = new Set(Object.values(listaConsolidada?.hortifruti || {}).map(i => i.item_id));
+  let n = 0;
+  for (const i of sug.itens) if (i.item_id && !naLista.has(i.item_id) && _sugPushAvulso(i, data)) n++;
+  showToast(`${n} item(ns) de hortifruti incluídos com a quantidade sugerida. Ajuste na Qtd Final.`, 'success');
+  carregarLista();
+}
+
+// =====================================================================
+// REGISTRAR PEDIDO ENVIADO — alimenta o histórico da sugestão
+// =====================================================================
+// Depois de mandar o e-mail, o arquivo FINAL (com o que foi acrescentado à
+// mão) entra em pedido_historico. Registrar o mesmo dia de novo substitui o
+// dia inteiro: vale a última versão do arquivo.
+async function registrarPedidoEnviado(input) {
+  const f = input.files && input.files[0];
+  input.value = '';
+  if (!f) return;
+  const m = f.name.match(/(\d{2})\.(\d{2})/);
+  const ano = (_ppDataPedido() || isoDate(new Date())).slice(0, 4);
+  const dia = m ? `${ano}-${m[2]}-${m[1]}` : _ppDataPedido();
+  if (!dia) { showToast('Informe a data do pedido.', 'error'); return; }
+  try {
+    const JSZip = await _ppCarregarJSZip();
+    const linhas = (await _ppLinhasDoModelo(await JSZip.loadAsync(await f.arrayBuffer())))
+      .filter(l => l.qtd > 0);
+    if (!linhas.length) { showToast('Este arquivo não tem quantidade preenchida.', 'error'); return; }
+    if (!confirm(`Registrar "${f.name}" como o pedido de ${ptDate(dia)} (${linhas.length} linhas)?`)) return;
+    const CAT = { PROTEINAS: 'proteina', LATICINIOS: 'laticinios', HORTIFRUTI: 'hortifruti', DIVERSOS: 'diversos' };
+    const idDe = new Map();
+    for (const it of state.catalogo.filter(i => i.ativo)) {
+      for (const n of [it.nome, it.nome_curto, it.nome_inventario].filter(Boolean)) {
+        if (!idDe.has(_ppNorm(n))) idDe.set(_ppNorm(n), it.id);
+      }
+    }
+    const reg = linhas.map(l => ({
+      data_pedido: dia, categoria: CAT[_ppSemAcento(l.aba).trim()], aba: l.aba, linha: l.linha,
+      item_nome: l.nome, item_id: idDe.get(l.n) || null, quantidade: +l.qtd.toFixed(3),
+      unidade: l.un || null, fornecedor: l.forn || null, origem: 'arquivo', arquivo: f.name,
+      registrado_por: state.perfil?.id || null,
+    }));
+    const { error: eD } = await sb.from('pedido_historico').delete().eq('data_pedido', dia);
+    if (eD) throw eD;
+    const { error } = await sb.from('pedido_historico').insert(reg);
+    if (error) throw error;
+    Object.keys(_sugCache).forEach(k => delete _sugCache[k]);
+    showToast(`Pedido de ${ptDate(dia)} registrado — ${reg.length} linhas.`, 'success');
+  } catch (e) {
+    console.error('[registrar pedido]', e);
+    showToast('Não registrou: ' + (e.message || e), 'error');
+  }
 }
 
 // =====================================================================
@@ -2022,7 +2224,7 @@ async function _ppLinhasDoModelo(zip) {
     for (const [lin, r] of Object.entries(cel)) {
       if (!r.B || !r.D || (r.A || '').toUpperCase() === 'FORNECEDOR') continue;
       linhas.push({ aba, xml, linha: +lin, nome: r.B, n: _ppNorm(r.B),
-        forn: r.A || '', un: r.D, preco: Number(r.E) || 0 });
+        forn: r.A || '', un: r.D, preco: Number(r.E) || 0, qtd: Number(r.C) || 0 });
     }
   }
   return linhas;
