@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestão de Cozinhas e Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610280709">
+<link rel="stylesheet" href="style.css?v=202610281717">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610280709"></script>
+<script src="config.js?v=202610281717"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -1502,6 +1502,7 @@ function toggleAprovDet(id) {
 }
 
 async function aprovar(id) {
+  const antes = state.aprovacao.find(s => s.id === id)?.data_competencia;
   const { data, error } = await sb.from('solicitacoes_compra').update({
     status: 'aprovada',
     aprovado_por: state.perfil.id,
@@ -1512,9 +1513,14 @@ async function aprovar(id) {
   // feito depois das 10h vai para a lista de amanhã — e até aqui o gerente
   // aprovava, não via nada aparecer e concluía que o sistema tinha perdido.
   // O aviso não muda a regra; só para de esconder o que ela faz.
+  // Aprovada depois do dia da lista, o banco a passa para a lista atual
+  // (migration 99) — o aviso conta de onde ela saiu.
   const hoje = isoDate(new Date());
   const comp = data?.data_competencia;
-  showToast(comp && comp !== hoje
+  const movida = antes && comp && antes < comp && antes < hoje;
+  showToast(movida
+    ? `Aprovada — era da lista de ${ptDate(antes)}, entrou na de ${ptDate(comp)}.`
+    : comp && comp !== hoje
     ? `Aprovada — entra na lista de ${ptDate(comp)}, não na de hoje.`
     : 'Solicitação aprovada — já está na Lista do Dia.', 'success');
 
