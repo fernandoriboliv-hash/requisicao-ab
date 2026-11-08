@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissaria — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610281717">
+<link rel="stylesheet" href="style.css?v=202611081557">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610281717"></script>
+<script src="config.js?v=202611081557"></script>
 <style>
   /* Lista de requisições */
   .req-card {
@@ -38,6 +38,8 @@
   }
   .req-meta { font-size: 12px; color: var(--muted); }
   .req-count { font-size: 12px; color: var(--muted); }
+  .rasc-tag { font-size: 11px; color: var(--gold, #B8963E); border: 1px solid currentColor;
+              border-radius: 10px; padding: 1px 8px; white-space: nowrap; }
   /* Data que o PDV pediu. É por ela que a fila é ordenada, então ela
      precisa estar visível — a hora do envio não diz quando separar. */
   .req-entrega {
@@ -1857,6 +1859,80 @@ function renderFila() {
       </div>
     </div>`;
   }).join('');
+  restaurarRascunhosEntrega(lista);
+}
+
+// =====================================================================
+// RASCUNHO DA ENTREGA — o peso digitado sobrevive à queda de internet
+// =====================================================================
+// 04/11/2026: a Comissaria pesou uma requisição inteira, a rede caiu no
+// "Registrar Entrega" e tudo o que foi digitado se perdeu ao recarregar.
+// Agora cada campo é guardado NESTE aparelho assim que é digitado, como na
+// contagem do inventário. Só guarda: nada vai para o banco, nada debita
+// estoque nem atribui custo à cozinha até a entrega ser registrada. Depois
+// de registrada, o rascunho é apagado.
+//
+// A chave é o id da LINHA da requisição, não a posição: a troca de item
+// (migration 74) muda a linha, e o peso do item antigo não pode cair no
+// item novo — por isso o item_id vai junto e é conferido na volta.
+const RASC_ENTREGA = 'entregaRascunho:';
+
+function _rascLer(reqId) {
+  try { return JSON.parse(localStorage.getItem(RASC_ENTREGA + reqId) || 'null') || {}; }
+  catch (e) { return {}; }
+}
+function _rascGravar(reqId, r) {
+  try {
+    if (Object.keys(r).length) localStorage.setItem(RASC_ENTREGA + reqId, JSON.stringify(r));
+    else localStorage.removeItem(RASC_ENTREGA + reqId);
+  } catch (e) { /* aba anônima ou armazenamento cheio: segue sem rascunho */ }
+}
+function apagarRascunhoEntrega(reqId) {
+  try { localStorage.removeItem(RASC_ENTREGA + reqId); } catch (e) {}
+}
+
+// Guarda a linha inteira (os quatro campos) a cada mudança.
+function guardarRascunhoLinha(reqId, idx) {
+  const req = state.reqs.find(r => r.id === reqId);
+  const it = req?.requisicao_itens?.[idx];
+  if (!it) return;
+  const v = id => document.getElementById(`${id}-${reqId}-${idx}`)?.value ?? '';
+  const r = _rascLer(reqId);
+  r[it.id] = { item_id: it.item_id || null, qe: v('qe'), qp: v('qp'), mot: v('mot'), motobs: v('motobs') };
+  _rascGravar(reqId, r);
+}
+
+// Uma escuta só para a fila inteira: qualquer campo de entrega digitado
+// grava o rascunho da linha dele.
+document.addEventListener('input', ev => {
+  const m = /^(qe|qp|motobs)-(.+)-(\d+)$/.exec(ev.target?.id || '');
+  if (m) guardarRascunhoLinha(m[2], +m[3]);
+});
+
+function restaurarRascunhosEntrega(lista) {
+  for (const r of lista) {
+    if (r.status !== 'enviado' && r.status !== 'separacao') { apagarRascunhoEntrega(r.id); continue; }
+    const rasc = _rascLer(r.id);
+    if (!Object.keys(rasc).length) continue;
+    let voltou = 0;
+    (r.requisicao_itens || []).forEach((it, idx) => {
+      const g = rasc[it.id];
+      if (!g || (g.item_id || null) !== (it.item_id || null)) return;   // item trocado: descarta
+      const set = (id, val) => { const el = document.getElementById(`${id}-${r.id}-${idx}`); if (el && val !== '') el.value = val; };
+      set('qp', g.qp); set('qe', g.qe); set('motobs', g.motobs);
+      const pacote = ehPacote(it);
+      checkDiv(r.id, idx, it.quantidade_solicitada, pacote ? (g.qp || it.quantidade_solicitada) : (g.qe || it.quantidade_solicitada));
+      if (g.mot) { setMotivo(r.id, idx, g.mot); document.getElementById(`motw-${r.id}-${idx}`)?.classList.add('visible'); }
+      pesoBrutoLinha(r.id, idx, it.item_id || '', pacote ? unidadePeso(it) : (it.item_unidade || ''));
+      voltou++;
+    });
+    if (voltou) {
+      document.getElementById('detail-' + r.id)?.classList.add('open');
+      document.getElementById('chev-' + r.id)?.classList.add('open');
+      const head = document.querySelector(`#card-${r.id} .req-count`);
+      if (head) head.insertAdjacentHTML('afterend', '<span class="rasc-tag">pesagem salva</span>');
+    }
+  }
 }
 
 // =====================================================================
@@ -1995,6 +2071,7 @@ function setMotivo(reqId, idx, motivo) {
   if (btn) btn.classList.add('selected');
   const hidden = document.getElementById(`mot-${reqId}-${idx}`);
   if (hidden) hidden.value = motivo;
+  guardarRascunhoLinha(reqId, idx);
 }
 
 async function marcarSeparacao(id) {
@@ -2156,7 +2233,21 @@ async function registrarEntrega(reqId) {
     }
   }
 
-  // Tudo validado → grava.
+  // Tudo validado → grava. Cada passo confere o erro: sem isso, com a rede
+  // caída, o "Entrega registrada" aparecia sem nada ter sido gravado. Se
+  // falhar no meio, o rascunho continua no aparelho e o mesmo botão termina
+  // o serviço — regravar uma linha que já foi é inofensivo.
+  const btn = document.querySelector(`#card-${reqId} .btn-green`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Registrando...'; }
+  const falhou = (error) => {
+    console.error('[registrar entrega]', error);
+    if (btn) { btn.disabled = false; btn.textContent = 'Registrar Entrega'; }
+    const rede = !navigator.onLine || /fetch|network|Failed/i.test(error?.message || '');
+    showToast(rede
+      ? 'Sem conexão — a entrega NÃO foi registrada. A pesagem ficou salva neste aparelho: quando a internet voltar, toque em Registrar Entrega de novo.'
+      : 'A entrega não foi registrada: ' + (error?.message || error) + '. A pesagem ficou salva neste aparelho.', 'error');
+  };
+  try {
   for (let idx = 0; idx < itens.length; idx++) {
     const it = itens[idx];
     const e = lerEntregaItem(reqId, idx, it);
@@ -2169,7 +2260,8 @@ async function registrarEntrega(reqId) {
       motivo_divergencia: e.divergencia ? motivoFinal : null,
     };
     if (e.pacote) payload.pacotes_entregues = e.pacotesEntregues;
-    await sb.from('requisicao_itens').update(payload).eq('id', it.id);
+    const { error: eItem } = await sb.from('requisicao_itens').update(payload).eq('id', it.id);
+    if (eItem) return falhou(eItem);
 
     // O peso médio do pacote é aprendido daqui: ninguém tem essa tabela
     // pronta, mas toda pesagem real melhora a estimativa do próximo pedido.
@@ -2179,10 +2271,13 @@ async function registrarEntrega(reqId) {
       });
     }
   }
-  await sb.from('requisicoes').update({
+  const { error: eReq } = await sb.from('requisicoes').update({
     status: 'entregue',
     entregue_em: new Date().toISOString(),
   }).eq('id', reqId);
+  if (eReq) return falhou(eReq);
+  } catch (err) { return falhou(err); }
+  apagarRascunhoEntrega(reqId);
   showToast('Entrega registrada.', 'success');
   await carregarFila();
 }

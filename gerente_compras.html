@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestão de Cozinhas e Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610281717">
+<link rel="stylesheet" href="style.css?v=202611081557">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202610281717"></script>
+<script src="config.js?v=202611081557"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -303,7 +303,14 @@
     <div class="main full">
       <div class="section-title">
         <span>Solicitações Aguardando Aprovação</span>
-        <span id="aprovacaoCount" class="text-muted" style="font-size:12px"></span>
+        <span style="display:flex;gap:10px;align-items:center">
+          <select id="aprovacaoOrdem" class="input" style="max-width:190px;font-size:12px;padding:4px 8px"
+                  onchange="renderAprovacao()" aria-label="Ordenar a fila">
+            <option value="entrega">Pela data de entrega</option>
+            <option value="chegada">Pela chegada do pedido</option>
+          </select>
+          <span id="aprovacaoCount" class="text-muted" style="font-size:12px"></span>
+        </span>
       </div>
       <div id="aprovacaoContainer"><div class="loading-text">Carregando...</div></div>
     </div>
@@ -896,7 +903,14 @@
                         font-size: 13px; color: var(--muted); }
   .sug-acoes { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 10px 0 6px; font-size: 11px; }
   .sug-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0 18px; }
-  .sug-item { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center;
+  .pp-email { width: 100%; font-family: inherit; font-size: 14px; line-height: 1.6; resize: vertical; }
+  .sug-tirar { background: none; border: 0; padding: 2px 0; font-size: 11px; color: var(--muted);
+               text-decoration: underline; cursor: pointer; white-space: nowrap; }
+  .sug-tirar:hover, .sug-tirar:focus-visible { color: var(--text); }
+  .sug-sobdemanda { margin-top: 10px; font-size: 12px; }
+  .sug-sobdemanda summary { cursor: pointer; }
+  .sug-sobdemanda .sug-item { grid-template-columns: 1fr auto; }
+  .sug-item { display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 8px; align-items: center;
               padding: 5px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
   .sug-qtd { font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
   .sug-vezes { font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -1453,6 +1467,18 @@ async function carregarAprovacao() {
     .eq('status', 'enviada')
     .order('created_at', { ascending: true });
   state.aprovacao = data || [];
+  renderAprovacao();
+}
+
+// Ordem da fila (04/11/2026): por padrão, a entrega que vence primeiro vem
+// primeiro — a ordem de chegada punha um pedido para o dia 7 acima de um
+// para amanhã. Sem data de entrega, vale a data da lista (competência).
+// "Pela chegada" continua disponível no seletor.
+function renderAprovacao() {
+  const ordem = document.getElementById('aprovacaoOrdem')?.value || 'entrega';
+  const alvo = s => s.data_entrega_desejada || s.data_competencia || '';
+  state.aprovacao.sort((a, b) => (ordem === 'entrega' ? alvo(a).localeCompare(alvo(b)) : 0)
+    || a.created_at.localeCompare(b.created_at));
   document.getElementById('aprovacaoCount').textContent = `${state.aprovacao.length} pendente(s)`;
 
   const cont = document.getElementById('aprovacaoContainer');
@@ -1481,6 +1507,7 @@ async function carregarAprovacao() {
         <span class="text-muted" style="font-size:12px">${hora}</span>
         <span class="text-muted" style="font-size:12px">${itens.length} item(ns)</span>
         <span class="text-muted" style="font-size:12px">Entrega: ${s.data_entrega_desejada ? ptDate(s.data_entrega_desejada) : '—'}</span>
+        <span class="text-muted" style="font-size:12px">Lista: ${s.data_competencia ? ptDate(s.data_competencia) : '—'}</span>
         <span class="chevron" id="chev-ap-${s.id}">▼</span>
       </div>
       <div class="pend-detail" id="det-ap-${s.id}">
@@ -1514,10 +1541,12 @@ async function aprovar(id) {
   // aprovava, não via nada aparecer e concluía que o sistema tinha perdido.
   // O aviso não muda a regra; só para de esconder o que ela faz.
   // Aprovada depois do dia da lista, o banco a passa para a lista atual
-  // (migration 99) — o aviso conta de onde ela saiu.
+  // (migration 99); aprovada na compilação (dia útil, antes das 12h), a que
+  // a regra das 10h tinha jogado para amanhã volta para hoje (migration
+  // 100). O aviso conta de onde ela saiu.
   const hoje = isoDate(new Date());
   const comp = data?.data_competencia;
-  const movida = antes && comp && antes < comp && antes < hoje;
+  const movida = antes && comp && antes !== comp;
   showToast(movida
     ? `Aprovada — era da lista de ${ptDate(antes)}, entrou na de ${ptDate(comp)}.`
     : comp && comp !== hoje
@@ -1945,10 +1974,16 @@ async function sugestaoHortifruti(dataLista) {
     x.nome = r.item_nome; x.un = r.unidade;
     por.set(k, x);
   }
-  const itens = [];
+  const itens = [], sobDemanda = [];
   for (const x of por.values()) {
     const ds = [...x.q.keys()].sort();
     if (!(ds.length >= 5 || ds.filter(dd => ult3.has(dd)).length >= 2)) continue;
+    // Comprado só quando a cozinha pede (cogumelos, por exemplo): a
+    // frequência engana, então a Gestão tira o item da sugestão
+    // (itens.sugestao_pedido, migration 101). A solicitação da cozinha
+    // continua chegando normalmente.
+    const doCat = x.item_id ? state.catalogo.find(c => c.id === x.item_id) : null;
+    if (doCat && doCat.sugestao_pedido === false) { sobDemanda.push({ item_id: doCat.id, nome: doCat.nome }); continue; }
     const q = ds.slice(-5).map(dd => x.q.get(dd)).sort((a, b) => a - b);
     const med = q.length % 2 ? q[(q.length - 1) / 2] : (q[q.length / 2 - 1] + q[q.length / 2]) / 2;
     const kg = /^KG/i.test(String(x.un || '').trim());
@@ -1963,12 +1998,34 @@ async function sugestaoHortifruti(dataLista) {
                  un: it ? it.unidade : x.un, sugerido, vezes: ds.length });
   }
   itens.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  sobDemanda.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   const porItem = new Map(itens.filter(i => i.item_id).map(i => [i.item_id, i]));
-  return (_sugCache[entrega] = { entrega, datas, itens, porItem });
+  return (_sugCache[entrega] = { entrega, datas, itens, porItem, sobDemanda });
+}
+
+// Marca ou desmarca "comprado só sob demanda". Vale para todos os dias.
+async function sugMarcarSobDemanda(itemId, sugerir) {
+  const { error } = await sb.from('itens').update({ sugestao_pedido: sugerir }).eq('id', itemId);
+  if (error) { showToast('Não salvou: ' + error.message, 'error'); return; }
+  const it = state.catalogo.find(c => c.id === itemId);
+  if (it) it.sugestao_pedido = sugerir;
+  Object.keys(_sugCache).forEach(k => delete _sugCache[k]);
+  showToast(sugerir
+    ? `${(it?.nome || 'Item').slice(0, 40)} volta para a sugestão.`
+    : `${(it?.nome || 'Item').slice(0, 40)} sai da sugestão — só entra quando uma cozinha pedir.`, 'success');
+  carregarLista();
 }
 
 function htmlSugestaoHortifruti(sug, hortiNaLista, dataLista) {
-  if (!sug.itens.length) return '';
+  if (!sug.itens.length && !(sug.sobDemanda || []).length) return '';
+  const sd = sug.sobDemanda || [];
+  const blocoSobDemanda = sd.length ? `<details class="sug-sobdemanda">
+      <summary class="text-muted">${sd.length} item(ns) comprado(s) só sob demanda, fora da sugestão</summary>
+      <div class="sug-lista">${sd.map(i => `<div class="sug-item">
+          <span class="sug-nome">${escapeHtml(i.nome)}</span>
+          <button class="btn btn-sm btn-outline" onclick="sugMarcarSobDemanda('${i.item_id}', true)">Voltar a sugerir</button>
+        </div>`).join('')}</div>
+    </details>` : '';
   const naLista = new Set(Object.values(hortiNaLista || {}).map(i => i.item_id).filter(Boolean));
   const fora = sug.itens.filter(i => !i.item_id || !naLista.has(i.item_id));
   const dia = new Date(sug.entrega + 'T12:00:00')
@@ -1985,9 +2042,12 @@ function htmlSugestaoHortifruti(sug, hortiNaLista, dataLista) {
           <span class="sug-nome">${escapeHtml(i.nome)}</span>
           <span class="sug-qtd">${_sugFmt(i.sugerido)} ${escapeHtml(i.un || '')}</span>
           <span class="sug-vezes text-muted">${i.vezes}/${sug.datas.length}</span>
-          ${i.item_id ? `<button class="btn btn-sm btn-outline" onclick="sugIncluir('${i.item_id}')">+ Lista</button>`
+          ${i.item_id ? `<button class="btn btn-sm btn-outline" onclick="sugIncluir('${i.item_id}')">+ Lista</button>
+                         <button class="sug-tirar" title="Comprado só quando uma cozinha pede"
+                                 onclick="sugMarcarSobDemanda('${i.item_id}', false)">só sob demanda</button>`
                       : '<span class="text-muted" style="font-size:11px">sem item no catálogo</span>'}
         </div>`).join('')}</div>` : '<div class="text-muted" style="padding:8px 0">Todos os sugeridos já estão na lista.</div>'}
+    ${blocoSobDemanda}
   </details>`;
 }
 
@@ -2237,7 +2297,33 @@ async function _ppLinhasDoModelo(zip) {
 }
 
 // ── casamento: lista do dia → linha do modelo ─────────────────
-function _ppCasar(linhas) {
+// Fornecedor de cada linha nos pedidos registrados dos últimos 60 dias
+// (pedido_historico, migration 98): nome da linha → fornecedor → vezes.
+// É o que decide entre duas linhas do mesmo item (04/11/2026: o sistema
+// marcava os cogumelos da linha mais cara porque seguia o preço cadastrado,
+// e o pedido de verdade sai quase sempre da outra). 60 dias e não o
+// histórico todo: a compradora troca o fornecedor de uma linha com o tempo,
+// e o que vale é o de agora.
+async function _ppFornecedorUsado() {
+  const de = isoDate(new Date(Date.now() - 60 * 864e5));
+  const uso = new Map();
+  for (let i = 0; i < 20000; i += 1000) {            // PostgREST corta em 1000
+    const { data, error } = await sb.from('pedido_historico')
+      .select('item_nome, fornecedor').gte('data_pedido', de).range(i, i + 999);
+    if (error) return uso;
+    for (const r of data || []) {
+      const n = _ppNorm(r.item_nome), f = _ppNorm(r.fornecedor);
+      if (!n || !f) continue;
+      const m = uso.get(n) || new Map();
+      m.set(f, (m.get(f) || 0) + 1);
+      uso.set(n, m);
+    }
+    if (!data || data.length < 1000) break;
+  }
+  return uso;
+}
+
+function _ppCasar(linhas, uso = new Map()) {
   const tot = new Map();
   for (const cat of ['proteina', 'laticinios', 'hortifruti', 'diversos']) {
     for (const it of Object.values(listaConsolidada[cat] || {})) {
@@ -2257,10 +2343,25 @@ function _ppCasar(linhas) {
     if (!cands.length) { fora.push(t); continue; }
     let alvo = cands[0];
     if (cands.length > 1) {
-      const f = _ppNorm(state.precosMap?.[t.item_id]?.fornecedor || it?.fornecedor_principal);
-      const doForn = f && cands.find(c => _ppNorm(c.forn).split(' ').some(p => p.length > 3 && f.includes(p)));
-      alvo = doForn || cands[0];
-      duas.push({ ...t, alvo, cands, certo: !!doForn });
+      // 1) a linha na mesma unidade do pedido (DILL em KG não vai na de CX);
+      // 2) a do fornecedor mais pedido nos últimos 60 dias;
+      // 3) a do fornecedor do preço vigente; 4) a primeira, para conferir.
+      const mesmaUn = t.un ? cands.filter(c => _ppUn(c.un) === _ppUn(t.un)) : [];
+      const pool = mesmaUn.length ? mesmaUn : cands;
+      let motivo = 'primeira', vezes = 0;
+      alvo = pool[0];
+      if (pool.length === 1 && mesmaUn.length) { motivo = 'unidade'; }
+      else {
+        const conta = c => uso.get(c.n)?.get(_ppNorm(c.forn)) || 0;
+        const top = [...pool].sort((a, b) => conta(b) - conta(a) || (a.preco || 1e9) - (b.preco || 1e9))[0];
+        if (conta(top) > 0) { alvo = top; motivo = 'historico'; vezes = conta(top); }
+        else {
+          const f = _ppNorm(state.precosMap?.[t.item_id]?.fornecedor || it?.fornecedor_principal);
+          const doForn = f && pool.find(c => _ppNorm(c.forn).split(' ').some(p => p.length > 3 && f.includes(p)));
+          if (doForn) { alvo = doForn; motivo = 'preco'; }
+        }
+      }
+      duas.push({ ...t, alvo, cands, certo: motivo !== 'primeira', motivo, vezes });
     }
     if (t.un && _ppUn(t.un) !== _ppUn(alvo.un)) { unidade.push({ ...t, alvo }); continue; }
     const k = alvo.xml + '|' + alvo.linha;
@@ -2308,7 +2409,7 @@ async function gerarPlanilhaPedido() {
     const JSZip = await _ppCarregarJSZip();
     const zip = await JSZip.loadAsync(_ppModelo.buf);
     const linhas = await _ppLinhasDoModelo(zip);
-    const r = _ppCasar(linhas);
+    const r = _ppCasar(linhas, await _ppFornecedorUsado());
     if (!r.total) { showToast('Lista vazia — nada para preencher.', 'error'); return; }
     await _ppEscrever(zip, linhas, r.preencher);
     const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE',
@@ -2333,16 +2434,44 @@ function _ppMostrarResultado(r, nomeArq) {
   const tabela = (cab, linhas) => `<table class="table-simples" style="width:100%;margin-bottom:14px">
     <thead><tr>${cab.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${linhas.join('')}</tbody></table>`;
   let h = `<div class="aviso aviso-success" style="margin:14px 0">${escapeHtml(nomeArq)} — ${r.preencher.size} linha(s) preenchida(s) de ${r.total} item(ns) da lista.</div>`;
-  if (r.fora.length) h += `<div class="uppercase-label mb-2">Sem linha na planilha · ${r.fora.length}</div>`
-    + tabela(['Item', 'Qtd', 'Unid.'], r.fora.map(t =>
-      `<tr><td>${escapeHtml(t.nome)}</td><td>${q(t.qtd)}</td><td>${escapeHtml(t.un || '')}</td></tr>`));
+  // Sem linha na planilha: vai no corpo do e-mail. Sai como texto, uma
+  // linha por item, no jeito que já era escrito à mão ("30kg Queijo...").
+  // Tabela colada no e-mail desmonta; texto não.
+  if (r.fora.length) {
+    const texto = r.fora.map(_ppLinhaEmail).join('\n');
+    h += `<div class="uppercase-label mb-2">Fora da planilha · para o corpo do e-mail · ${r.fora.length}</div>
+      <textarea id="ppTextoEmail" class="input pp-email" readonly rows="${Math.min(12, r.fora.length + 1)}">${escapeHtml(texto)}</textarea>
+      <button class="btn btn-sm btn-outline" style="margin:6px 0 16px" onclick="copiarTextoEmail(this)">Copiar</button>`;
+  }
   if (r.unidade.length) h += `<div class="uppercase-label mb-2">Unidade diferente — não preenchido · ${r.unidade.length}</div>`
     + tabela(['Item', 'Na lista', 'Na planilha'], r.unidade.map(t =>
       `<tr><td>${escapeHtml(t.nome)}</td><td>${q(t.qtd)} ${escapeHtml(t.un || '')}</td><td>${escapeHtml(t.alvo.un)} · ${onde(t.alvo)}</td></tr>`));
   if (r.duas.length) h += `<div class="uppercase-label mb-2">Item em mais de uma linha · ${r.duas.length}</div>`
     + tabela(['Item', 'Preenchido em', 'Fornecedor'], r.duas.map(t =>
-      `<tr><td>${escapeHtml(t.nome)}</td><td>${onde(t.alvo)}</td><td>${escapeHtml(t.alvo.forn || '—')}${t.certo ? '' : ' <span class="text-muted">(primeira linha — confira)</span>'}</td></tr>`));
+      `<tr><td>${escapeHtml(t.nome)}</td><td>${onde(t.alvo)}</td><td>${escapeHtml(t.alvo.forn || '—')} <span class="text-muted">(${
+        t.motivo === 'historico' ? `pedido ${t.vezes}x em 60 dias`
+        : t.motivo === 'unidade' ? 'mesma unidade'
+        : t.motivo === 'preco' ? 'preço cadastrado'
+        : 'primeira linha — confira'})</span></td></tr>`));
   document.getElementById('ppResultado').innerHTML = h;
+}
+
+// "30kg QUEIJO COTTAGE YORGUZ", "2 cx Flor Cravina branca": peso colado no
+// número, as outras unidades separadas — como nos pedidos avulsos.
+function _ppLinhaEmail(t) {
+  const n = Number(t.qtd).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+  const u = String(t.un || '').trim().toLowerCase();
+  const qtd = !u ? n : /^(kg|g|l|ml)$/.test(u) ? n + u : `${n} ${u}`;
+  return `${qtd} ${t.nome}`;
+}
+
+async function copiarTextoEmail(btn) {
+  const ta = document.getElementById('ppTextoEmail');
+  if (!ta) return;
+  try { await navigator.clipboard.writeText(ta.value); }
+  catch (e) { ta.select(); document.execCommand('copy'); }
+  btn.textContent = 'Copiado';
+  setTimeout(() => { btn.textContent = 'Copiar'; }, 2000);
 }
 
 // =====================================================================

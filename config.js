@@ -1953,11 +1953,11 @@ function _invNum(v) {
   // A unidade digitada junto é comum na contagem ("1,5 kg", "3 cx") e
   // antes virava "Quantidade inválida". O número é o que importa.
   t = t.replace(/[a-zA-Z\u00C0-\u017F%\s]+$/, '').trim();
-  // "1.250" é mil duzentos e cinquenta para quem conta, não 1,25: quando
-  // há vírgula, o ponto é separador de milhar; quando não há, ponto com
-  // três casas depois também é milhar.
+  // Ponto sozinho é VÍRGULA. Teclado de celular em padrão americano só
+  // oferece o ponto: "3.132" é 3,132 kg, não 3.132 kg. Até 30/10/2026 isto
+  // era lido como milhar e gerou 3.132 kg de robalo e 4.225 kg de mostarda
+  // no inventário de outubro. Só quando há vírgula o ponto é milhar.
   if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
-  else if (/^[0-9]{1,3}(\.[0-9]{3})+$/.test(t)) t = t.replace(/\./g, '');
   if (/^[.,]/.test(t)) t = '0' + t;       // ",5" é meio quilo
   t = t.replace(/[.,]$/, '');            // "10," e "10." são 10
   // O ponto tem que ser escapado: antes era /^[0-9]+(.[0-9]+)?$/, em que
