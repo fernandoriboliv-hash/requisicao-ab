@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestão de Cozinhas e Compras — Rosewood A&B</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202611081557">
+<link rel="stylesheet" href="style.css?v=202611252052">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=202611081557"></script>
+<script src="config.js?v=202611252052"></script>
 <style>
   body { display: flex; }
   .pend-card {
@@ -2105,6 +2105,10 @@ async function registrarPedidoEnviado(input) {
     if (!confirm(`Registrar "${f.name}" como o pedido de ${ptDate(dia)} (${linhas.length} linhas)?`)) return;
     const CAT = { PROTEINAS: 'proteina', LATICINIOS: 'laticinios', HORTIFRUTI: 'hortifruti', DIVERSOS: 'diversos' };
     const idDe = new Map();
+    // A linha ligada ao item (itens.nome_planilha) vale antes do nome igual.
+    for (const it of state.catalogo.filter(i => i.ativo && i.nome_planilha)) {
+      if (!idDe.has(_ppNorm(it.nome_planilha))) idDe.set(_ppNorm(it.nome_planilha), it.id);
+    }
     for (const it of state.catalogo.filter(i => i.ativo)) {
       for (const n of [it.nome, it.nome_curto, it.nome_inventario].filter(Boolean)) {
         if (!idDe.has(_ppNorm(n))) idDe.set(_ppNorm(n), it.id);
@@ -2338,8 +2342,14 @@ function _ppCasar(linhas, uso = new Map()) {
   const preencher = new Map(), fora = [], unidade = [], duas = [];
   for (const t of tot.values()) {
     const it = t.item_id ? state.catalogo.find(i => i.id === t.item_id) : null;
+    // itens.nome_planilha (migration 102): o nome da linha na market list
+    // quando ela é diferente do nome do item ("FILE DE ATUM" está na linha
+    // "FILE DE ATUM FRESCO LOMBO ACIMA DE 6KG"). Vale primeiro; se a
+    // compradora renomear a linha de novo, cai nos outros nomes e, sem
+    // nenhum, vai para o texto do e-mail como hoje.
+    const vinc = it?.nome_planilha ? linhas.filter(l => l.n === _ppNorm(it.nome_planilha)) : [];
     const nomes = new Set([t.nome, it?.nome, it?.nome_curto, it?.nome_inventario].filter(Boolean).map(_ppNorm));
-    const cands = linhas.filter(l => nomes.has(l.n));
+    const cands = vinc.length ? vinc : linhas.filter(l => nomes.has(l.n));
     if (!cands.length) { fora.push(t); continue; }
     let alvo = cands[0];
     if (cands.length > 1) {
